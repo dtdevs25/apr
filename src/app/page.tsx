@@ -121,7 +121,7 @@ export default function Dashboard() {
   const [selectedCities, setSelectedCities] = useState<string[]>([]);
 
   // Expand state
-  const [expandedAuditor, setExpandedAuditor] = useState<string | null>(null);
+  const [selectedAuditorDetails, setSelectedAuditorDetails] = useState<any | null>(null);
 
   useEffect(() => {
     fetch('/api/data').then(res => res.json()).then(json => { setData(json); setLoading(false); });
@@ -441,34 +441,27 @@ export default function Dashboard() {
 
             <div className="flex-1 overflow-y-auto scrollbar-thin pr-2">
               {rankAgg.map((item, idx) => {
-                const isExp = expandedAuditor === item.name;
                 const pct = (item.count / maxRank) * 100;
                 const colors = ['bg-pink-500', 'bg-blue-500', 'bg-green-500', 'bg-orange-500', 'bg-purple-500', 'bg-teal-500', 'bg-yellow-500'];
                 const barColor = colors[idx % colors.length];
-                const cityAgg = Object.entries(item.data.reduce((acc: any, curr: any) => {
-                  const c = curr['CIDADE COMERCIAL'] || 'N/A';
-                  acc[c] = (acc[c] || 0) + 1; return acc;
-                }, {})).sort((a: any, b: any) => b[1] - a[1]);
 
                 return (
                   <div key={`${item.name}-${idx}`} className="mb-2">
                     <div 
-                      onClick={() => setExpandedAuditor(isExp ? null : item.name)}
-                      className={`grid grid-cols-[30px_1fr_80px_100px_110px] items-center gap-4 p-3 rounded-xl cursor-pointer transition-all border ${isExp ? 'bg-purple-50/50 border-purple-100 shadow-sm' : 'bg-white border-transparent hover:bg-gray-50'}`}
+                      onClick={() => setSelectedAuditorDetails(item)}
+                      className="grid grid-cols-[30px_1fr_80px_100px_110px] items-center gap-4 p-3 rounded-xl cursor-pointer transition-all border bg-white border-transparent hover:bg-purple-50/50 hover:border-purple-100"
                     >
                       <div className="text-sm font-bold text-gray-400">{idx + 1}º</div>
                       
                       <div className="overflow-hidden pr-2">
-                        <div className={`text-sm font-semibold truncate ${isExp ? 'text-purple-900' : 'text-gray-800'}`} title={item.name}>{item.name}</div>
-                        {!isExp && (
-                          <div className="h-1.5 w-full bg-gray-100 rounded-full mt-1.5 overflow-hidden">
-                            <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} className={`h-full ${barColor} rounded-full opacity-80`} />
-                          </div>
-                        )}
+                        <div className="text-sm font-semibold truncate text-gray-800" title={item.name}>{item.name}</div>
+                        <div className="h-1.5 w-full bg-gray-100 rounded-full mt-1.5 overflow-hidden">
+                          <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} className={`h-full ${barColor} rounded-full opacity-80`} />
+                        </div>
                       </div>
                       
                       <div className="flex justify-center items-center">
-                        <div className={`text-base font-bold ${isExp ? 'text-purple-900' : 'text-gray-900'}`}>{formatNum(item.count)}</div>
+                        <div className="text-base font-bold text-gray-900">{formatNum(item.count)}</div>
                       </div>
 
                       <div className="flex justify-center items-center">
@@ -484,27 +477,6 @@ export default function Dashboard() {
                         </div>
                       </div>
                     </div>
-                    
-                    <AnimatePresence>
-                      {isExp && (
-                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden ml-10 mr-2">
-                          <div className="py-4 px-4 mt-1 mb-3 bg-gray-50 border border-gray-100 rounded-xl">
-                            <div className="text-xs uppercase font-bold text-gray-400 mb-3 tracking-wider">Distribuição por Cidades</div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
-                              {cityAgg.map(([cid, val]: any) => (
-                                <div key={cid} className="flex justify-between items-center text-sm py-1 border-b border-gray-100/50">
-                                  <span className="text-gray-600 font-medium truncate mr-3">↳ {cid}</span>
-                                  <div className="flex gap-4 text-gray-500 w-20 justify-end">
-                                    <span className="font-bold text-gray-700">{val}</span>
-                                    <span className="text-xs w-8 text-right">{((val/item.count)*100).toFixed(0)}%</span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
                   </div>
                 );
               })}
@@ -551,6 +523,64 @@ export default function Dashboard() {
                     Entendi
                   </button>
                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {selectedAuditorDetails && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl max-w-5xl w-full max-h-[85vh] flex flex-col overflow-hidden"
+            >
+              <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gray-50/50 shrink-0">
+                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <UserCheck className="text-[#660099]" size={20} />
+                  APRs de {selectedAuditorDetails.name}
+                </h3>
+                <button onClick={() => setSelectedAuditorDetails(null)} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-0 scrollbar-thin">
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                  <thead className="bg-gray-50 sticky top-0 border-b border-gray-100 z-10 shadow-sm">
+                    <tr>
+                      <th className="px-6 py-3.5 font-semibold text-gray-500 uppercase text-xs">Data Início</th>
+                      <th className="px-6 py-3.5 font-semibold text-gray-500 uppercase text-xs">Duração</th>
+                      <th className="px-6 py-3.5 font-semibold text-gray-500 uppercase text-xs">Cidade</th>
+                      <th className="px-6 py-3.5 font-semibold text-gray-500 uppercase text-xs w-full">Questionário / Situação</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {selectedAuditorDetails.data.map((apr: any, i: number) => (
+                      <tr key={i} className="hover:bg-purple-50/30 transition-colors">
+                        <td className="px-6 py-3 text-gray-700">{apr['Data Início'] || '-'}</td>
+                        <td className="px-6 py-3 text-gray-700 font-medium">
+                          <span className="flex items-center gap-1.5"><Clock size={14} className="text-[#660099]" />{apr['Duração'] || '-'}</span>
+                        </td>
+                        <td className="px-6 py-3 text-gray-700">{apr['CIDADE COMERCIAL'] || '-'}</td>
+                        <td className="px-6 py-3">
+                          <div className="text-gray-800 font-medium truncate max-w-lg" title={apr['Questionário']}>{apr['Questionário'] || '-'}</div>
+                          <div className={`text-xs mt-1 ${apr['Situação'] === 'FECHADO' ? 'text-green-600' : 'text-orange-500'}`}>{apr['Situação'] || '-'}</div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="p-4 border-t border-gray-100 bg-gray-50/50 flex justify-end shrink-0">
+                <button 
+                  onClick={() => setSelectedAuditorDetails(null)}
+                  className="px-6 py-2 bg-[#660099] text-white text-sm font-semibold rounded-xl hover:bg-[#8000bf] transition-colors shadow-sm"
+                >
+                  Fechar Detalhes
+                </button>
               </div>
             </motion.div>
           </div>
