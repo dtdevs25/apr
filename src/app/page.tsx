@@ -13,6 +13,23 @@ const monthMap: Record<string, string> = {
   '07': 'Jul', '08': 'Ago', '09': 'Set'
 };
 
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return '-';
+  try {
+    const [datePart] = dateStr.split(' ');
+    const [y, m, d] = datePart.split('-');
+    return `${d}/${m}/${y}`;
+  } catch {
+    return dateStr;
+  }
+};
+
+const cleanTipo = (str: string) => {
+  if (!str) return 'Não Identificado';
+  const parts = str.split('|');
+  return parts[parts.length - 1].trim();
+};
+
 // Componente Premium de Multi-seleção
 const PremiumMultiSelect = ({ 
   label, 
@@ -114,7 +131,7 @@ export default function Dashboard() {
   const [isMetaModalOpen, setIsMetaModalOpen] = useState(false);
 
   // Filters
-  const [visao, setVisao] = useState('c'); // c: cidade, d: diretoria, t: supervisor
+  const [selectedTipos, setSelectedTipos] = useState<string[]>([]);
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [selectedDiretorias, setSelectedDiretorias] = useState<string[]>([]);
   const [selectedSupervisors, setSelectedSupervisors] = useState<string[]>([]);
@@ -130,27 +147,37 @@ export default function Dashboard() {
   const allMonths = useMemo(() => Array.from(new Set(data.map(i => String(i['Mês'])))).filter(Boolean).sort(), [data]);
 
   // Filtros em Cascata
-  const allDiretorias = useMemo(() => {
+  const allTipos = useMemo(() => {
     const base = data.filter(i => selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês'])));
-    return Array.from(new Set(base.map(i => i['DIRETORIA 3']))).filter(Boolean).sort();
+    return Array.from(new Set(base.map(i => cleanTipo(i['Questionário'])))).filter(Boolean).sort();
   }, [data, selectedMonths]);
+
+  const allDiretorias = useMemo(() => {
+    const base = data.filter(i => 
+      (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
+      (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário'])))
+    );
+    return Array.from(new Set(base.map(i => i['DIRETORIA 3']))).filter(Boolean).sort();
+  }, [data, selectedMonths, selectedTipos]);
 
   const allSupervisors = useMemo(() => {
     const base = data.filter(i => 
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
+      (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3']))
     );
     return Array.from(new Set(base.map(i => i['Supervisor'] || i['SUPERVISOR'] || i['GESTOR']))).filter(Boolean).sort();
-  }, [data, selectedMonths, selectedDiretorias]);
+  }, [data, selectedMonths, selectedTipos, selectedDiretorias]);
 
   const allCities = useMemo(() => {
     const base = data.filter(i => 
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
+      (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
       (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor'] || i['SUPERVISOR'] || i['GESTOR']))
     );
     return Array.from(new Set(base.map(i => i['CIDADE COMERCIAL']))).filter(Boolean).sort();
-  }, [data, selectedMonths, selectedDiretorias, selectedSupervisors]);
+  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors]);
 
   const toggleMonth = (m: string) => setSelectedMonths(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]);
 
@@ -161,6 +188,7 @@ export default function Dashboard() {
 
   const clearFilters = () => {
     setSelectedMonths([]);
+    setSelectedTipos([]);
     setSelectedDiretorias([]);
     setSelectedSupervisors([]);
     setSelectedCities([]);
@@ -169,11 +197,12 @@ export default function Dashboard() {
   const filteredData = useMemo(() => {
     return data.filter(item => {
       return (selectedMonths.length === 0 || selectedMonths.includes(String(item['Mês']))) &&
+             (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(item['Questionário']))) &&
              (selectedDiretorias.length === 0 || selectedDiretorias.includes(item['DIRETORIA 3'])) &&
              (selectedSupervisors.length === 0 || selectedSupervisors.includes(item['Supervisor'] || item['SUPERVISOR'] || item['GESTOR'])) &&
              (selectedCities.length === 0 || selectedCities.includes(item['CIDADE COMERCIAL']));
     });
-  }, [data, selectedMonths, selectedDiretorias, selectedSupervisors, selectedCities]);
+  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities]);
 
   // KPIs
   const totalAprs = filteredData.length;
@@ -206,16 +235,12 @@ export default function Dashboard() {
   // Main list
   const mainAgg = useMemo(() => {
     const agg: Record<string, number> = {};
-    const field = visao === 'c' ? 'CIDADE COMERCIAL' : visao === 'd' ? 'DIRETORIA 3' : 'GESTOR';
     filteredData.forEach(item => {
-      let val = item[field] || item['SUPERVISOR'] || item['Supervisor'] || 'Não Identificado';
-      if (visao === 't') {
-        val = item['Supervisor'] || item['SUPERVISOR'] || item['GESTOR'] || 'Não Identificado';
-      }
+      let val = cleanTipo(item['Questionário']);
       agg[val] = (agg[val] || 0) + 1;
     });
     return Object.entries(agg).sort((a, b) => b[1] - a[1]);
-  }, [filteredData, visao]);
+  }, [filteredData]);
   const maxMain = mainAgg.length > 0 ? mainAgg[0][1] : 1;
 
   // Rank list
@@ -285,20 +310,7 @@ export default function Dashboard() {
         <div className="bg-gray-50/50 backdrop-blur-md border-t border-gray-100">
           <div className="max-w-[1600px] mx-auto px-6 py-2 flex flex-wrap items-center gap-4">
             
-            <div className="flex flex-col gap-1.5">
-              <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Visão Principal</span>
-              <div className="relative">
-                <select 
-                  value={visao} onChange={e => setVisao(e.target.value)}
-                  className="appearance-none px-3 py-1.5 w-60 bg-white border border-gray-200 rounded-xl shadow-sm text-xs font-medium text-gray-700 hover:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200 transition-all cursor-pointer"
-                >
-                  <option value="c">Por Cidade</option>
-                  <option value="d">Por Diretoria</option>
-                  <option value="t">Por Supervisor</option>
-                </select>
-                <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-              </div>
-            </div>
+            <PremiumMultiSelect label="Tipo de APR" options={allTipos} selected={selectedTipos} onChange={handleMultiSelect(setSelectedTipos)} icon={FileText} />
 
             <div className="w-px h-12 bg-gray-200 hidden md:block"></div>
 
@@ -306,7 +318,7 @@ export default function Dashboard() {
             <PremiumMultiSelect label="Supervisor" options={allSupervisors} selected={selectedSupervisors} onChange={handleMultiSelect(setSelectedSupervisors)} icon={Users} />
             <PremiumMultiSelect label="Cidade" options={allCities} selected={selectedCities} onChange={handleMultiSelect(setSelectedCities)} icon={MapPin} />
 
-            {(selectedMonths.length > 0 || selectedDiretorias.length > 0 || selectedSupervisors.length > 0 || selectedCities.length > 0) && (
+            {(selectedMonths.length > 0 || selectedTipos.length > 0 || selectedDiretorias.length > 0 || selectedSupervisors.length > 0 || selectedCities.length > 0) && (
               <div className="flex flex-col gap-1.5 ml-auto">
                 <span className="text-[10px] font-semibold opacity-0">Limpar</span>
                 <button
@@ -385,9 +397,7 @@ export default function Dashboard() {
           {/* Main List (Width decreased to col-span-1) */}
           <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm col-span-1 flex flex-col h-[600px]">
             <h2 className="text-lg font-bold text-gray-900 mb-4">
-              {visao === 'c' && "Distribuição por Cidade"}
-              {visao === 'd' && "Distribuição por Diretoria"}
-              {visao === 't' && "Distribuição por Supervisor"}
+              Distribuição por Tipo
             </h2>
             
             <div className="flex-1 overflow-y-auto scrollbar-thin pr-2">
@@ -398,11 +408,7 @@ export default function Dashboard() {
                 return (
                   <div 
                     key={`${name}-${idx}`} 
-                    onClick={() => {
-                      if (visao === 'c') handleMultiSelect(setSelectedCities)(name);
-                      if (visao === 'd') handleMultiSelect(setSelectedDiretorias)(name);
-                      if (visao === 't') handleMultiSelect(setSelectedSupervisors)(name);
-                    }}
+                    onClick={() => handleMultiSelect(setSelectedTipos)(name)}
                     className="group flex flex-col justify-center gap-2 py-3 px-4 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors mb-2"
                   >
                     <div className="flex justify-between items-center w-full">
@@ -560,13 +566,13 @@ export default function Dashboard() {
                   <tbody className="divide-y divide-gray-100">
                     {selectedAuditorDetails.data.map((apr: any, i: number) => (
                       <tr key={i} className="hover:bg-purple-50/30 transition-colors">
-                        <td className="px-6 py-3 text-gray-700">{apr['Data Início'] || '-'}</td>
+                        <td className="px-6 py-3 text-gray-700">{formatDate(apr['Data Início'])}</td>
                         <td className="px-6 py-3 text-gray-700 font-medium">
                           <span className="flex items-center gap-1.5"><Clock size={14} className="text-[#660099]" />{apr['Duração'] || '-'}</span>
                         </td>
                         <td className="px-6 py-3 text-gray-700">{apr['CIDADE COMERCIAL'] || '-'}</td>
                         <td className="px-6 py-3">
-                          <div className="text-gray-800 font-medium truncate max-w-lg" title={apr['Questionário']}>{apr['Questionário'] || '-'}</div>
+                          <div className="text-gray-800 font-medium truncate max-w-lg" title={apr['Questionário']}>{cleanTipo(apr['Questionário'])}</div>
                           <div className={`text-xs mt-1 ${apr['Situação'] === 'FECHADO' ? 'text-green-600' : 'text-orange-500'}`}>{apr['Situação'] || '-'}</div>
                         </td>
                       </tr>
