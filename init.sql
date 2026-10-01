@@ -1,4 +1,5 @@
-CREATE TABLE IF NOT EXISTS aprs (
+DROP TABLE IF EXISTS aprs;
+CREATE TABLE aprs (
   id SERIAL PRIMARY KEY,
   numero BIGINT,
   data_checklist TIMESTAMP,
