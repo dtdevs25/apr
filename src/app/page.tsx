@@ -125,9 +125,29 @@ export default function Dashboard() {
   }, []);
 
   const allMonths = useMemo(() => Array.from(new Set(data.map(i => String(i['Mês'])))).filter(Boolean).sort(), [data]);
-  const allDiretorias = useMemo(() => Array.from(new Set(data.map(i => i['DIRETORIA 1']))).filter(Boolean).sort(), [data]);
-  const allSupervisors = useMemo(() => Array.from(new Set(data.map(i => i['Supervisor'] || i['SUPERVISOR'] || i['GESTOR']))).filter(Boolean).sort(), [data]);
-  const allCities = useMemo(() => Array.from(new Set(data.map(i => i['CIDADE COMERCIAL']))).filter(Boolean).sort(), [data]);
+
+  // Filtros em Cascata
+  const allDiretorias = useMemo(() => {
+    const base = data.filter(i => selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês'])));
+    return Array.from(new Set(base.map(i => i['DIRETORIA 1']))).filter(Boolean).sort();
+  }, [data, selectedMonths]);
+
+  const allSupervisors = useMemo(() => {
+    const base = data.filter(i => 
+      (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
+      (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 1']))
+    );
+    return Array.from(new Set(base.map(i => i['Supervisor'] || i['SUPERVISOR'] || i['GESTOR']))).filter(Boolean).sort();
+  }, [data, selectedMonths, selectedDiretorias]);
+
+  const allCities = useMemo(() => {
+    const base = data.filter(i => 
+      (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
+      (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 1'])) &&
+      (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor'] || i['SUPERVISOR'] || i['GESTOR']))
+    );
+    return Array.from(new Set(base.map(i => i['CIDADE COMERCIAL']))).filter(Boolean).sort();
+  }, [data, selectedMonths, selectedDiretorias, selectedSupervisors]);
 
   const toggleMonth = (m: string) => setSelectedMonths(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]);
 
