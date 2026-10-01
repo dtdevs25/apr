@@ -276,20 +276,6 @@ export default function Dashboard() {
             <PremiumMultiSelect label="Supervisor" options={allSupervisors} selected={selectedSupervisors} onChange={handleMultiSelect(setSelectedSupervisors)} icon={Users} />
             <PremiumMultiSelect label="Cidade" options={allCities} selected={selectedCities} onChange={handleMultiSelect(setSelectedCities)} icon={MapPin} />
 
-            <div className="w-px h-8 bg-gray-200 hidden xl:block"></div>
-
-            <div className="flex flex-col gap-1 ml-auto">
-              <div className="flex gap-1 items-center bg-white p-1 rounded-xl border border-gray-100">
-                {['1','2','3','4','5','6','7','8','9','10','11','12'].map(m => (
-                  <button 
-                    key={m} onClick={() => toggleMonth(m)}
-                    className={`px-2 py-1 rounded-md text-[10px] min-w-[32px] text-center font-bold transition-all border ${selectedMonths.includes(m) ? 'bg-[#660099] text-white border-[#660099] shadow-md' : 'bg-gray-50 border-gray-100 text-gray-500 hover:text-gray-900 hover:border-gray-300'}`}
-                  >
-                    {monthMap[m]}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
         </div>
       </header>
