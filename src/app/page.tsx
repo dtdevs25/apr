@@ -19,13 +19,15 @@ const PremiumMultiSelect = ({
   options, 
   selected, 
   onChange,
-  icon: Icon
+  icon: Icon,
+  widthClass = 'w-72'
 }: { 
   label: string, 
   options: string[], 
   selected: string[], 
   onChange: (val: string) => void,
-  icon: any
+  icon: any,
+  widthClass?: string
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -48,7 +50,7 @@ const PremiumMultiSelect = ({
         <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{label}</span>
         <button 
           onClick={() => setIsOpen(!isOpen)}
-          className={`flex items-center justify-between px-3 py-1.5 w-72 bg-white border rounded-xl shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-purple-200 ${isActive ? 'border-purple-400 bg-purple-50' : 'border-gray-200 hover:border-purple-300'}`}
+          className={`flex items-center justify-between px-3 py-1.5 ${widthClass} bg-white border rounded-xl shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-purple-200 ${isActive ? 'border-purple-400 bg-purple-50' : 'border-gray-200 hover:border-purple-300'}`}
         >
           <div className="flex items-center gap-2 overflow-hidden">
             <Icon size={14} className={isActive ? 'text-[#660099]' : 'text-gray-400'} />
@@ -64,7 +66,7 @@ const PremiumMultiSelect = ({
         {isOpen && (
           <motion.div 
             initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 5 }} transition={{ duration: 0.15 }}
-            className="absolute z-50 top-[105%] left-0 w-72 bg-white/80 backdrop-blur-xl border border-white/40 shadow-2xl rounded-2xl overflow-hidden ring-1 ring-black/5"
+            className={`absolute z-50 top-[105%] left-0 ${widthClass} bg-white/80 backdrop-blur-xl border border-white/40 shadow-2xl rounded-2xl overflow-hidden ring-1 ring-black/5`}
           >
             <div className="p-3 border-b border-gray-100 bg-white/50">
               <div className="flex items-center bg-gray-100/80 rounded-lg px-3 py-2 border border-gray-200 focus-within:border-purple-300 focus-within:bg-white transition-all">
@@ -299,7 +301,7 @@ export default function Dashboard() {
 
             <div className="w-px h-12 bg-gray-200 hidden md:block"></div>
 
-            <PremiumMultiSelect label="Diretoria" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} />
+            <PremiumMultiSelect label="Diretoria" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-[340px]" />
             <PremiumMultiSelect label="Supervisor" options={allSupervisors} selected={selectedSupervisors} onChange={handleMultiSelect(setSelectedSupervisors)} icon={Users} />
             <PremiumMultiSelect label="Cidade" options={allCities} selected={selectedCities} onChange={handleMultiSelect(setSelectedCities)} icon={MapPin} />
 
