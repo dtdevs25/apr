@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, ChevronDown, CheckSquare, Square, Building, Users, MapPin, Calendar, Search, FileText, UserCheck, Clock, HelpCircle } from 'lucide-react';
+import { Download, ChevronDown, CheckSquare, Square, Building, Users, MapPin, Calendar, Search, FileText, UserCheck, Clock, HelpCircle, X } from 'lucide-react';
 
 const formatNum = (n: number) => n.toLocaleString('pt-BR');
 
@@ -156,6 +156,13 @@ export default function Dashboard() {
     setter(prev => prev.includes(val) ? prev.filter(x => x !== val) : [...prev, val]);
   };
 
+  const clearFilters = () => {
+    setSelectedMonths([]);
+    setSelectedDiretorias([]);
+    setSelectedSupervisors([]);
+    setSelectedCities([]);
+  };
+
   const filteredData = useMemo(() => {
     return data.filter(item => {
       return (selectedMonths.length === 0 || selectedMonths.includes(String(item['Mês']))) &&
@@ -295,6 +302,18 @@ export default function Dashboard() {
             <PremiumMultiSelect label="Diretoria" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} />
             <PremiumMultiSelect label="Supervisor" options={allSupervisors} selected={selectedSupervisors} onChange={handleMultiSelect(setSelectedSupervisors)} icon={Users} />
             <PremiumMultiSelect label="Cidade" options={allCities} selected={selectedCities} onChange={handleMultiSelect(setSelectedCities)} icon={MapPin} />
+
+            {(selectedMonths.length > 0 || selectedDiretorias.length > 0 || selectedSupervisors.length > 0 || selectedCities.length > 0) && (
+              <div className="flex flex-col gap-1.5 ml-auto">
+                <span className="text-[10px] font-semibold opacity-0">Limpar</span>
+                <button
+                  onClick={clearFilters}
+                  className="flex items-center justify-center gap-1.5 px-4 py-1.5 h-[34px] text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 hover:border-red-200 rounded-xl transition-all shadow-sm"
+                >
+                  <X size={14} strokeWidth={2.5} /> Limpar Filtros
+                </button>
+              </div>
+            )}
 
           </div>
         </div>
