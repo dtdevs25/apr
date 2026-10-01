@@ -136,6 +136,7 @@ export default function Dashboard() {
   const [selectedDiretorias, setSelectedDiretorias] = useState<string[]>([]);
   const [selectedSupervisors, setSelectedSupervisors] = useState<string[]>([]);
   const [selectedCities, setSelectedCities] = useState<string[]>([]);
+  const [selectedAuditores, setSelectedAuditores] = useState<string[]>([]);
 
   // Expand state
   const [selectedAuditorDetails, setSelectedAuditorDetails] = useState<any | null>(null);
@@ -179,6 +180,17 @@ export default function Dashboard() {
     return Array.from(new Set(base.map(i => i['CIDADE COMERCIAL']))).filter(Boolean).sort();
   }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors]);
 
+  const allAuditores = useMemo(() => {
+    const base = data.filter(i => 
+      (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
+      (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
+      (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
+      (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor'] || i['SUPERVISOR'] || i['GESTOR'])) &&
+      (selectedCities.length === 0 || selectedCities.includes(i['CIDADE COMERCIAL']))
+    );
+    return Array.from(new Set(base.map(i => i['Nome Auditor'] || i['Matrícula Auditor']))).filter(Boolean).sort();
+  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities]);
+
   const toggleMonth = (m: string) => setSelectedMonths(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]);
 
   const handleMultiSelect = (setter: React.Dispatch<React.SetStateAction<string[]>>) => (val: string) => {
@@ -192,6 +204,7 @@ export default function Dashboard() {
     setSelectedDiretorias([]);
     setSelectedSupervisors([]);
     setSelectedCities([]);
+    setSelectedAuditores([]);
   };
 
   const filteredData = useMemo(() => {
@@ -200,9 +213,10 @@ export default function Dashboard() {
              (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(item['Questionário']))) &&
              (selectedDiretorias.length === 0 || selectedDiretorias.includes(item['DIRETORIA 3'])) &&
              (selectedSupervisors.length === 0 || selectedSupervisors.includes(item['Supervisor'] || item['SUPERVISOR'] || item['GESTOR'])) &&
-             (selectedCities.length === 0 || selectedCities.includes(item['CIDADE COMERCIAL']));
+             (selectedCities.length === 0 || selectedCities.includes(item['CIDADE COMERCIAL'])) &&
+             (selectedAuditores.length === 0 || selectedAuditores.includes(item['Nome Auditor'] || item['Matrícula Auditor']));
     });
-  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities]);
+  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities, selectedAuditores]);
 
   // KPIs
   const totalAprs = filteredData.length;
@@ -317,8 +331,9 @@ export default function Dashboard() {
             <PremiumMultiSelect label="Diretoria" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-[340px]" />
             <PremiumMultiSelect label="Supervisor" options={allSupervisors} selected={selectedSupervisors} onChange={handleMultiSelect(setSelectedSupervisors)} icon={Users} />
             <PremiumMultiSelect label="Cidade" options={allCities} selected={selectedCities} onChange={handleMultiSelect(setSelectedCities)} icon={MapPin} />
+            <PremiumMultiSelect label="Colaborador" options={allAuditores} selected={selectedAuditores} onChange={handleMultiSelect(setSelectedAuditores)} icon={UserCheck} />
 
-            {(selectedMonths.length > 0 || selectedTipos.length > 0 || selectedDiretorias.length > 0 || selectedSupervisors.length > 0 || selectedCities.length > 0) && (
+            {(selectedMonths.length > 0 || selectedTipos.length > 0 || selectedDiretorias.length > 0 || selectedSupervisors.length > 0 || selectedCities.length > 0 || selectedAuditores.length > 0) && (
               <div className="flex flex-col gap-1.5 ml-auto">
                 <span className="text-[10px] font-semibold opacity-0">Limpar</span>
                 <button
