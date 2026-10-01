@@ -429,7 +429,9 @@ export default function Dashboard() {
               <div className="text-center">APR</div>
               <div className="flex items-center justify-center gap-1">
                 Meta
-                <HelpCircle size={14} className="text-gray-400 cursor-help" title="Meta: 2 aprs/dia x dias úteis no mês" />
+                <span title="Meta: 2 aprs/dia x dias úteis no mês">
+                  <HelpCircle size={14} className="text-gray-400 cursor-help" />
+                </span>
               </div>
               <div className="text-center">Duração</div>
             </div>
