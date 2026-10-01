@@ -111,6 +111,7 @@ const PremiumMultiSelect = ({
 export default function Dashboard() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isMetaModalOpen, setIsMetaModalOpen] = useState(false);
 
   // Filters
   const [visao, setVisao] = useState('c'); // c: cidade, d: diretoria, t: supervisor
@@ -431,9 +432,9 @@ export default function Dashboard() {
               <div className="text-center">APR</div>
               <div className="flex items-center justify-center gap-1">
                 Meta
-                <span title="Meta: 2 aprs/dia x dias úteis no mês">
-                  <HelpCircle size={14} className="text-gray-400 cursor-help" />
-                </span>
+                <button onClick={() => setIsMetaModalOpen(true)} className="focus:outline-none rounded-full hover:bg-gray-100 p-0.5 transition-colors">
+                  <HelpCircle size={14} className="text-gray-400 cursor-pointer hover:text-purple-600" />
+                </button>
               </div>
               <div className="text-center">Duração</div>
             </div>
@@ -513,6 +514,49 @@ export default function Dashboard() {
         </div>
 
       </main>
+
+      <AnimatePresence>
+        {isMetaModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden"
+            >
+              <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gray-50/50">
+                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <HelpCircle className="text-[#660099]" size={20} />
+                  Entendendo a Meta
+                </h3>
+                <button onClick={() => setIsMetaModalOpen(false)} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-6">
+                <p className="text-gray-600 text-sm leading-relaxed">
+                  A meta de APRs é calculada com base na seguinte regra:
+                </p>
+                <div className="mt-4 p-4 bg-purple-50 rounded-xl border border-purple-100">
+                  <p className="font-bold text-purple-900 text-center">2 APRs por dia × Dias úteis do mês</p>
+                </div>
+                <p className="mt-4 text-gray-600 text-sm leading-relaxed">
+                  Isso significa que cada colaborador tem o objetivo de realizar ao menos 2 Análises Preliminares de Riscos para cada dia útil trabalhado nos meses selecionados no filtro.
+                </p>
+                <div className="mt-6 flex justify-end">
+                  <button 
+                    onClick={() => setIsMetaModalOpen(false)}
+                    className="px-6 py-2 bg-[#660099] text-white text-sm font-semibold rounded-xl hover:bg-[#8000bf] transition-colors shadow-sm"
+                  >
+                    Entendi
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
