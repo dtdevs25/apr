@@ -129,13 +129,13 @@ export default function Dashboard() {
   // Filtros em Cascata
   const allDiretorias = useMemo(() => {
     const base = data.filter(i => selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês'])));
-    return Array.from(new Set(base.map(i => i['DIRETORIA 1']))).filter(Boolean).sort();
+    return Array.from(new Set(base.map(i => i['DIRETORIA 3']))).filter(Boolean).sort();
   }, [data, selectedMonths]);
 
   const allSupervisors = useMemo(() => {
     const base = data.filter(i => 
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
-      (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 1']))
+      (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3']))
     );
     return Array.from(new Set(base.map(i => i['Supervisor'] || i['SUPERVISOR'] || i['GESTOR']))).filter(Boolean).sort();
   }, [data, selectedMonths, selectedDiretorias]);
@@ -143,7 +143,7 @@ export default function Dashboard() {
   const allCities = useMemo(() => {
     const base = data.filter(i => 
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
-      (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 1'])) &&
+      (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
       (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor'] || i['SUPERVISOR'] || i['GESTOR']))
     );
     return Array.from(new Set(base.map(i => i['CIDADE COMERCIAL']))).filter(Boolean).sort();
@@ -159,7 +159,7 @@ export default function Dashboard() {
   const filteredData = useMemo(() => {
     return data.filter(item => {
       return (selectedMonths.length === 0 || selectedMonths.includes(String(item['Mês']))) &&
-             (selectedDiretorias.length === 0 || selectedDiretorias.includes(item['DIRETORIA 1'])) &&
+             (selectedDiretorias.length === 0 || selectedDiretorias.includes(item['DIRETORIA 3'])) &&
              (selectedSupervisors.length === 0 || selectedSupervisors.includes(item['Supervisor'] || item['SUPERVISOR'] || item['GESTOR'])) &&
              (selectedCities.length === 0 || selectedCities.includes(item['CIDADE COMERCIAL']));
     });
@@ -169,7 +169,7 @@ export default function Dashboard() {
   const totalAprs = filteredData.length;
   const auditoresSet = new Set(filteredData.map(i => i['Matrícula Auditor'] || i['Nome Auditor']));
   const totalAuditores = auditoresSet.size;
-  const diretoriasUnicas = new Set(filteredData.map(i => i['DIRETORIA 1']).filter(Boolean)).size;
+  const diretoriasUnicas = new Set(filteredData.map(i => i['DIRETORIA 3']).filter(Boolean)).size;
   const cidadesUnicas = new Set(filteredData.map(i => i['CIDADE COMERCIAL']).filter(Boolean)).size;
   const supervisoresUnicos = new Set(filteredData.map(i => i['Supervisor'] || i['SUPERVISOR'] || i['GESTOR']).filter(Boolean)).size;
 
@@ -196,7 +196,7 @@ export default function Dashboard() {
   // Main list
   const mainAgg = useMemo(() => {
     const agg: Record<string, number> = {};
-    const field = visao === 'c' ? 'CIDADE COMERCIAL' : visao === 'd' ? 'DIRETORIA 1' : 'GESTOR';
+    const field = visao === 'c' ? 'CIDADE COMERCIAL' : visao === 'd' ? 'DIRETORIA 3' : 'GESTOR';
     filteredData.forEach(item => {
       let val = item[field] || item['SUPERVISOR'] || item['Supervisor'] || 'Não Identificado';
       if (visao === 't') {

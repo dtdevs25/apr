@@ -22,7 +22,7 @@ def process_data():
     print("Selecting and formatting columns...")
     # Fill NA for cities and directorships just in case
     df_merged['CIDADE COMERCIAL'] = df_merged['CIDADE COMERCIAL'].fillna('Não Identificada')
-    df_merged['DIRETORIA 1'] = df_merged['DIRETORIA 1'].fillna('Não Identificada')
+    df_merged['DIRETORIA 3'] = df_merged['DIRETORIA 3'].fillna('Não Identificada')
     df_merged['GESTOR'] = df_merged['GESTOR'].fillna('Não Identificado')
     df_merged['Mês'] = pd.to_datetime(df_merged['Data Início']).dt.month.fillna(0).astype(int)
     df_merged['Ano'] = pd.to_datetime(df_merged['Data Início']).dt.year.fillna(0).astype(int)
@@ -35,7 +35,7 @@ def process_data():
     cols_to_keep = [
         'Número', 'Data Checklist', 'Data Início', 'Data Fim', 'Duração', 'Situação',
         'Matrícula Auditor', 'Nome Auditor', 'Localidade Objeto', 'Questionário',
-        'RE', 'CIDADE COMERCIAL', 'UF COMERCIAL', 'DIRETORIA 1', 'GERÊNCIA', 'GESTOR',
+        'RE', 'CIDADE COMERCIAL', 'UF COMERCIAL', 'DIRETORIA 3', 'GERÊNCIA', 'GESTOR',
         'Mês', 'Ano'
     ]
     df_final = df_cleaned[cols_to_keep]
