@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS aprs (
   data_checklist TIMESTAMP,
   data_inicio TIMESTAMP,
   data_fim TIMESTAMP,
-  duracao TIME,
+  duracao VARCHAR(50),
   situacao VARCHAR(50),
   matricula_auditor BIGINT,
   nome_auditor VARCHAR(255),
