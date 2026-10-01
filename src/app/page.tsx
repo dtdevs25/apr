@@ -403,6 +403,15 @@ export default function Dashboard() {
           <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm col-span-1 lg:col-span-2 flex flex-col h-[600px]">
             <h2 className="text-lg font-bold text-gray-900 mb-4">Ranking de Colaboradores</h2>
             
+            {/* Table Header */}
+            <div className="grid grid-cols-[30px_1fr_80px_100px_110px] items-center gap-4 px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100 mb-3">
+              <div>#</div>
+              <div>Colaborador</div>
+              <div className="text-center">APR</div>
+              <div className="text-center">Meta</div>
+              <div className="text-center">Duração</div>
+            </div>
+
             <div className="flex-1 overflow-y-auto scrollbar-thin pr-2">
               {rankAgg.map((item, idx) => {
                 const isExp = expandedAuditor === item.name;
@@ -418,22 +427,33 @@ export default function Dashboard() {
                   <div key={`${item.name}-${idx}`} className="mb-2">
                     <div 
                       onClick={() => setExpandedAuditor(isExp ? null : item.name)}
-                      className={`grid grid-cols-[30px_1fr_auto] items-center gap-4 p-4 rounded-xl cursor-pointer transition-all border ${isExp ? 'bg-gray-50 border-gray-200 shadow-sm' : 'bg-white border-transparent hover:border-gray-200 hover:bg-gray-50'}`}
+                      className={`grid grid-cols-[30px_1fr_80px_100px_110px] items-center gap-4 p-3 rounded-xl cursor-pointer transition-all border ${isExp ? 'bg-purple-50/50 border-purple-100 shadow-sm' : 'bg-white border-transparent hover:bg-gray-50'}`}
                     >
                       <div className="text-sm font-bold text-gray-400">{idx + 1}º</div>
-                      <div className="overflow-hidden">
-                        <div className={`text-base font-semibold truncate ${isExp ? 'text-black' : 'text-gray-700'}`} title={item.name}>{item.name}</div>
+                      
+                      <div className="overflow-hidden pr-2">
+                        <div className={`text-sm font-semibold truncate ${isExp ? 'text-purple-900' : 'text-gray-800'}`} title={item.name}>{item.name}</div>
                         {!isExp && (
-                          <div className="h-1.5 w-full bg-gray-100 rounded-full mt-2 overflow-hidden">
-                            <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} className={`h-full ${barColor} rounded-full opacity-70`} />
+                          <div className="h-1.5 w-full bg-gray-100 rounded-full mt-1.5 overflow-hidden">
+                            <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} className={`h-full ${barColor} rounded-full opacity-80`} />
                           </div>
                         )}
                       </div>
-                      <div className="flex flex-col items-end pl-4 border-l border-gray-100">
-                        <div className="text-xs text-gray-400 font-medium mb-1 flex items-center gap-1.5 bg-white px-2 py-0.5 rounded-full border border-gray-100"><Clock size={12} className="text-[#660099]"/> {getAvgTimeStr(item.totalSecs, item.validCount)}</div>
-                        <div className="flex items-baseline gap-2">
-                          <div className={`text-xl font-bold ${isExp ? 'text-black' : 'text-gray-900'}`}>{formatNum(item.count)}</div>
-                          <div className="text-[11px] text-gray-400 font-bold tracking-wide uppercase">{targetAprs > 0 ? ((item.count/targetAprs)*100).toFixed(1) : 0}% da meta</div>
+                      
+                      <div className="text-center">
+                        <div className={`text-base font-bold ${isExp ? 'text-purple-900' : 'text-gray-900'}`}>{formatNum(item.count)}</div>
+                      </div>
+
+                      <div className="text-center">
+                        <div className={`text-sm font-bold ${((item.count/targetAprs)*100) >= 100 ? 'text-green-600' : 'text-gray-600'}`}>
+                          {targetAprs > 0 ? ((item.count/targetAprs)*100).toFixed(1) : 0}%
+                        </div>
+                      </div>
+
+                      <div className="text-center flex justify-center">
+                        <div className="text-xs text-gray-600 font-medium flex items-center gap-1.5 bg-white px-2 py-1 rounded-md border border-gray-100">
+                          <Clock size={12} className="text-[#660099]"/> 
+                          {getAvgTimeStr(item.totalSecs, item.validCount)}
                         </div>
                       </div>
                     </div>
@@ -441,7 +461,7 @@ export default function Dashboard() {
                     <AnimatePresence>
                       {isExp && (
                         <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden ml-10 mr-2">
-                          <div className="py-4 px-4 mt-2 mb-4 bg-gray-50 border border-gray-100 rounded-xl">
+                          <div className="py-4 px-4 mt-1 mb-3 bg-gray-50 border border-gray-100 rounded-xl">
                             <div className="text-xs uppercase font-bold text-gray-400 mb-3 tracking-wider">Distribuição por Cidades</div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
                               {cityAgg.map(([cid, val]: any) => (
