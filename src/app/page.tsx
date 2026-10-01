@@ -213,10 +213,9 @@ export default function Dashboard() {
              (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(item['Questionário']))) &&
              (selectedDiretorias.length === 0 || selectedDiretorias.includes(item['DIRETORIA 3'])) &&
              (selectedSupervisors.length === 0 || selectedSupervisors.includes(item['Supervisor'] || item['SUPERVISOR'] || item['GESTOR'])) &&
-             (selectedCities.length === 0 || selectedCities.includes(item['CIDADE COMERCIAL'])) &&
-             (selectedAuditores.length === 0 || selectedAuditores.includes(item['Nome Auditor'] || item['Matrícula Auditor']));
+             (selectedCities.length === 0 || selectedCities.includes(item['CIDADE COMERCIAL']));
     });
-  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities, selectedAuditores]);
+  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities]);
 
   // KPIs
   const totalAprs = filteredData.length;
@@ -263,6 +262,7 @@ export default function Dashboard() {
     filteredData.forEach(item => {
       const mat = item['Matrícula Auditor'] || 'N/A';
       const name = item['Nome Auditor'] || mat;
+      if (selectedAuditores.length > 0 && !selectedAuditores.includes(name) && !selectedAuditores.includes(mat)) return;
       if (!agg[mat]) agg[mat] = { count: 0, name, data: [], totalSecs: 0, validCount: 0 };
       agg[mat].count += 1; agg[mat].data.push(item);
       const durKey = Object.keys(item).find(k => k.toLowerCase().includes('dura') && k.toLowerCase().includes('o'));
@@ -331,7 +331,6 @@ export default function Dashboard() {
             <PremiumMultiSelect label="Diretoria" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-[340px]" />
             <PremiumMultiSelect label="Supervisor" options={allSupervisors} selected={selectedSupervisors} onChange={handleMultiSelect(setSelectedSupervisors)} icon={Users} />
             <PremiumMultiSelect label="Cidade" options={allCities} selected={selectedCities} onChange={handleMultiSelect(setSelectedCities)} icon={MapPin} />
-            <PremiumMultiSelect label="Colaborador" options={allAuditores} selected={selectedAuditores} onChange={handleMultiSelect(setSelectedAuditores)} icon={UserCheck} />
 
             {(selectedMonths.length > 0 || selectedTipos.length > 0 || selectedDiretorias.length > 0 || selectedSupervisors.length > 0 || selectedCities.length > 0 || selectedAuditores.length > 0) && (
               <div className="flex flex-col gap-1.5 ml-auto">
@@ -444,7 +443,12 @@ export default function Dashboard() {
 
           {/* Ranking List (Width increased to col-span-2) */}
           <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm col-span-1 lg:col-span-2 flex flex-col h-[600px]">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Ranking de Colaboradores</h2>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Ranking de Colaboradores</h2>
+              <div className="z-20">
+                <PremiumMultiSelect label="Filtrar Nome" options={allAuditores} selected={selectedAuditores} onChange={handleMultiSelect(setSelectedAuditores)} icon={UserCheck} widthClass="w-[280px]" />
+              </div>
+            </div>
             
             {/* Table Header */}
             <div className="grid grid-cols-[30px_1fr_80px_100px_110px] items-center gap-4 px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100 mb-3">
