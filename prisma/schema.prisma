@@ -1,0 +1,35 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AprRecord {
+  id                Int      @id @default(autoincrement())
+  numero            String?
+  dataChecklist     String?
+  dataInicio        String?
+  dataFim           String?
+  duracao           String?
+  situacao          String?
+  matriculaAuditor  Int?
+  nomeAuditor       String?
+  localidadeObjeto  String?
+  questionario      String?
+  re                Int?
+  cidadeComercial   String?
+  ufComercial       String?
+  diretoria         String?
+  gerencia          String?
+  gestor            String?
+  mes               Int?
+  ano               Int?
+
+  @@map("apr_records")
+}

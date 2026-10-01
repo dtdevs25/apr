@@ -40,6 +40,13 @@ def process_data():
     ]
     df_final = df_cleaned[cols_to_keep]
 
+    # Convert datetime columns to strings for JSON serialization
+    for col in df_final.select_dtypes(include=['datetime64', 'datetimetz']).columns:
+        df_final[col] = df_final[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+
+    # Replace NaN with empty string to avoid invalid JSON 'NaN' tokens
+    df_final = df_final.fillna("")
+    
     print("Saving to data.json...")
     records = df_final.to_dict(orient='records')
     
