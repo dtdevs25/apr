@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, ChevronDown, CheckSquare, Square, Building, Users, MapPin, Calendar, Search, FileText, UserCheck, Clock } from 'lucide-react';
+import { Download, ChevronDown, CheckSquare, Square, Building, Users, MapPin, Calendar, Search, FileText, UserCheck, Clock, HelpCircle } from 'lucide-react';
 
 const formatNum = (n: number) => n.toLocaleString('pt-BR');
 
@@ -48,7 +48,7 @@ const PremiumMultiSelect = ({
         <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{label}</span>
         <button 
           onClick={() => setIsOpen(!isOpen)}
-          className={`flex items-center justify-between px-3 py-1.5 w-48 bg-white border rounded-xl shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-purple-200 ${isActive ? 'border-purple-400 bg-purple-50' : 'border-gray-200 hover:border-purple-300'}`}
+          className={`flex items-center justify-between px-3 py-1.5 w-72 bg-white border rounded-xl shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-purple-200 ${isActive ? 'border-purple-400 bg-purple-50' : 'border-gray-200 hover:border-purple-300'}`}
         >
           <div className="flex items-center gap-2 overflow-hidden">
             <Icon size={14} className={isActive ? 'text-[#660099]' : 'text-gray-400'} />
@@ -64,7 +64,7 @@ const PremiumMultiSelect = ({
         {isOpen && (
           <motion.div 
             initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 5 }} transition={{ duration: 0.15 }}
-            className="absolute z-50 top-[105%] left-0 w-64 bg-white/80 backdrop-blur-xl border border-white/40 shadow-2xl rounded-2xl overflow-hidden ring-1 ring-black/5"
+            className="absolute z-50 top-[105%] left-0 w-72 bg-white/80 backdrop-blur-xl border border-white/40 shadow-2xl rounded-2xl overflow-hidden ring-1 ring-black/5"
           >
             <div className="p-3 border-b border-gray-100 bg-white/50">
               <div className="flex items-center bg-gray-100/80 rounded-lg px-3 py-2 border border-gray-200 focus-within:border-purple-300 focus-within:bg-white transition-all">
@@ -280,7 +280,7 @@ export default function Dashboard() {
               <div className="relative">
                 <select 
                   value={visao} onChange={e => setVisao(e.target.value)}
-                  className="appearance-none px-3 py-1.5 w-40 bg-white border border-gray-200 rounded-xl shadow-sm text-xs font-medium text-gray-700 hover:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200 transition-all cursor-pointer"
+                  className="appearance-none px-3 py-1.5 w-60 bg-white border border-gray-200 rounded-xl shadow-sm text-xs font-medium text-gray-700 hover:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200 transition-all cursor-pointer"
                 >
                   <option value="c">Por Cidade</option>
                   <option value="d">Por Diretoria</option>
@@ -408,7 +408,10 @@ export default function Dashboard() {
               <div>#</div>
               <div>Colaborador</div>
               <div className="text-center">APR</div>
-              <div className="text-center">Meta</div>
+              <div className="flex items-center justify-center gap-1">
+                Meta
+                <HelpCircle size={14} className="text-gray-400 cursor-help" title="Meta: 2 aprs/dia x dias úteis no mês" />
+              </div>
               <div className="text-center">Duração</div>
             </div>
 
@@ -440,18 +443,18 @@ export default function Dashboard() {
                         )}
                       </div>
                       
-                      <div className="text-center">
+                      <div className="flex justify-center items-center">
                         <div className={`text-base font-bold ${isExp ? 'text-purple-900' : 'text-gray-900'}`}>{formatNum(item.count)}</div>
                       </div>
 
-                      <div className="text-center">
+                      <div className="flex justify-center items-center">
                         <div className={`text-sm font-bold ${((item.count/targetAprs)*100) >= 100 ? 'text-green-600' : 'text-gray-600'}`}>
                           {targetAprs > 0 ? ((item.count/targetAprs)*100).toFixed(1) : 0}%
                         </div>
                       </div>
 
-                      <div className="text-center flex justify-center">
-                        <div className="text-xs text-gray-600 font-medium flex items-center gap-1.5 bg-white px-2 py-1 rounded-md border border-gray-100">
+                      <div className="flex justify-center items-center">
+                        <div className="text-xs text-gray-600 font-medium flex items-center justify-center gap-1.5 bg-white px-2 py-1 rounded-md border border-gray-100">
                           <Clock size={12} className="text-[#660099]"/> 
                           {getAvgTimeStr(item.totalSecs, item.validCount)}
                         </div>
