@@ -69,6 +69,7 @@ export async function POST(req: Request) {
 
       const rowsToProcess = [];
       const numerosNaPlanilha = [];
+      const seenNumeros = new Set<string>();
 
       for (const rawRow of data as any[]) {
         // Função para buscar chave ignorando case
@@ -85,6 +86,11 @@ export async function POST(req: Request) {
         if (!numeroRaw) continue;
 
         const numero = String(numeroRaw);
+        
+        // Evitar duplicidades na mesma planilha
+        if (seenNumeros.has(numero)) continue;
+        seenNumeros.add(numero);
+
         const dataChecklist = parseExcelDate(getVal(['Data Checklist', 'Data_Checklist']));
         const dataInicio = parseExcelDate(getVal(['Data Início', 'Data Inicio']));
         const dataFim = parseExcelDate(getVal(['Data Fim', 'Data_Fim']));
@@ -186,9 +192,9 @@ export async function POST(req: Request) {
       success: true, 
       message: `Importação rápida concluída com sucesso!` 
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Erro no upload:", error);
-    return NextResponse.json({ success: false, message: "Erro ao processar o arquivo no banco de dados." }, { status: 500 });
+    return NextResponse.json({ success: false, message: "Erro no DB: " + (error.message || String(error)) }, { status: 500 });
   }
 }
 
