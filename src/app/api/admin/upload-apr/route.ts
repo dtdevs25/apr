@@ -144,10 +144,13 @@ export async function POST(req: Request) {
         });
       }
 
+      let updated = 0;
+
       // Apagar registros que já existem para atualizar mais rápido
       for (let i = 0; i < numerosNaPlanilha.length; i += 5000) {
         const chunk = numerosNaPlanilha.slice(i, i + 5000);
-        await client.query('DELETE FROM aprs WHERE numero::text = ANY($1::text[])', [chunk]);
+        const delRes = await client.query('DELETE FROM aprs WHERE numero::text = ANY($1::text[])', [chunk]);
+        if (delRes.rowCount) updated += delRes.rowCount;
       }
 
       // Bulk insert
@@ -180,18 +183,21 @@ export async function POST(req: Request) {
         await client.query(query + placeholders, values);
       }
 
+      const totalProcessed = rowsToProcess.length;
+      const imported = totalProcessed - updated;
+
       await client.query('COMMIT');
+      
+      return NextResponse.json({ 
+        success: true, 
+        message: `Importação rápida concluída! ${imported} novas APRs inseridas e ${updated} atualizadas.` 
+      });
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
     } finally {
       client.release();
     }
-
-    return NextResponse.json({ 
-      success: true, 
-      message: `Importação rápida concluída com sucesso!` 
-    });
   } catch (error: any) {
     console.error("Erro no upload:", error);
     return NextResponse.json({ success: false, message: "Erro no DB: " + (error.message || String(error)) }, { status: 500 });
