@@ -5,31 +5,34 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    // Cruzamento APR x Plano de Ocupações feito direto no SQL:
-    // 1) tenta o PO do mesmo mês/ano da APR; 2) senão, o PO mais recente da matrícula; 3) senão, o que veio na APR.
+    // Cruzamento APR x Plano de Ocupações, SEM considerar data:
+    // acha a pessoa no PO pela Matrícula Auditor, pelo RE ou pelo nome. Achou -> usa diretoria, supervisor etc. do PO.
+    const ACC_FROM = 'ÁÀÂÃÄáàâãäÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÕÖóòôõöÚÙÛÜúùûüÇçÑñ';
+    const ACC_TO   = 'AAAAAaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuCcNn';
+    const normNome = (col: string) =>
+      `NULLIF(UPPER(TRIM(REGEXP_REPLACE(TRANSLATE(${col}::text, '${ACC_FROM}', '${ACC_TO}'), '\\s+', ' ', 'g'))), '')`;
+    const normId = (col: string) =>
+      `NULLIF(LTRIM(REGEXP_REPLACE(REGEXP_REPLACE(TRIM(${col}::text), '\\.0+$', ''), '[^0-9]', '', 'g'), '0'), '')`;
+
     const { rows } = await pool.query(`
       WITH po_norm AS (
-        SELECT
-          id, ano, UPPER(TRIM(mes)) AS mes,
-          LTRIM(REGEXP_REPLACE(user_id_ssff::text, '[^0-9]', '', 'g'), '0') AS uid,
+        SELECT id,
+          ${normId('user_id_ssff')} AS uid,
+          ${normNome('nome')} AS nome_n,
           diretoria_3, gerencia, gestor, cidade_comercial, uf_comercial
         FROM po
-        WHERE user_id_ssff IS NOT NULL
       ),
-      po_mes AS (
-        SELECT DISTINCT ON (uid, ano, mes) *
-        FROM po_norm
-        ORDER BY uid, ano, mes, id DESC
+      po_by_id AS (
+        SELECT DISTINCT ON (uid) * FROM po_norm WHERE uid IS NOT NULL ORDER BY uid, id DESC
       ),
-      po_last AS (
-        SELECT DISTINCT ON (uid) *
-        FROM po_norm
-        ORDER BY uid, ano DESC, id DESC
+      po_by_nome AS (
+        SELECT DISTINCT ON (nome_n) * FROM po_norm WHERE nome_n IS NOT NULL ORDER BY nome_n, id DESC
       ),
       a AS (
         SELECT aprs.*,
-          LTRIM(REGEXP_REPLACE(matricula_auditor::text, '[^0-9]', '', 'g'), '0') AS uid,
-          (ARRAY['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'])[aprs.mes] AS mes_nome
+          ${normId('matricula_auditor')} AS uid_mat,
+          ${normId('re')} AS uid_re,
+          ${normNome('nome_auditor')} AS nome_n
         FROM aprs
       )
       SELECT 
@@ -44,17 +47,18 @@ export async function GET() {
         a.localidade_objeto AS "Localidade Objeto",
         a.questionario AS "Questionário",
         a.re AS "RE",
-        COALESCE(pm.cidade_comercial, pl.cidade_comercial, a.cidade_comercial) AS "CIDADE COMERCIAL",
-        COALESCE(pm.uf_comercial, pl.uf_comercial, a.uf_comercial) AS "UF COMERCIAL",
-        COALESCE(pm.diretoria_3, pl.diretoria_3, a.diretoria_3) AS "DIRETORIA 3",
-        COALESCE(pm.gerencia, pl.gerencia, a.gerencia) AS "GERÊNCIA",
-        COALESCE(pm.gestor, pl.gestor, a.gestor) AS "GESTOR",
-        COALESCE(pm.gestor, pl.gestor, a.gestor) AS "Supervisor",
+        COALESCE(p1.cidade_comercial, p2.cidade_comercial, p3.cidade_comercial, a.cidade_comercial) AS "CIDADE COMERCIAL",
+        COALESCE(p1.uf_comercial, p2.uf_comercial, p3.uf_comercial, a.uf_comercial) AS "UF COMERCIAL",
+        COALESCE(p1.diretoria_3, p2.diretoria_3, p3.diretoria_3, a.diretoria_3) AS "DIRETORIA 3",
+        COALESCE(p1.gerencia, p2.gerencia, p3.gerencia, a.gerencia) AS "GERÊNCIA",
+        COALESCE(p1.gestor, p2.gestor, p3.gestor, a.gestor) AS "GESTOR",
+        COALESCE(p1.gestor, p2.gestor, p3.gestor, a.gestor) AS "Supervisor",
         a.mes AS "Mês",
         a.ano AS "Ano"
       FROM a
-      LEFT JOIN po_mes pm ON pm.uid = a.uid AND pm.ano = a.ano AND pm.mes = a.mes_nome
-      LEFT JOIN po_last pl ON pl.uid = a.uid
+      LEFT JOIN po_by_id   p1 ON p1.uid = a.uid_mat
+      LEFT JOIN po_by_id   p2 ON p2.uid = a.uid_re
+      LEFT JOIN po_by_nome p3 ON p3.nome_n = a.nome_n
       ORDER BY a.data_inicio DESC
     `);
     
