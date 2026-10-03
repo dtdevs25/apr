@@ -54,13 +54,13 @@ export async function POST(req: Request) {
       await client.query('BEGIN');
 
       const { rows: poRows } = await client.query('SELECT ano, mes, user_id_ssff, diretoria_3, gerencia, gestor, cidade_comercial, uf_comercial FROM po');
-      const poMap = new Map();
       const poFallbackMap = new Map();
       for (const po of poRows) {
         if (po.user_id_ssff) {
-          const key = `${po.ano}-${po.mes}-${po.user_id_ssff}`;
-          poMap.set(key, po);
-          poFallbackMap.set(String(po.user_id_ssff), po); // Fallback: pega o último disponível no banco
+          const rawId = String(po.user_id_ssff).replace(/[^0-9]/g, '').replace(/^0+/, '');
+          if (rawId) {
+            poFallbackMap.set(rawId, po); // Fallback: pega o último disponível no banco
+          }
         }
       }
 
@@ -100,7 +100,10 @@ export async function POST(req: Request) {
         
         const situacao = getVal(['Situação', 'Situacao']) || null;
         const matriculaAuditorRaw = getVal(['Matrícula Auditor', 'Matricula Auditor', 'RE']) || '';
-        const matriculaAuditor = String(matriculaAuditorRaw).replace(/[^0-9]/g, '');
+        let matriculaAuditor = String(matriculaAuditorRaw).replace(/[^0-9]/g, '');
+        // Remover zeros à esquerda para o de-para funcionar independente de como veio formatado
+        matriculaAuditor = matriculaAuditor.replace(/^0+/, '');
+
         const nomeAuditor = getVal(['Nome Auditor']) || null;
         const localidadeObjeto = getVal(['Localidade Objeto']) || null;
         const questionario = getVal(['Questionário', 'Questionario']) || null;

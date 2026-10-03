@@ -74,13 +74,26 @@ export async function POST(req: Request) {
 
       // 2. Inserir dados do arquivo
       for (const row of data as any[]) {
-        const rowAno = parseInt(row['ANO'], 10);
-        const rowMes = String(row['MÊS']).toUpperCase();
+        // Função para buscar chave ignorando case
+        const getVal = (keys: string[]) => {
+          for (const k of Object.keys(row)) {
+            if (keys.some(key => k.toLowerCase() === key.toLowerCase())) {
+              return row[k];
+            }
+          }
+          return null;
+        };
+
+        const rowAnoRaw = getVal(['ANO']);
+        const rowMesRaw = getVal(['MÊS', 'MES', 'Mês', 'Mes']);
+        const rowAno = rowAnoRaw ? parseInt(rowAnoRaw, 10) : null;
+        const rowMes = rowMesRaw ? String(rowMesRaw).toUpperCase() : null;
         
         if (!rowAno || !rowMes || rowMes === 'UNDEFINED') continue;
 
-        const userIdRaw = row['USER ID SSFF'] || row['RE'] || row['MATRÍCULA'] || null;
-        const userId = userIdRaw ? String(userIdRaw).replace(/[^0-9]/g, '') : null;
+        const userIdRaw = getVal(['USER ID SSFF', 'RE', 'MATRÍCULA', 'MATRICULA']);
+        let userId = userIdRaw ? String(userIdRaw).replace(/[^0-9]/g, '') : null;
+        if (userId) userId = userId.replace(/^0+/, '');
         if (!userId) continue;
 
         // Verificar se esse userId já foi processado neste mesmo ano/mês
@@ -90,16 +103,16 @@ export async function POST(req: Request) {
         }
         processedIdsPerPeriod.add(uniqueKey);
 
-        const status = row['STATUS'] || 'ATIVO';
-        const nome = row['NOME'] || null;
-        const cargo = row['CARGO'] || null;
-        const diretoria3 = row['DIRETORIA 3'] || null;
-        const gerencia = row['GERÊNCIA'] || null;
-        const gestor = row['GESTOR'] || null;
-        const cidade = row['CIDADE COMERCIAL'] || null;
-        const uf = row['UF COMERCIAL'] || null;
-        const dataAdmissao = parseExcelDate(row['DATA ADMISSÃO']);
-        const dataDesligamento = parseExcelDate(row['DATA DESLIGAMENTO']);
+        const status = getVal(['STATUS']) || 'ATIVO';
+        const nome = getVal(['NOME']) || null;
+        const cargo = getVal(['CARGO']) || null;
+        const diretoria3 = getVal(['DIRETORIA 3', 'DIRETORIA3', 'Diretoria 3']) || null;
+        const gerencia = getVal(['GERÊNCIA', 'GERENCIA']) || null;
+        const gestor = getVal(['GESTOR']) || null;
+        const cidade = getVal(['CIDADE COMERCIAL']) || null;
+        const uf = getVal(['UF COMERCIAL']) || null;
+        const dataAdmissao = parseExcelDate(getVal(['DATA ADMISSÃO', 'DATA ADMISSAO']));
+        const dataDesligamento = parseExcelDate(getVal(['DATA DESLIGAMENTO']));
 
         await client.query(`
           INSERT INTO po (
