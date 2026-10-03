@@ -76,7 +76,8 @@ export async function POST(req: Request) {
 
       // 2. Inserir dados do arquivo
       for (const row of data as any[]) {
-        const userId = row['USER ID SSFF'] ? String(row['USER ID SSFF']) : null;
+        const userIdRaw = row['USER ID SSFF'] || row['RE'] || row['MATRÍCULA'] || null;
+        const userId = userIdRaw ? String(userIdRaw).replace(/[^0-9]/g, '') : null;
         if (!userId) continue;
 
         activeIds.add(userId);
