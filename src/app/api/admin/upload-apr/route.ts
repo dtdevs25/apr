@@ -19,8 +19,25 @@ export async function POST(req: Request) {
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
     
-    // Obter dados em JSON, tratando campos como strings e números
-    const data = xlsx.utils.sheet_to_json(sheet, { defval: null });
+    // Obter dados em formato de array puro para encontrar a linha do cabeçalho
+    const rawData = xlsx.utils.sheet_to_json(sheet, { header: 1 });
+    let headerIndex = -1;
+    
+    // Procurar a linha que contém o cabeçalho "Número" (ou "Numero")
+    for (let i = 0; i < Math.min(20, rawData.length); i++) {
+      const rowArr = rawData[i] as any[];
+      if (rowArr && rowArr.some(v => typeof v === 'string' && (v.trim().toLowerCase() === 'número' || v.trim().toLowerCase() === 'numero'))) {
+        headerIndex = i;
+        break;
+      }
+    }
+
+    if (headerIndex === -1) {
+      return NextResponse.json({ success: false, message: "Não foi possível encontrar a linha de cabeçalho com a coluna 'Número'." }, { status: 400 });
+    }
+
+    // Agora sim ler os dados como objetos, começando da linha do cabeçalho correta
+    const data = xlsx.utils.sheet_to_json(sheet, { range: headerIndex, defval: null });
 
     if (!Array.isArray(data) || data.length === 0) {
       return NextResponse.json({ success: false, message: "A planilha está vazia ou no formato incorreto." }, { status: 400 });
