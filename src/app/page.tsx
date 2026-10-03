@@ -1,10 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Download, ChevronDown, CheckSquare, Square, Building, Users, MapPin, Calendar, Search, FileText, UserCheck, Clock, HelpCircle, X, Settings, UploadCloud, Lock } from 'lucide-react';
-
-const formatNum = (n: number) => n.toLocaleString('pt-BR');
+import { Download, ChevronDown, CheckSquare, Square, Building, Users, MapPin, Calendar, Search, FileText, UserCheck, Clock, HelpCircle, X, Settings, UploadCloud, Lock, Eye, EyeOff } from 'lucide-react';
 
 const monthMap: Record<string, string> = {
   '1': 'Jan', '2': 'Fev', '3': 'Mar', '4': 'Abr', '5': 'Mai', '6': 'Jun',
@@ -142,6 +139,7 @@ export default function Dashboard() {
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [adminAction, setAdminAction] = useState<'apr' | 'plano' | null>(null);
   const [adminPassword, setAdminPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [adminAuthStatus, setAdminAuthStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [uploadStatus, setUploadStatus] = useState('');
 
@@ -684,14 +682,42 @@ export default function Dashboard() {
                   Administração
                 </h3>
                 <button 
-                  onClick={() => { setIsAdminOpen(false); setAdminAction(null); setAdminAuthStatus('idle'); setAdminPassword(''); setUploadStatus(''); }} 
+                  onClick={() => { setIsAdminOpen(false); setAdminAction(null); setAdminAuthStatus('idle'); setAdminPassword(''); setUploadStatus(''); setShowPassword(false); }} 
                   className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100"
                 >
                   <X size={20} />
                 </button>
               </div>
               <div className="p-6">
-                {!adminAction ? (
+                {adminAuthStatus !== 'success' ? (
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="w-12 h-12 bg-orange-100 text-orange-500 rounded-full flex items-center justify-center mb-2"><Lock size={24} /></div>
+                    <h4 className="font-bold text-gray-900">Acesso Restrito</h4>
+                    <p className="text-sm text-gray-500 text-center mb-2">Digite a senha de administrador para prosseguir.</p>
+                    <div className="relative w-full">
+                      <input 
+                        type={showPassword ? "text" : "password"} 
+                        value={adminPassword} 
+                        onChange={e => setAdminPassword(e.target.value)}
+                        placeholder="Senha" 
+                        className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#660099] focus:outline-none pr-10"
+                      />
+                      <button 
+                        type="button" 
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                    {adminAuthStatus === 'error' && <p className="text-xs text-red-500 font-semibold">Senha incorreta.</p>}
+                    <div className="flex w-full mt-2">
+                      <button onClick={handleAdminAuth} className="w-full py-2 bg-[#660099] text-white font-semibold rounded-xl hover:bg-[#8000bf] transition-colors">
+                        {adminAuthStatus === 'loading' ? 'Verificando...' : 'Autenticar'}
+                      </button>
+                    </div>
+                  </div>
+                ) : !adminAction ? (
                   <div className="flex flex-col gap-3">
                     <button onClick={() => setAdminAction('apr')} className="flex items-center gap-3 p-4 rounded-xl border border-gray-200 hover:border-[#660099] hover:bg-purple-50 transition-all group">
                       <div className="p-2 bg-purple-100 rounded-lg group-hover:bg-[#660099] text-[#660099] group-hover:text-white transition-colors"><UploadCloud size={20} /></div>
@@ -701,24 +727,6 @@ export default function Dashboard() {
                       <div className="p-2 bg-blue-100 rounded-lg group-hover:bg-blue-600 text-blue-600 group-hover:text-white transition-colors"><Users size={20} /></div>
                       <div className="text-left"><p className="font-bold text-gray-900">Importar Plano de Ocupações</p><p className="text-xs text-gray-500">Atualizar lista de colaboradores e diretorias</p></div>
                     </button>
-                  </div>
-                ) : adminAuthStatus !== 'success' ? (
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 bg-orange-100 text-orange-500 rounded-full flex items-center justify-center mb-2"><Lock size={24} /></div>
-                    <h4 className="font-bold text-gray-900">Acesso Restrito</h4>
-                    <p className="text-sm text-gray-500 text-center mb-2">Digite a senha de administrador para prosseguir com a importação.</p>
-                    <input 
-                      type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)}
-                      placeholder="Senha" 
-                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#660099] focus:outline-none"
-                    />
-                    {adminAuthStatus === 'error' && <p className="text-xs text-red-500 font-semibold">Senha incorreta.</p>}
-                    <div className="flex gap-3 w-full mt-2">
-                      <button onClick={() => setAdminAction(null)} className="flex-1 py-2 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-colors">Voltar</button>
-                      <button onClick={handleAdminAuth} className="flex-1 py-2 bg-[#660099] text-white font-semibold rounded-xl hover:bg-[#8000bf] transition-colors">
-                        {adminAuthStatus === 'loading' ? 'Verificando...' : 'Autenticar'}
-                      </button>
-                    </div>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center gap-4">
@@ -735,14 +743,10 @@ export default function Dashboard() {
                     </label>
 
                     {uploadStatus && (
-                      <div className={`w-full p-3 rounded-lg text-sm font-semibold text-center ${uploadStatus.includes('sucesso') ? 'bg-green-50 text-green-700 border border-green-200' : uploadStatus.includes('Erro') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
+                      <div className={`w-full p-3 rounded-lg text-sm font-semibold text-center ${uploadStatus.includes('sucesso') || uploadStatus.includes('concluíd') ? 'bg-green-50 text-green-700 border border-green-200' : uploadStatus.includes('Erro') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
                         {uploadStatus}
                       </div>
                     )}
-
-                    <button onClick={() => setAdminAction(null)} className="w-full py-2 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-colors mt-2">
-                      Voltar
-                    </button>
                   </div>
                 )}
               </div>
