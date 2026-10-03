@@ -102,8 +102,11 @@ export async function POST(req: Request) {
         
         const mesRaw = getVal(['Mês', 'Mes']);
         const anoRaw = getVal(['Ano']);
-        const mes = mesRaw ? parseInt(mesRaw) : null;
-        const ano = anoRaw ? parseInt(anoRaw) : null;
+        let mes = mesRaw ? parseInt(mesRaw) : null;
+        let ano = anoRaw ? parseInt(anoRaw) : null;
+
+        if (!mes && dataInicio) mes = dataInicio.getMonth() + 1;
+        if (!ano && dataInicio) ano = dataInicio.getFullYear();
 
         let cidadeComercial = getVal(['CIDADE COMERCIAL']) || null;
         let ufComercial = getVal(['UF COMERCIAL']) || null;
