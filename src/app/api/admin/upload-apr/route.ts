@@ -55,31 +55,44 @@ export async function POST(req: Request) {
         7: 'JULHO', 8: 'AGOSTO', 9: 'SETEMBRO', 10: 'OUTUBRO', 11: 'NOVEMBRO', 12: 'DEZEMBRO'
       };
 
-      for (const row of data as any[]) {
-        if (!row.Número) continue;
+      for (const rawRow of data as any[]) {
+        // Função para buscar chave ignorando case
+        const getVal = (keys: string[]) => {
+          for (const k of Object.keys(rawRow)) {
+            if (keys.some(key => k.toLowerCase() === key.toLowerCase())) {
+              return rawRow[k];
+            }
+          }
+          return null;
+        };
 
-        const numero = String(row.Número);
-        const dataChecklist = parseExcelDate(row['Data Checklist']);
-        const dataInicio = parseExcelDate(row['Data Início']);
-        const dataFim = parseExcelDate(row['Data Fim']);
-        const duracao = row['Duração'];
+        const numeroRaw = getVal(['Número', 'Numero']);
+        if (!numeroRaw) continue;
+
+        const numero = String(numeroRaw);
+        const dataChecklist = parseExcelDate(getVal(['Data Checklist', 'Data_Checklist']));
+        const dataInicio = parseExcelDate(getVal(['Data Início', 'Data Inicio']));
+        const dataFim = parseExcelDate(getVal(['Data Fim', 'Data_Fim']));
+        const duracao = getVal(['Duração', 'Duracao']);
         
-        const situacao = row['Situação'] || null;
-        const matriculaAuditorRaw = row['Matrícula Auditor'] || row['RE'] || '';
+        const situacao = getVal(['Situação', 'Situacao']) || null;
+        const matriculaAuditorRaw = getVal(['Matrícula Auditor', 'Matricula Auditor', 'RE']) || '';
         const matriculaAuditor = String(matriculaAuditorRaw).replace(/[^0-9]/g, '');
-        const nomeAuditor = row['Nome Auditor'] || null;
-        const localidadeObjeto = row['Localidade Objeto'] || null;
-        const questionario = row['Questionário'] || null;
-        const re = row['RE'] || null;
+        const nomeAuditor = getVal(['Nome Auditor']) || null;
+        const localidadeObjeto = getVal(['Localidade Objeto']) || null;
+        const questionario = getVal(['Questionário', 'Questionario']) || null;
+        const re = getVal(['RE']) || null;
         
-        const mes = parseInt(row['Mês']) || null;
-        const ano = parseInt(row['Ano']) || null;
+        const mesRaw = getVal(['Mês', 'Mes']);
+        const anoRaw = getVal(['Ano']);
+        const mes = mesRaw ? parseInt(mesRaw) : null;
+        const ano = anoRaw ? parseInt(anoRaw) : null;
 
-        let cidadeComercial = row['CIDADE COMERCIAL'] || null;
-        let ufComercial = row['UF COMERCIAL'] || null;
-        let diretoria3 = row['DIRETORIA 3'] || null;
-        let gerencia = row['GERÊNCIA'] || null;
-        let gestor = row['GESTOR'] || null;
+        let cidadeComercial = getVal(['CIDADE COMERCIAL']) || null;
+        let ufComercial = getVal(['UF COMERCIAL']) || null;
+        let diretoria3 = getVal(['DIRETORIA 3', 'DIRETORIA3']) || null;
+        let gerencia = getVal(['GERÊNCIA', 'GERENCIA']) || null;
+        let gestor = getVal(['GESTOR']) || null;
 
         // Fazer o DE-PARA com o Plano de Ocupações
         if (mes && ano && matriculaAuditor) {
