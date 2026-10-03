@@ -171,8 +171,15 @@ export default function Dashboard() {
     try {
       const endpoint = adminAction === 'apr' ? '/api/admin/upload-apr' : '/api/admin/upload-plano';
       const res = await fetch(endpoint, { method: 'POST', body: formData });
-      if (res.ok) setUploadStatus('Upload e importação concluídos com sucesso!');
-      else setUploadStatus('Erro na importação.');
+      if (res.ok) {
+        const dataRes = await res.json();
+        setUploadStatus(dataRes.message || 'Upload e importação concluídos com sucesso!');
+        // Atualiza os dados do dashboard em seguida
+        fetch('/api/data').then(r => r.json()).then(json => setData(json));
+      } else {
+        const dataRes = await res.json().catch(() => ({}));
+        setUploadStatus(dataRes.message || 'Erro na importação.');
+      }
     } catch {
       setUploadStatus('Erro na requisição.');
     }
