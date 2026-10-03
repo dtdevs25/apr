@@ -53,11 +53,6 @@ export async function POST(req: Request) {
       // Começar transação (opcional, mas bom pra velocidade e segurança)
       await client.query('BEGIN');
 
-      // Buscar números existentes
-      const { rows } = await client.query('SELECT numero FROM aprs');
-      const existingNumeros = new Set(rows.map(r => String(r.numero)));
-
-      // Buscar todos do Plano de Ocupações para fazer o DE-PARA
       const { rows: poRows } = await client.query('SELECT ano, mes, user_id_ssff, diretoria_3, gerencia, gestor, cidade_comercial, uf_comercial FROM po');
       const poMap = new Map();
       for (const po of poRows) {
@@ -71,6 +66,9 @@ export async function POST(req: Request) {
         1: 'JANEIRO', 2: 'FEVEREIRO', 3: 'MARÇO', 4: 'ABRIL', 5: 'MAIO', 6: 'JUNHO',
         7: 'JULHO', 8: 'AGOSTO', 9: 'SETEMBRO', 10: 'OUTUBRO', 11: 'NOVEMBRO', 12: 'DEZEMBRO'
       };
+
+      const rowsToProcess = [];
+      const numerosNaPlanilha = [];
 
       for (const rawRow of data as any[]) {
         // Função para buscar chave ignorando case
@@ -131,41 +129,49 @@ export async function POST(req: Request) {
           }
         }
 
-        if (existingNumeros.has(numero)) {
-          // Update
-          await client.query(`
-            UPDATE aprs SET 
-              data_checklist = $1, data_inicio = $2, data_fim = $3, duracao = $4, situacao = $5, 
-              matricula_auditor = $6, nome_auditor = $7, localidade_objeto = $8, questionario = $9, 
-              re = $10, cidade_comercial = $11, uf_comercial = $12, diretoria_3 = $13, gerencia = $14, 
-              gestor = $15, mes = $16, ano = $17
-            WHERE numero = $18
-          `, [
-            dataChecklist, dataInicio, dataFim, duracao, situacao, 
-            matriculaAuditor, nomeAuditor, localidadeObjeto, questionario, 
-            re, cidadeComercial, ufComercial, diretoria3, gerencia, 
-            gestor, mes, ano, numero
-          ]);
-          updated++;
-        } else {
-          // Insert
-          await client.query(`
-            INSERT INTO aprs (
-              numero, data_checklist, data_inicio, data_fim, duracao, situacao,
-              matricula_auditor, nome_auditor, localidade_objeto, questionario,
-              re, cidade_comercial, uf_comercial, diretoria_3, gerencia,
-              gestor, mes, ano
-            ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
-            )
-          `, [
-            numero, dataChecklist, dataInicio, dataFim, duracao, situacao,
-            matriculaAuditor, nomeAuditor, localidadeObjeto, questionario,
-            re, cidadeComercial, ufComercial, diretoria3, gerencia,
+        numerosNaPlanilha.push(numero);
+        rowsToProcess.push({
+          numero, dataChecklist, dataInicio, dataFim, duracao, situacao,
+          matriculaAuditor, nomeAuditor, localidadeObjeto, questionario,
+          re, cidadeComercial, ufComercial, diretoria3, gerencia,
+          gestor, mes, ano
+        });
+      }
+
+      // Apagar registros que já existem para atualizar mais rápido
+      for (let i = 0; i < numerosNaPlanilha.length; i += 5000) {
+        const chunk = numerosNaPlanilha.slice(i, i + 5000);
+        await client.query('DELETE FROM aprs WHERE numero = ANY($1::text[])', [chunk]);
+      }
+
+      // Bulk insert
+      const BATCH_SIZE = 500;
+      for (let i = 0; i < rowsToProcess.length; i += BATCH_SIZE) {
+        const batch = rowsToProcess.slice(i, i + BATCH_SIZE);
+        
+        let query = `
+          INSERT INTO aprs (
+            numero, data_checklist, data_inicio, data_fim, duracao, situacao,
+            matricula_auditor, nome_auditor, localidade_objeto, questionario,
+            re, cidade_comercial, uf_comercial, diretoria_3, gerencia,
             gestor, mes, ano
-          ]);
-          imported++;
-        }
+          ) VALUES 
+        `;
+        const values = [];
+        let valIndex = 1;
+        const placeholders = batch.map(r => {
+          const rowStr = Array.from({length: 18}, (_, idx) => `$${valIndex + idx}`).join(', ');
+          values.push(
+            r.numero, r.dataChecklist, r.dataInicio, r.dataFim, r.duracao, r.situacao,
+            r.matriculaAuditor, r.nomeAuditor, r.localidadeObjeto, r.questionario,
+            r.re, r.cidadeComercial, r.ufComercial, r.diretoria3, r.gerencia,
+            r.gestor, r.mes, r.ano
+          );
+          valIndex += 18;
+          return `(${rowStr})`;
+        }).join(', ');
+
+        await client.query(query + placeholders, values);
       }
 
       await client.query('COMMIT');
@@ -178,7 +184,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ 
       success: true, 
-      message: `Importação concluída. ${imported} novos itens inseridos, ${updated} itens atualizados.` 
+      message: `Importação rápida concluída. ${rowsToProcess.length} registros processados.` 
     });
   } catch (error) {
     console.error("Erro no upload:", error);
