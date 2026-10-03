@@ -40,6 +40,21 @@ export async function POST(req: Request) {
       const { rows } = await client.query('SELECT numero FROM aprs');
       const existingNumeros = new Set(rows.map(r => String(r.numero)));
 
+      // Buscar todos do Plano de Ocupações para fazer o DE-PARA
+      const { rows: poRows } = await client.query('SELECT ano, mes, user_id_ssff, diretoria_3, gerencia, gestor, cidade_comercial, uf_comercial FROM po');
+      const poMap = new Map();
+      for (const po of poRows) {
+        if (po.user_id_ssff) {
+          const key = `${po.ano}-${po.mes}-${po.user_id_ssff}`;
+          poMap.set(key, po);
+        }
+      }
+
+      const MONTHS_MAP: Record<number, string> = {
+        1: 'JANEIRO', 2: 'FEVEREIRO', 3: 'MARÇO', 4: 'ABRIL', 5: 'MAIO', 6: 'JUNHO',
+        7: 'JULHO', 8: 'AGOSTO', 9: 'SETEMBRO', 10: 'OUTUBRO', 11: 'NOVEMBRO', 12: 'DEZEMBRO'
+      };
+
       for (const row of data as any[]) {
         if (!row.Número) continue;
 
@@ -48,21 +63,40 @@ export async function POST(req: Request) {
         const dataInicio = parseExcelDate(row['Data Início']);
         const dataFim = parseExcelDate(row['Data Fim']);
         const duracao = row['Duração'];
-        const duracaoMinutos = parseDurationToMinutes(duracao);
         
         const situacao = row['Situação'] || null;
-        const matriculaAuditor = row['Matrícula Auditor'] || null;
+        const matriculaAuditorRaw = row['Matrícula Auditor'] || row['RE'] || '';
+        const matriculaAuditor = String(matriculaAuditorRaw).replace(/[^0-9]/g, '');
         const nomeAuditor = row['Nome Auditor'] || null;
         const localidadeObjeto = row['Localidade Objeto'] || null;
         const questionario = row['Questionário'] || null;
         const re = row['RE'] || null;
-        const cidadeComercial = row['CIDADE COMERCIAL'] || null;
-        const ufComercial = row['UF COMERCIAL'] || null;
-        const diretoria3 = row['DIRETORIA 3'] || null;
-        const gerencia = row['GERÊNCIA'] || null;
-        const gestor = row['GESTOR'] || null;
+        
         const mes = parseInt(row['Mês']) || null;
         const ano = parseInt(row['Ano']) || null;
+
+        let cidadeComercial = row['CIDADE COMERCIAL'] || null;
+        let ufComercial = row['UF COMERCIAL'] || null;
+        let diretoria3 = row['DIRETORIA 3'] || null;
+        let gerencia = row['GERÊNCIA'] || null;
+        let gestor = row['GESTOR'] || null;
+
+        // Fazer o DE-PARA com o Plano de Ocupações
+        if (mes && ano && matriculaAuditor) {
+          const mesNome = MONTHS_MAP[mes];
+          if (mesNome) {
+            const poKey = `${ano}-${mesNome}-${matriculaAuditor}`;
+            const poData = poMap.get(poKey);
+            
+            if (poData) {
+              diretoria3 = poData.diretoria_3 || diretoria3;
+              gerencia = poData.gerencia || gerencia;
+              gestor = poData.gestor || gestor;
+              cidadeComercial = poData.cidade_comercial || cidadeComercial;
+              ufComercial = poData.uf_comercial || ufComercial;
+            }
+          }
+        }
 
         if (existingNumeros.has(numero)) {
           // Update
