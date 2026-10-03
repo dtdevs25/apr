@@ -25,8 +25,7 @@ export async function GET() {
         gestor AS "GESTOR",
         gestor AS "Supervisor",
         mes AS "Mês",
-        ano AS "Ano",
-        duracao_minutos AS "duracao_minutos"
+        ano AS "Ano"
       FROM aprs
       ORDER BY data_inicio DESC
     `);

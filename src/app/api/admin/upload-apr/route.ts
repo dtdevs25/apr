@@ -71,13 +71,13 @@ export async function POST(req: Request) {
               data_checklist = $1, data_inicio = $2, data_fim = $3, duracao = $4, situacao = $5, 
               matricula_auditor = $6, nome_auditor = $7, localidade_objeto = $8, questionario = $9, 
               re = $10, cidade_comercial = $11, uf_comercial = $12, diretoria_3 = $13, gerencia = $14, 
-              gestor = $15, mes = $16, ano = $17, duracao_minutos = $18
-            WHERE numero = $19
+              gestor = $15, mes = $16, ano = $17
+            WHERE numero = $18
           `, [
             dataChecklist, dataInicio, dataFim, duracao, situacao, 
             matriculaAuditor, nomeAuditor, localidadeObjeto, questionario, 
             re, cidadeComercial, ufComercial, diretoria3, gerencia, 
-            gestor, mes, ano, duracaoMinutos, numero
+            gestor, mes, ano, numero
           ]);
           updated++;
         } else {
@@ -87,15 +87,15 @@ export async function POST(req: Request) {
               numero, data_checklist, data_inicio, data_fim, duracao, situacao,
               matricula_auditor, nome_auditor, localidade_objeto, questionario,
               re, cidade_comercial, uf_comercial, diretoria_3, gerencia,
-              gestor, mes, ano, duracao_minutos
+              gestor, mes, ano
             ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
             )
           `, [
             numero, dataChecklist, dataInicio, dataFim, duracao, situacao,
             matriculaAuditor, nomeAuditor, localidadeObjeto, questionario,
             re, cidadeComercial, ufComercial, diretoria3, gerencia,
-            gestor, mes, ano, duracaoMinutos, numero
+            gestor, mes, ano
           ]);
           imported++;
         }
