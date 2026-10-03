@@ -16,7 +16,7 @@ export async function GET() {
     const { rows: poSample } = await client.query('SELECT user_id_ssff, nome, diretoria_3, gerencia FROM po WHERE user_id_ssff IS NOT NULL LIMIT 10');
     
     // Sample APR entries with non-null matricula_auditor
-    const { rows: aprSample } = await client.query('SELECT numero, matricula_auditor, nome_auditor, diretoria, supervisor FROM aprs WHERE matricula_auditor IS NOT NULL AND matricula_auditor != \'\' LIMIT 10');
+    const { rows: aprSample } = await client.query('SELECT numero, matricula_auditor, nome_auditor, diretoria, supervisor FROM aprs WHERE matricula_auditor IS NOT NULL LIMIT 10');
     
     // How many total PO rows
     const { rows: poCount } = await client.query('SELECT COUNT(*) FROM po');
