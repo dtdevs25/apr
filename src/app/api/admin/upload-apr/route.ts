@@ -147,7 +147,7 @@ export async function POST(req: Request) {
       // Apagar registros que já existem para atualizar mais rápido
       for (let i = 0; i < numerosNaPlanilha.length; i += 5000) {
         const chunk = numerosNaPlanilha.slice(i, i + 5000);
-        await client.query('DELETE FROM aprs WHERE numero = ANY($1::text[])', [chunk]);
+        await client.query('DELETE FROM aprs WHERE numero::text = ANY($1::text[])', [chunk]);
       }
 
       // Bulk insert
