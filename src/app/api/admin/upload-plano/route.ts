@@ -42,45 +42,53 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: "A planilha está vazia ou no formato incorreto." }, { status: 400 });
     }
 
-    // Extrair o Ano e Mês da primeira linha válida
-    let currentAno: number | null = null;
-    let currentMes: string | null = null;
-
+    // Identificar todos os meses/anos presentes na planilha
+    const periods = new Set<string>();
+    
     for (const row of data as any[]) {
-      if (row['ANO'] && row['MÊS']) {
-        currentAno = parseInt(row['ANO'], 10);
-        currentMes = String(row['MÊS']).toUpperCase();
-        break;
+      const rowAno = parseInt(row['ANO'], 10);
+      const rowMes = String(row['MÊS']).toUpperCase();
+      if (rowAno && rowMes && rowMes !== 'UNDEFINED') {
+        periods.add(`${rowAno}-${rowMes}`);
       }
     }
 
-    if (!currentAno || !currentMes) {
+    if (periods.size === 0) {
       return NextResponse.json({ success: false, message: "A planilha não possui as colunas ANO e MÊS ou elas estão vazias." }, { status: 400 });
     }
 
-    const { prevMes, prevAno } = getPreviousMonthAndYear(currentMes, currentAno);
-
     let inseridosArquivo = 0;
-    let inseridosDesligados = 0;
-
     const client = await pool.connect();
 
     try {
       await client.query('BEGIN');
 
-      // 1. Limpar dados existentes para o mesmo ano e mês (para evitar duplicação caso faça upload novamente)
-      await client.query('DELETE FROM po WHERE ano = $1 AND mes = $2', [currentAno, currentMes]);
+      // 1. Limpar dados existentes apenas para os meses/anos que estão sendo enviados agora
+      for (const period of Array.from(periods)) {
+        const [anoStr, mes] = period.split('-');
+        await client.query('DELETE FROM po WHERE ano = $1 AND mes = $2', [parseInt(anoStr, 10), mes]);
+      }
 
-      // Array para guardar os IDs de quem está neste arquivo
-      const activeIds = new Set<string>();
+      // Conjunto para evitar duplicidade de matrícula no MESMO mês/ano na própria planilha
+      const processedIdsPerPeriod = new Set<string>();
 
       // 2. Inserir dados do arquivo
       for (const row of data as any[]) {
+        const rowAno = parseInt(row['ANO'], 10);
+        const rowMes = String(row['MÊS']).toUpperCase();
+        
+        if (!rowAno || !rowMes || rowMes === 'UNDEFINED') continue;
+
         const userIdRaw = row['USER ID SSFF'] || row['RE'] || row['MATRÍCULA'] || null;
         const userId = userIdRaw ? String(userIdRaw).replace(/[^0-9]/g, '') : null;
         if (!userId) continue;
 
-        activeIds.add(userId);
+        // Verificar se esse userId já foi processado neste mesmo ano/mês
+        const uniqueKey = `${rowAno}-${rowMes}-${userId}`;
+        if (processedIdsPerPeriod.has(uniqueKey)) {
+          continue; // Pula se já existir, evitando duplicação
+        }
+        processedIdsPerPeriod.add(uniqueKey);
 
         const status = row['STATUS'] || 'ATIVO';
         const nome = row['NOME'] || null;
@@ -101,40 +109,10 @@ export async function POST(req: Request) {
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
           )
         `, [
-          currentAno, currentMes, status, userId, nome, cargo, diretoria3,
+          rowAno, rowMes, status, userId, nome, cargo, diretoria3,
           gerencia, gestor, cidade, uf, dataAdmissao, dataDesligamento
         ]);
         inseridosArquivo++;
-      }
-
-      // 3. Lógica de Histórico (Desligados)
-      if (prevAno && prevMes) {
-        // Buscar todos do mês anterior
-        const { rows: previousUsers } = await client.query(`
-          SELECT * FROM po 
-          WHERE ano = $1 AND mes = $2 AND status != 'DESLIGADO/DEMITIDO'
-        `, [prevAno, prevMes]);
-
-        for (const oldUser of previousUsers) {
-          const uIdStr = String(oldUser.user_id_ssff);
-          
-          // Se o cara estava no mês anterior mas NÃO está no arquivo atual
-          if (!activeIds.has(uIdStr)) {
-            await client.query(`
-              INSERT INTO po (
-                ano, mes, status, user_id_ssff, nome, cargo, diretoria_3,
-                gerencia, gestor, cidade_comercial, uf_comercial, data_admissao, data_desligamento
-              ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
-              )
-            `, [
-              currentAno, currentMes, 'DESLIGADO/DEMITIDO', oldUser.user_id_ssff, oldUser.nome,
-              oldUser.cargo, oldUser.diretoria_3, oldUser.gerencia, oldUser.gestor,
-              oldUser.cidade_comercial, oldUser.uf_comercial, oldUser.data_admissao, oldUser.data_desligamento
-            ]);
-            inseridosDesligados++;
-          }
-        }
       }
 
       await client.query('COMMIT');
@@ -147,7 +125,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ 
       success: true, 
-      message: `Upload do Plano concluído (${currentMes}/${currentAno})! ${inseridosArquivo} ativos importados. ${inseridosDesligados} identificados como desligados/ausentes na nova planilha.` 
+      message: `Upload do Plano concluído! ${inseridosArquivo} ativos importados sem duplicações nos ${periods.size} meses identificados.` 
     });
   } catch (error) {
     console.error("Erro no upload do PO:", error);
