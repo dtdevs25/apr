@@ -1,7 +1,10 @@
 "use client";
 import { useState, useEffect, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Download, ChevronDown, CheckSquare, Square, Building, Users, MapPin, Calendar, Search, FileText, UserCheck, Clock, HelpCircle, X, Settings, UploadCloud, Lock, Eye, EyeOff } from 'lucide-react';
+
+const formatNum = (n: number) => n.toLocaleString('pt-BR');
 
 const monthMap: Record<string, string> = {
   '1': 'Jan', '2': 'Fev', '3': 'Mar', '4': 'Abr', '5': 'Mai', '6': 'Jun',
