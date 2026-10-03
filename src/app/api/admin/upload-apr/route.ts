@@ -77,7 +77,7 @@ export async function POST(req: Request) {
         // Função para buscar chave ignorando case
         const getVal = (keys: string[]) => {
           for (const k of Object.keys(rawRow)) {
-            if (keys.some(key => k.toLowerCase() === key.toLowerCase())) {
+            if (keys.some(key => k.trim().toLowerCase() === key.trim().toLowerCase())) {
               return rawRow[k];
             }
           }
