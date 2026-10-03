@@ -24,10 +24,17 @@ const formatDate = (dateStr: string) => {
   }
 };
 
+// Tipos oficiais de APR. Qualquer variação (acento, caixa, espaços, textos extras) é agrupada nestes 4.
 const cleanTipo = (str: string) => {
   if (!str) return 'Não Identificado';
-  const parts = str.split('|');
-  return parts[parts.length - 1].trim();
+  const parts = String(str).split('|');
+  const last = parts[parts.length - 1]
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase().replace(/\s+/g, ' ').trim();
+  if (last.includes('POSTE')) return 'POSTE';
+  if (last.includes('CAIXA') || last.includes('SUBTERR')) return 'CAIXA SUBTERRÂNEA';
+  if (last.includes('TRAVESSIA')) return 'TRAVESSIA';
+  return 'OUTRAS ATIVIDADES';
 };
 
 // Componente Premium de Multi-seleção
