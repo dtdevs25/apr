@@ -157,7 +157,7 @@ export async function POST(req: Request) {
             gestor, mes, ano
           ) VALUES 
         `;
-        const values = [];
+        const values: any[] = [];
         let valIndex = 1;
         const placeholders = batch.map(r => {
           const rowStr = Array.from({length: 18}, (_, idx) => `$${valIndex + idx}`).join(', ');
@@ -184,7 +184,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ 
       success: true, 
-      message: `Importação rápida concluída. ${rowsToProcess.length} registros processados.` 
+      message: `Importação rápida concluída com sucesso!` 
     });
   } catch (error) {
     console.error("Erro no upload:", error);
