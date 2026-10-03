@@ -74,10 +74,13 @@ export async function POST(req: Request) {
 
       // 2. Inserir dados do arquivo
       for (const row of data as any[]) {
-        // Função para buscar chave ignorando case
+        const normalizeKey = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+
+        // Função para buscar chave ignorando case, acentos e espaços extras
         const getVal = (keys: string[]) => {
           for (const k of Object.keys(row)) {
-            if (keys.some(key => k.trim().toLowerCase() === key.trim().toLowerCase())) {
+            const cleanK = normalizeKey(k);
+            if (keys.some(key => cleanK === normalizeKey(key))) {
               return row[k];
             }
           }
