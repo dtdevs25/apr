@@ -53,16 +53,8 @@ export async function POST(req: Request) {
       // Começar transação (opcional, mas bom pra velocidade e segurança)
       await client.query('BEGIN');
 
-      const { rows: poRows } = await client.query('SELECT ano, mes, user_id_ssff, diretoria_3, gerencia, gestor, cidade_comercial, uf_comercial FROM po');
-      const poFallbackMap = new Map();
-      for (const po of poRows) {
-        if (po.user_id_ssff) {
-          const rawId = String(po.user_id_ssff).replace(/[^0-9]/g, '').replace(/^0+/, '');
-          if (rawId) {
-            poFallbackMap.set(rawId, po); // Fallback: pega o último disponível no banco
-          }
-        }
-      }
+      // O cruzamento com o Plano de Ocupações (diretoria, gerência, supervisor, cidade)
+      // é feito em SQL na rota /api/data, no momento da leitura.
 
       const MONTHS_MAP: Record<number, string> = {
         1: 'JANEIRO', 2: 'FEVEREIRO', 3: 'MARÇO', 4: 'ABRIL', 5: 'MAIO', 6: 'JUNHO',
@@ -76,12 +68,15 @@ export async function POST(req: Request) {
       for (const rawRow of data as any[]) {
         const normalizeKey = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
 
-        // Função para buscar chave ignorando case, acentos e espaços extras
+        // Função para buscar chave ignorando case, acentos e espaços extras.
+        // Respeita a ordem de prioridade da lista de chaves.
         const getVal = (keys: string[]) => {
-          for (const k of Object.keys(rawRow)) {
-            const cleanK = normalizeKey(k);
-            if (keys.some(key => cleanK === normalizeKey(key))) {
-              return rawRow[k];
+          const rowKeys = Object.keys(rawRow);
+          for (const key of keys) {
+            const target = normalizeKey(key);
+            const found = rowKeys.find(k => normalizeKey(k) === target);
+            if (found !== undefined && rawRow[found] !== null && rawRow[found] !== '') {
+              return rawRow[found];
             }
           }
           return null;
@@ -102,10 +97,10 @@ export async function POST(req: Request) {
         const duracao = getVal(['Duração', 'Duracao']);
         
         const situacao = getVal(['Situação', 'Situacao']) || null;
-        const matriculaAuditorRaw = getVal(['Matrícula Auditor', 'Matricula Auditor', 'Matrícula', 'Matricula', 'USER ID SSFF', 'RE', 'ID']) || '';
-        let matriculaAuditor = String(matriculaAuditorRaw).replace(/[^0-9]/g, '');
+        const matriculaAuditorRaw = getVal(['Matrícula Auditor', 'Matricula Auditor', 'Matrícula', 'Matricula', 'RE']) || '';
+        let matriculaAuditor: string | null = String(matriculaAuditorRaw).trim().replace(/\.0+$/, '').replace(/[^0-9]/g, '');
         // Remover zeros à esquerda para o de-para funcionar independente de como veio formatado
-        matriculaAuditor = matriculaAuditor.replace(/^0+/, '');
+        matriculaAuditor = matriculaAuditor.replace(/^0+/, '') || null;
 
         const nomeAuditor = getVal(['Nome Auditor']) || null;
         const localidadeObjeto = getVal(['Localidade Objeto']) || null;
@@ -126,18 +121,6 @@ export async function POST(req: Request) {
         let gerencia = getVal(['GERÊNCIA', 'GERENCIA']) || null;
         let gestor = getVal(['GESTOR']) || null;
 
-        // Fazer o DE-PARA com o Plano de Ocupações
-        if (matriculaAuditor) {
-          const poData = poFallbackMap.get(matriculaAuditor);
-            
-          if (poData) {
-            diretoria3 = poData.diretoria_3 || diretoria3;
-            gerencia = poData.gerencia || gerencia;
-            gestor = poData.gestor || gestor;
-            cidadeComercial = poData.cidade_comercial || cidadeComercial;
-            ufComercial = poData.uf_comercial || ufComercial;
-          }
-        }
 
         numerosNaPlanilha.push(numero);
         rowsToProcess.push({
