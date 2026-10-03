@@ -122,20 +122,7 @@ export async function POST(req: Request) {
 
         // Fazer o DE-PARA com o Plano de Ocupações
         if (matriculaAuditor) {
-          let poData = null;
-
-          if (mes && ano) {
-            const mesNome = MONTHS_MAP[mes];
-            if (mesNome) {
-              const poKey = `${ano}-${mesNome}-${matriculaAuditor}`;
-              poData = poMap.get(poKey);
-            }
-          }
-
-          // Se não achou no mês exato, tenta qualquer um que existir pra essa pessoa
-          if (!poData) {
-            poData = poFallbackMap.get(matriculaAuditor);
-          }
+          const poData = poFallbackMap.get(matriculaAuditor);
             
           if (poData) {
             diretoria3 = poData.diretoria_3 || diretoria3;
