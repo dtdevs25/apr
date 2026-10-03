@@ -12,27 +12,13 @@ export async function GET() {
   try {
     const client = await pool.connect();
     
-    // Sample PO entries with non-null user_id_ssff
-    const { rows: poSample } = await client.query('SELECT user_id_ssff, nome, diretoria_3, gerencia FROM po WHERE user_id_ssff IS NOT NULL LIMIT 10');
-    
-    // Sample APR entries with non-null matricula_auditor
-    const { rows: aprSample } = await client.query('SELECT numero, matricula_auditor, nome_auditor, diretoria, supervisor FROM aprs WHERE matricula_auditor IS NOT NULL LIMIT 10');
-    
-    // How many total PO rows
-    const { rows: poCount } = await client.query('SELECT COUNT(*) FROM po');
-    
-    // How many total APR rows
-    const { rows: aprCount } = await client.query('SELECT COUNT(*) FROM aprs');
-
-    // How many APR rows have non-null diretoria (meaning they successfully matched in the JS layer)
-    const { rows: aprMatchedCount } = await client.query('SELECT COUNT(*) FROM aprs WHERE diretoria IS NOT NULL OR supervisor IS NOT NULL');
+    // Simplest queries to avoid hanging
+    const { rows: poSample } = await client.query('SELECT user_id_ssff, nome, diretoria_3, gerencia FROM po LIMIT 10');
+    const { rows: aprSample } = await client.query('SELECT numero, matricula_auditor, nome_auditor, diretoria, supervisor FROM aprs LIMIT 10');
     
     client.release();
 
     return NextResponse.json({
-      po_total_count: poCount[0].count,
-      apr_total_count: aprCount[0].count,
-      apr_matched_count: aprMatchedCount[0].count,
       po_samples: poSample,
       apr_samples: aprSample
     });
