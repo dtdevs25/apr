@@ -194,10 +194,23 @@ export async function POST(req: Request) {
 // Funções auxiliares
 function parseExcelDate(val: any) {
   if (!val) return null;
-  // Se for string no formato YYYY-MM-DD HH:mm:ss
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
   if (typeof val === 'string') {
-    const d = new Date(val);
-    if (!isNaN(d.getTime())) return d;
+    const s = val.trim();
+    // Formato brasileiro: DD/MM/AAAA [HH:mm[:ss]] (também aceita - ou . como separador)
+    const br = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (br) {
+      const [, dd, mm, yyyy, hh = '0', mi = '0', ss = '0'] = br;
+      const d = new Date(+yyyy, +mm - 1, +dd, +hh, +mi, +ss);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    // Formato ISO: AAAA-MM-DD [HH:mm:ss]
+    const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    if (iso) {
+      const [, yyyy, mm, dd, hh = '0', mi = '0', ss = '0'] = iso;
+      const d = new Date(+yyyy, +mm - 1, +dd, +hh, +mi, +ss);
+      return isNaN(d.getTime()) ? null : d;
+    }
     return null;
   }
   // Se for número (serial date do Excel)
