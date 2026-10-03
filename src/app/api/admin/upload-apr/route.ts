@@ -55,10 +55,12 @@ export async function POST(req: Request) {
 
       const { rows: poRows } = await client.query('SELECT ano, mes, user_id_ssff, diretoria_3, gerencia, gestor, cidade_comercial, uf_comercial FROM po');
       const poMap = new Map();
+      const poFallbackMap = new Map();
       for (const po of poRows) {
         if (po.user_id_ssff) {
           const key = `${po.ano}-${po.mes}-${po.user_id_ssff}`;
           poMap.set(key, po);
+          poFallbackMap.set(String(po.user_id_ssff), po); // Fallback: pega o último disponível no banco
         }
       }
 
@@ -119,19 +121,28 @@ export async function POST(req: Request) {
         let gestor = getVal(['GESTOR']) || null;
 
         // Fazer o DE-PARA com o Plano de Ocupações
-        if (mes && ano && matriculaAuditor) {
-          const mesNome = MONTHS_MAP[mes];
-          if (mesNome) {
-            const poKey = `${ano}-${mesNome}-${matriculaAuditor}`;
-            const poData = poMap.get(poKey);
-            
-            if (poData) {
-              diretoria3 = poData.diretoria_3 || diretoria3;
-              gerencia = poData.gerencia || gerencia;
-              gestor = poData.gestor || gestor;
-              cidadeComercial = poData.cidade_comercial || cidadeComercial;
-              ufComercial = poData.uf_comercial || ufComercial;
+        if (matriculaAuditor) {
+          let poData = null;
+
+          if (mes && ano) {
+            const mesNome = MONTHS_MAP[mes];
+            if (mesNome) {
+              const poKey = `${ano}-${mesNome}-${matriculaAuditor}`;
+              poData = poMap.get(poKey);
             }
+          }
+
+          // Se não achou no mês exato, tenta qualquer um que existir pra essa pessoa
+          if (!poData) {
+            poData = poFallbackMap.get(matriculaAuditor);
+          }
+            
+          if (poData) {
+            diretoria3 = poData.diretoria_3 || diretoria3;
+            gerencia = poData.gerencia || gerencia;
+            gestor = poData.gestor || gestor;
+            cidadeComercial = poData.cidade_comercial || cidadeComercial;
+            ufComercial = poData.uf_comercial || ufComercial;
           }
         }
 
