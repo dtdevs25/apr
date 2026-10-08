@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
         throw err;
       }
     }
-    
+    }
     // Converte datas para string no formato correto
     const formattedData = rows.map(r => {
       const formatData = (d: Date | null) => {
