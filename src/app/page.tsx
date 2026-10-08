@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, ChevronDown, CheckSquare, Square, Building, Users, MapPin, Calendar, Search, FileText, UserCheck, Clock, HelpCircle, X, Settings, UploadCloud, Lock, Eye, EyeOff, ArrowLeft, ShieldAlert } from 'lucide-react';
+import { Download, ChevronDown, CheckSquare, Square, Building, Users, MapPin, Calendar, Search, FileText, UserCheck, Clock, HelpCircle, X, Settings, UploadCloud, Lock, Eye, EyeOff, ArrowLeft, ShieldAlert, FileCheck, Activity } from 'lucide-react';
 
 const formatNum = (n: number) => n.toLocaleString('pt-BR');
 
