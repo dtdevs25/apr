@@ -569,20 +569,32 @@ export default function Dashboard() {
       <main className="max-w-[1600px] mx-auto px-6 py-10">
         
         {/* KPIs (Premium Cards - matching requested layout exactly) */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-          {[
+        {(() => {
+          const totalEsperadoDss = Math.round(targetAprs * supervisoresUnicos);
+          const percAtendimento = totalEsperadoDss > 0 ? ((totalAprs / totalEsperadoDss) * 100).toFixed(1) : '0.0';
+          const kpisToRender = selectedModule === 'DSS' ? [
+            { v: formatNum(totalAuditores), l: 'Participantes', icon: Users, c: 'border-l-purple-500', t: 'text-purple-500' },
+            { v: formatNum(totalEsperadoDss), l: 'DSS Esperados', icon: FileCheck, c: 'border-l-blue-500', t: 'text-blue-500' },
+            { v: formatNum(totalAprs), l: 'DSS Realizados', icon: FileText, c: 'border-l-pink-500', t: 'text-pink-500' },
+            { v: `${percAtendimento}%`, l: 'Atendimento', icon: Activity, c: 'border-l-orange-500', t: 'text-orange-500' },
+            { v: formatNum(supervisoresUnicos), l: 'Supervisores', icon: UserCheck, c: 'border-l-teal-500', t: 'text-teal-500' }
+          ] : [
             { v: formatNum(totalAprs), l: `${selectedModule}s no filtro`, icon: FileText, c: 'border-l-pink-500', t: 'text-pink-500' },
             { v: formatNum(diretoriasUnicas), l: 'diretorias', icon: Building, c: 'border-l-blue-500', t: 'text-blue-500' },
             { v: formatNum(supervisoresUnicos), l: 'supervisores', icon: Users, c: 'border-l-orange-500', t: 'text-orange-500' },
             { v: formatNum(cidadesUnicas), l: 'cidades', icon: MapPin, c: 'border-l-teal-500', t: 'text-teal-500' },
-            { v: formatNum(totalAuditores), l: selectedModule === 'DSS' ? 'participantes' : 'colaboradores', icon: UserCheck, c: 'border-l-purple-500', t: 'text-purple-500' }
-          ].map((kpi, i) => (
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-              key={kpi.l} 
-              className={`bg-white rounded-2xl p-5 border border-gray-100 border-l-4 ${kpi.c} shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] transition-all group flex justify-between items-center`}
-            >
-              <div>
+            { v: formatNum(totalAuditores), l: 'colaboradores', icon: UserCheck, c: 'border-l-purple-500', t: 'text-purple-500' }
+          ];
+
+          return (
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+              {kpisToRender.map((kpi, i) => (
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
+                  key={kpi.l} 
+                  className={`bg-white rounded-2xl p-5 border border-gray-100 border-l-4 ${kpi.c} shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] transition-all group flex justify-between items-center`}
+                >
+                  <div>
                 <div className="text-3xl font-bold text-gray-900 mb-1 group-hover:scale-105 transform origin-left transition-transform">
                   {kpi.v}
                 </div>
@@ -595,7 +607,9 @@ export default function Dashboard() {
               </div>
             </motion.div>
           ))}
-        </div>
+            </div>
+          );
+        })()}
 
         {/* Chart Card (Moved to top) */}
         <div className="bg-white rounded-2xl p-8 border border-gray-100 shadow-sm mb-6">
