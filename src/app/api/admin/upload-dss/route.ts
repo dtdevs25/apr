@@ -105,27 +105,9 @@ export async function POST(req: Request) {
             if (p1 && p2 && yyyy) {
               let dd = p1;
               let mm = p2;
-              // Se p1 for > 12, com certeza é DD/MM/YYYY.
-              // Se o usuário falou que 'entendeu como outubro' pra janeiro (10/01 x 01/10),
-              // e quer DD/MM/YYYY, vamos forçar DD/MM/YYYY se a planilha estiver em MM/DD/YYYY.
-              // Na verdade, se a planilha está em MM/DD/YYYY, a gente inverte.
-              if (parseInt(p1) <= 12 && parseInt(p2) > 12) {
-                 // Formato é MM/DD/YYYY
-                 dd = p2;
-                 mm = p1;
-              } else if (parseInt(p1) <= 12 && parseInt(p2) <= 12) {
-                 // Ambiguidade: pode ser MM/DD ou DD/MM.
-                 // Como o usuário disse "o formato deve ser convertido para DD/MM/YYYY",
-                 // vamos assumir que o sistema exportou em MM/DD/YYYY se ele reclamou do erro,
-                 // OU vamos assumir que ele quer a leitura DD/MM/YYYY.
-                 // Se ele reclamou que o dado de JANEIRO virou OUTUBRO,
-                 // significa que o dia 10 virou mês 10. Logo o formato estava DD/MM/YYYY, mas foi interpretado...
-                 // Espera, meu código antigo ERA DD/MM/YYYY. Se virou outubro, é porque P2 era 10!
-                 // Então a planilha mandou MM/DD/YYYY! Invertemos:
-                 dd = p2;
-                 mm = p1;
-              }
-              
+              // A planilha SEMPRE manda no formato DD/MM/YYYY. 
+              // Se invertermos quando ambos são <= 12, Janeiro (10/01) vira Outubro (01/10).
+              // Então apenas assumimos p1 = DD, p2 = MM, yyyy = YYYY.
               dt = `${yyyy}-${mm}-${dd} ${t || '00:00:00'}`;
               mes = mm.replace(/^0+/, '');
               ano = yyyy;
