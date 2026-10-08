@@ -542,7 +542,7 @@ export default function Dashboard() {
         <div className="bg-gray-50/50 backdrop-blur-md border-t border-gray-100">
           <div className="max-w-[1600px] mx-auto px-6 py-2 flex flex-wrap items-center gap-4">
             
-            <PremiumMultiSelect label={selectedModule === 'DSS' ? "Assunto" : "Tipo de APR"} options={allTipos} selected={selectedTipos} onChange={handleMultiSelect(setSelectedTipos)} icon={FileText} />
+            <PremiumMultiSelect label={selectedModule === 'DSS' ? "Tipo" : "Tipo de APR"} options={allTipos} selected={selectedTipos} onChange={handleMultiSelect(setSelectedTipos)} icon={FileText} />
 
             <div className="w-px h-12 bg-gray-200 hidden md:block"></div>
 
