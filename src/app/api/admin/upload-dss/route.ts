@@ -10,14 +10,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: 'Nenhum arquivo enviado.' }, { status: 400 });
     }
 
-    const text = await file.text();
+    const arrayBuffer = await file.arrayBuffer();
+    const decoder = new TextDecoder('windows-1252');
+    const text = decoder.decode(arrayBuffer);
     const lines = text.split('\n').filter(line => line.trim());
     
     if (lines.length < 2) {
       return NextResponse.json({ message: 'Arquivo vazio ou formato inválido.' }, { status: 400 });
     }
 
-    // Header validation (optional, can skip and map directly if needed)
     // Assunto;Número do Diálogo;Líder;Base;UF;Localidade;Data Fechamento;Matrícula;Nome;Tipo;Status;Assinado;Justificativa;
 
     await pool.query(`
@@ -62,7 +63,7 @@ export async function POST(req: Request) {
         const base = parts[3]?.trim();
         const uf = parts[4]?.trim();
         const local = parts[5]?.trim();
-        const dtStr = parts[6]?.trim(); // ex: 30/09/2026 06:13:07
+        const dtStr = parts[6]?.trim(); // ex: 30/09/2026 06:13:07 or 01/10/2026
         const mat = parts[7]?.trim();
         const nome = parts[8]?.trim();
         const tipo = parts[9]?.trim();
@@ -70,15 +71,38 @@ export async function POST(req: Request) {
         const assinado = parts[11]?.trim();
         const just = parts[12]?.trim();
 
-        // Parse date DD/MM/YYYY HH:MM:SS to TIMESTAMP
+        // Parse date
         let dt = null;
         let mes = '';
         let ano = '';
         if (dtStr) {
           const [d, t] = dtStr.split(' ');
           if (d) {
-            const [dd, mm, yyyy] = d.split('/');
-            if (dd && mm && yyyy) {
+            let [p1, p2, yyyy] = d.split('/');
+            if (p1 && p2 && yyyy) {
+              let dd = p1;
+              let mm = p2;
+              // Se p1 for > 12, com certeza é DD/MM/YYYY.
+              // Se o usuário falou que 'entendeu como outubro' pra janeiro (10/01 x 01/10),
+              // e quer DD/MM/YYYY, vamos forçar DD/MM/YYYY se a planilha estiver em MM/DD/YYYY.
+              // Na verdade, se a planilha está em MM/DD/YYYY, a gente inverte.
+              if (parseInt(p1) <= 12 && parseInt(p2) > 12) {
+                 // Formato é MM/DD/YYYY
+                 dd = p2;
+                 mm = p1;
+              } else if (parseInt(p1) <= 12 && parseInt(p2) <= 12) {
+                 // Ambiguidade: pode ser MM/DD ou DD/MM.
+                 // Como o usuário disse "o formato deve ser convertido para DD/MM/YYYY",
+                 // vamos assumir que o sistema exportou em MM/DD/YYYY se ele reclamou do erro,
+                 // OU vamos assumir que ele quer a leitura DD/MM/YYYY.
+                 // Se ele reclamou que o dado de JANEIRO virou OUTUBRO,
+                 // significa que o dia 10 virou mês 10. Logo o formato estava DD/MM/YYYY, mas foi interpretado...
+                 // Espera, meu código antigo ERA DD/MM/YYYY. Se virou outubro, é porque P2 era 10!
+                 // Então a planilha mandou MM/DD/YYYY! Invertemos:
+                 dd = p2;
+                 mm = p1;
+              }
+              
               dt = `${yyyy}-${mm}-${dd} ${t || '00:00:00'}`;
               mes = mm.replace(/^0+/, '');
               ano = yyyy;

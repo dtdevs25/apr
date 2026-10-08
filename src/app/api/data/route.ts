@@ -6,10 +6,11 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   try {
     const type = req.nextUrl.searchParams.get('type') || 'APR';
-
+    let rows;
+    
     if (type === 'DSS') {
       try {
-        const { rows } = await pool.query(`
+        const res = await pool.query(`
           SELECT 
             d.assunto AS "Assunto",
             d.numero_dialogo AS "Número do Diálogo",
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
           FROM dss d
           ORDER BY d.data_fechamento DESC
         `);
-        return NextResponse.json(rows);
+        rows = res.rows;
       } catch (err: any) {
         if (err.code === '42P01') {
           // Tabela não existe ainda
@@ -37,10 +38,8 @@ export async function GET(req: NextRequest) {
         }
         throw err;
       }
-    }
-
-    // Para APR:
-    let rows;
+    } else {
+      // Para APR:
     try {
       const res = await pool.query(`SELECT * FROM mv_apr_data ORDER BY "Data Início" DESC`);
       rows = res.rows;
@@ -113,9 +112,16 @@ export async function GET(req: NextRequest) {
         if (!d) return null;
         if (typeof d === 'string') return d;
         const p = (n: number) => n.toString().padStart(2, '0');
-        return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+        return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
       };
       
+      if (type === 'DSS') {
+        return {
+          ...r,
+          "Data Fechamento": formatData(r["Data Fechamento"])
+        };
+      }
+
       return {
         ...r,
         "Data Checklist": formatData(r["Data Checklist"]),
