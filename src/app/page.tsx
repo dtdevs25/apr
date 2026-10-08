@@ -153,6 +153,7 @@ export default function Dashboard() {
   const [showPassword, setShowPassword] = useState(false);
   const [adminAuthStatus, setAdminAuthStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [uploadStatus, setUploadStatus] = useState('');
+  const [rankingGroup, setRankingGroup] = useState<'supervisor' | 'cidade'>('supervisor');
 
   const handleAdminAuth = async () => {
     setAdminAuthStatus('loading');
@@ -377,39 +378,20 @@ export default function Dashboard() {
     return totalWd * 2;
   }, [selectedMonths, allMonths, selectedModule]);
 
-  // Main list (Distribuição / Ranking principal)
-  const mainAgg = useMemo(() => {
-    const agg: Record<string, number> = {};
-    if (selectedModule === 'DSS') {
-      const uniqueDSS = new Set();
-      filteredData.forEach(item => {
-        const dssId = item['Número do Diálogo'];
-        if (!uniqueDSS.has(dssId)) {
-          uniqueDSS.add(dssId);
-          let val = item['Supervisor'] || item['Líder'] || 'Não Identificado';
-          agg[val] = (agg[val] || 0) + 1;
-        }
-      });
-    } else {
-      filteredData.forEach(item => {
-        let val = cleanTipo(item['Questionário']);
-        agg[val] = (agg[val] || 0) + 1;
-      });
-    }
-    return Object.entries(agg).sort((a, b) => b[1] - a[1]);
-  }, [filteredData, selectedModule]);
-  const maxMain = mainAgg.length > 0 ? mainAgg[0][1] : 1;
-
   // Rank list
   const rankAgg = useMemo(() => {
-    const agg: Record<string, { count: number, name: string, data: any[], totalSecs: number, validCount: number, dssSet: Set<string> }> = {};
+    const agg: Record<string, { count: number, name: string, data: any[], totalSecs: number, validCount: number, dssSet: Set<string>, uniquePeople: Set<string> }> = {};
     
     if (selectedModule === 'DSS') {
       filteredData.forEach(item => {
-        const name = item['Supervisor'] || item['Líder'] || 'Não Identificado';
-        if (selectedAuditores.length > 0 && !selectedAuditores.includes(name)) return;
-        if (!agg[name]) agg[name] = { count: 0, name, data: [], totalSecs: 0, validCount: 0, dssSet: new Set() };
+        const name = rankingGroup === 'cidade' ? (item['CIDADE COMERCIAL'] || 'Não Identificada') : (item['Supervisor'] || item['Líder'] || 'Não Identificado');
+        
+        if (selectedAuditores.length > 0 && !selectedAuditores.includes(item['Nome']) && !selectedAuditores.includes(item['Matrícula'])) return;
+        
+        if (!agg[name]) agg[name] = { count: 0, name, data: [], totalSecs: 0, validCount: 0, dssSet: new Set(), uniquePeople: new Set() };
         agg[name].data.push(item);
+        agg[name].uniquePeople.add(item['Supervisor'] || item['Líder'] || 'N/A');
+        
         const dssId = item['Número do Diálogo'];
         if (dssId && !agg[name].dssSet.has(dssId)) {
           agg[name].dssSet.add(dssId);
@@ -418,23 +400,30 @@ export default function Dashboard() {
       });
     } else {
       filteredData.forEach(item => {
+        const name = rankingGroup === 'cidade' ? (item['CIDADE COMERCIAL'] || 'Não Identificada') : (item['Supervisor'] || item['SUPERVISOR'] || item['GESTOR'] || 'Não Identificado');
+        
         const mat = item['Matrícula Auditor'] || 'N/A';
-        const name = item['Nome Auditor'] || mat;
-        if (selectedAuditores.length > 0 && !selectedAuditores.includes(name) && !selectedAuditores.includes(mat)) return;
-        if (!agg[mat]) agg[mat] = { count: 0, name, data: [], totalSecs: 0, validCount: 0, dssSet: new Set() };
-        agg[mat].count += 1; agg[mat].data.push(item);
+        const auditorName = item['Nome Auditor'] || mat;
+        
+        if (selectedAuditores.length > 0 && !selectedAuditores.includes(auditorName) && !selectedAuditores.includes(mat)) return;
+        
+        if (!agg[name]) agg[name] = { count: 0, name, data: [], totalSecs: 0, validCount: 0, dssSet: new Set(), uniquePeople: new Set() };
+        agg[name].count += 1; 
+        agg[name].data.push(item);
+        agg[name].uniquePeople.add(mat);
+        
         const durKey = Object.keys(item).find(k => k.toLowerCase().includes('dura') && k.toLowerCase().includes('o'));
         if (durKey && typeof item[durKey] === 'string') {
           const parts = item[durKey].split(':');
           if (parts.length === 3) {
             const h = parseInt(parts[0], 10); const m = parseInt(parts[1], 10); const s = parseInt(parts[2], 10);
-            if (!isNaN(h) && !isNaN(m) && !isNaN(s)) { agg[mat].totalSecs += h * 3600 + m * 60 + s; agg[mat].validCount++; }
+            if (!isNaN(h) && !isNaN(m) && !isNaN(s)) { agg[name].totalSecs += h * 3600 + m * 60 + s; agg[name].validCount++; }
           }
         }
       });
     }
     return Object.values(agg).sort((a, b) => b.count - a.count);
-  }, [filteredData, selectedModule, selectedAuditores]);
+  }, [filteredData, selectedModule, selectedAuditores, rankingGroup]);
   const maxRank = rankAgg.length > 0 ? rankAgg[0].count : 1;
 
   // Month cols
@@ -653,47 +642,30 @@ export default function Dashboard() {
         </div>
 
         {/* Dashboard Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* Main List (Width decreased to col-span-1) */}
-          <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm col-span-1 flex flex-col h-[600px]">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">
-              {selectedModule === 'DSS' ? 'DSS por Supervisor' : 'Distribuição por Tipo'}
-            </h2>
-            
-            <div className="flex-1 overflow-y-auto scrollbar-thin pr-2">
-              {mainAgg.map(([name, count], idx) => {
-                const pct = (count / maxMain) * 100;
-                const colors = ['bg-pink-500', 'bg-blue-500', 'bg-green-500', 'bg-orange-500', 'bg-purple-500', 'bg-teal-500', 'bg-yellow-500'];
-                const barColor = colors[idx % colors.length];
-                return (
-                  <div 
-                    key={`${name}-${idx}`} 
-                    onClick={() => handleMultiSelect(setSelectedTipos)(name)}
-                    className="group flex flex-col justify-center gap-2 py-3 px-4 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors mb-2"
-                  >
-                    <div className="flex justify-between items-center w-full">
-                      <div className="text-sm font-semibold text-gray-700 group-hover:text-black truncate" title={name}>{name}</div>
-                      <div className="text-lg font-bold text-gray-900">{formatNum(count)}</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
-                        <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} className={`h-full ${barColor} rounded-full`} />
-                      </div>
-                      <div className="text-[10px] font-medium text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded-md">{((count/totalAprs)*100 || 0).toFixed(1)}%</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+        <div className="grid grid-cols-1 gap-6">
 
-          {/* Ranking List (Width increased to col-span-2) */}
-          <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm col-span-1 lg:col-span-2 flex flex-col h-[600px]">
+          {/* Ranking List (Full width) */}
+          <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm flex flex-col h-[600px]">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-              <h2 className="text-lg font-bold text-gray-900">Ranking de {selectedModule === 'DSS' ? 'Líderes' : 'Colaboradores'}</h2>
+              <div className="flex items-center gap-4">
+                <h2 className="text-lg font-bold text-gray-900">Ranking por</h2>
+                <div className="flex items-center bg-gray-100 p-1 rounded-lg">
+                  <button 
+                    onClick={() => setRankingGroup('supervisor')}
+                    className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-all ${rankingGroup === 'supervisor' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    Supervisor
+                  </button>
+                  <button 
+                    onClick={() => setRankingGroup('cidade')}
+                    className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-all ${rankingGroup === 'cidade' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    Cidade
+                  </button>
+                </div>
+              </div>
               <div className="z-20">
-                <PremiumMultiSelect label={selectedModule === 'DSS' ? 'Filtrar Líder' : 'Filtrar Nome'} options={allAuditores} selected={selectedAuditores} onChange={handleMultiSelect(setSelectedAuditores)} icon={UserCheck} widthClass="w-[280px]" />
+                <PremiumMultiSelect label={selectedModule === 'DSS' ? 'Filtrar Líder' : 'Filtrar Colaborador'} options={allAuditores} selected={selectedAuditores} onChange={handleMultiSelect(setSelectedAuditores)} icon={UserCheck} widthClass="w-[280px]" />
               </div>
             </div>
             
@@ -737,8 +709,8 @@ export default function Dashboard() {
                       </div>
 
                       <div className="flex justify-center items-center">
-                        <div className={`text-sm font-bold ${((item.count/targetAprs)*100) >= 100 ? 'text-green-600' : 'text-gray-600'}`}>
-                          {targetAprs > 0 ? ((item.count/targetAprs)*100).toFixed(1) : 0}%
+                        <div className={`text-sm font-bold ${((item.count/(targetAprs * (item.uniquePeople?.size || 1)))*100) >= 100 ? 'text-green-600' : 'text-gray-600'}`}>
+                          {targetAprs > 0 ? ((item.count/(targetAprs * (item.uniquePeople?.size || 1)))*100).toFixed(1) : 0}%
                         </div>
                       </div>
 
