@@ -42,15 +42,34 @@ export async function POST(req: Request) {
       );
     `);
 
+    // Ensure the unique constraint exists for UPSERT
+    await pool.query(`
+      ALTER TABLE dss DROP CONSTRAINT IF EXISTS unique_dss_record;
+      ALTER TABLE dss ADD CONSTRAINT unique_dss_record UNIQUE (numero_dialogo, matricula);
+    `);
+
     // Iniciar transação
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query('TRUNCATE TABLE dss');
 
       const insertQuery = `
         INSERT INTO dss (assunto, numero_dialogo, lider, base, uf, localidade, data_fechamento, matricula, nome, tipo, status, assinado, justificativa, mes, ano)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        ON CONFLICT (numero_dialogo, matricula) DO UPDATE SET
+          assunto = EXCLUDED.assunto,
+          lider = EXCLUDED.lider,
+          base = EXCLUDED.base,
+          uf = EXCLUDED.uf,
+          localidade = EXCLUDED.localidade,
+          data_fechamento = EXCLUDED.data_fechamento,
+          nome = EXCLUDED.nome,
+          tipo = EXCLUDED.tipo,
+          status = EXCLUDED.status,
+          assinado = EXCLUDED.assinado,
+          justificativa = EXCLUDED.justificativa,
+          mes = EXCLUDED.mes,
+          ano = EXCLUDED.ano
       `;
 
       for (let i = 1; i < lines.length; i++) {
@@ -63,6 +82,10 @@ export async function POST(req: Request) {
         const base = parts[3]?.trim();
         const uf = parts[4]?.trim();
         const local = parts[5]?.trim();
+        
+        // Filtrar apenas o que for de SP
+        if (!uf || uf.toUpperCase() !== 'SP') continue;
+
         const dtStr = parts[6]?.trim(); // ex: 30/09/2026 06:13:07 or 01/10/2026
         const mat = parts[7]?.trim();
         const nome = parts[8]?.trim();
