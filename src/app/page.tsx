@@ -148,7 +148,7 @@ export default function Dashboard() {
 
   // Admin Modal
   const [isAdminOpen, setIsAdminOpen] = useState(false);
-  const [adminAction, setAdminAction] = useState<'apr' | 'plano' | null>(null);
+  const [adminAction, setAdminAction] = useState<'apr' | 'plano' | 'dss' | null>(null);
   const [adminPassword, setAdminPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [adminAuthStatus, setAdminAuthStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -178,7 +178,10 @@ export default function Dashboard() {
     formData.append('file', file);
     
     try {
-      const endpoint = adminAction === 'apr' ? '/api/admin/upload-apr' : '/api/admin/upload-plano';
+      let endpoint = '/api/admin/upload-apr';
+      if (adminAction === 'plano') endpoint = '/api/admin/upload-plano';
+      if (adminAction === 'dss') endpoint = '/api/admin/upload-dss';
+      
       const res = await fetch(endpoint, { method: 'POST', body: formData });
       if (res.ok) {
         const dataRes = await res.json();
@@ -207,6 +210,15 @@ export default function Dashboard() {
 
   // Filtros Cruzados (Cross-filtering)
   const allTipos = useMemo(() => {
+    if (selectedModule === 'DSS') {
+      const base = data.filter(i => 
+        (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
+        (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['Base'])) &&
+        (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Líder'])) &&
+        (selectedCities.length === 0 || selectedCities.includes(i['Localidade']))
+      );
+      return Array.from(new Set(base.map(i => i['Assunto']))).filter(Boolean).sort();
+    }
     const base = data.filter(i => 
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
@@ -214,9 +226,18 @@ export default function Dashboard() {
       (selectedCities.length === 0 || selectedCities.includes(i['CIDADE COMERCIAL']))
     );
     return Array.from(new Set(base.map(i => cleanTipo(i['Questionário'])))).filter(Boolean).sort();
-  }, [data, selectedMonths, selectedDiretorias, selectedSupervisors, selectedCities]);
+  }, [data, selectedMonths, selectedDiretorias, selectedSupervisors, selectedCities, selectedModule]);
 
   const allDiretorias = useMemo(() => {
+    if (selectedModule === 'DSS') {
+      const base = data.filter(i => 
+        (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
+        (selectedTipos.length === 0 || selectedTipos.includes(i['Assunto'])) &&
+        (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Líder'])) &&
+        (selectedCities.length === 0 || selectedCities.includes(i['Localidade']))
+      );
+      return Array.from(new Set(base.map(i => i['Base']))).filter(Boolean).sort();
+    }
     const base = data.filter(i => 
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
@@ -224,9 +245,18 @@ export default function Dashboard() {
       (selectedCities.length === 0 || selectedCities.includes(i['CIDADE COMERCIAL']))
     );
     return Array.from(new Set(base.map(i => i['DIRETORIA 3']))).filter(Boolean).sort();
-  }, [data, selectedMonths, selectedTipos, selectedSupervisors, selectedCities]);
+  }, [data, selectedMonths, selectedTipos, selectedSupervisors, selectedCities, selectedModule]);
 
   const allSupervisors = useMemo(() => {
+    if (selectedModule === 'DSS') {
+      const base = data.filter(i => 
+        (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
+        (selectedTipos.length === 0 || selectedTipos.includes(i['Assunto'])) &&
+        (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['Base'])) &&
+        (selectedCities.length === 0 || selectedCities.includes(i['Localidade']))
+      );
+      return Array.from(new Set(base.map(i => i['Líder']))).filter(Boolean).sort();
+    }
     const base = data.filter(i => 
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
@@ -234,9 +264,18 @@ export default function Dashboard() {
       (selectedCities.length === 0 || selectedCities.includes(i['CIDADE COMERCIAL']))
     );
     return Array.from(new Set(base.map(i => i['Supervisor'] || i['SUPERVISOR'] || i['GESTOR']))).filter(Boolean).sort();
-  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedCities]);
+  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedCities, selectedModule]);
 
   const allCities = useMemo(() => {
+    if (selectedModule === 'DSS') {
+      const base = data.filter(i => 
+        (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
+        (selectedTipos.length === 0 || selectedTipos.includes(i['Assunto'])) &&
+        (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['Base'])) &&
+        (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Líder']))
+      );
+      return Array.from(new Set(base.map(i => i['Localidade']))).filter(Boolean).sort();
+    }
     const base = data.filter(i => 
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
@@ -244,9 +283,19 @@ export default function Dashboard() {
       (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor'] || i['SUPERVISOR'] || i['GESTOR']))
     );
     return Array.from(new Set(base.map(i => i['CIDADE COMERCIAL']))).filter(Boolean).sort();
-  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors]);
+  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedModule]);
 
   const allAuditores = useMemo(() => {
+    if (selectedModule === 'DSS') {
+      const base = data.filter(i => 
+        (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
+        (selectedTipos.length === 0 || selectedTipos.includes(i['Assunto'])) &&
+        (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['Base'])) &&
+        (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Líder'])) &&
+        (selectedCities.length === 0 || selectedCities.includes(i['Localidade']))
+      );
+      return Array.from(new Set(base.map(i => i['Nome'] || i['Matrícula']))).filter(Boolean).sort();
+    }
     const base = data.filter(i => 
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
@@ -255,7 +304,7 @@ export default function Dashboard() {
       (selectedCities.length === 0 || selectedCities.includes(i['CIDADE COMERCIAL']))
     );
     return Array.from(new Set(base.map(i => i['Nome Auditor'] || i['Matrícula Auditor']))).filter(Boolean).sort();
-  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities]);
+  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities, selectedModule]);
 
   const toggleMonth = (m: string) => setSelectedMonths(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]);
 
@@ -275,21 +324,28 @@ export default function Dashboard() {
 
   const filteredData = useMemo(() => {
     return data.filter(item => {
+      if (selectedModule === 'DSS') {
+        return (selectedMonths.length === 0 || selectedMonths.includes(String(item['Mês']))) &&
+               (selectedTipos.length === 0 || selectedTipos.includes(item['Assunto'])) &&
+               (selectedDiretorias.length === 0 || selectedDiretorias.includes(item['Base'])) &&
+               (selectedSupervisors.length === 0 || selectedSupervisors.includes(item['Líder'])) &&
+               (selectedCities.length === 0 || selectedCities.includes(item['Localidade']));
+      }
       return (selectedMonths.length === 0 || selectedMonths.includes(String(item['Mês']))) &&
              (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(item['Questionário']))) &&
              (selectedDiretorias.length === 0 || selectedDiretorias.includes(item['DIRETORIA 3'])) &&
              (selectedSupervisors.length === 0 || selectedSupervisors.includes(item['Supervisor'] || item['SUPERVISOR'] || item['GESTOR'])) &&
              (selectedCities.length === 0 || selectedCities.includes(item['CIDADE COMERCIAL']));
     });
-  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities]);
+  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities, selectedModule]);
 
   // KPIs
-  const totalAprs = filteredData.length;
-  const auditoresSet = new Set(filteredData.map(i => i['Matrícula Auditor'] || i['Nome Auditor']));
+  const totalAprs = selectedModule === 'DSS' ? new Set(filteredData.map(i => i['Número do Diálogo'])).size : filteredData.length;
+  const auditoresSet = new Set(filteredData.map(i => selectedModule === 'DSS' ? (i['Matrícula'] || i['Nome']) : (i['Matrícula Auditor'] || i['Nome Auditor'])));
   const totalAuditores = auditoresSet.size;
-  const diretoriasUnicas = new Set(filteredData.map(i => i['DIRETORIA 3']).filter(Boolean)).size;
-  const cidadesUnicas = new Set(filteredData.map(i => i['CIDADE COMERCIAL']).filter(Boolean)).size;
-  const supervisoresUnicos = new Set(filteredData.map(i => i['Supervisor'] || i['SUPERVISOR'] || i['GESTOR']).filter(Boolean)).size;
+  const diretoriasUnicas = new Set(filteredData.map(i => selectedModule === 'DSS' ? i['Base'] : i['DIRETORIA 3']).filter(Boolean)).size;
+  const cidadesUnicas = new Set(filteredData.map(i => selectedModule === 'DSS' ? i['Localidade'] : i['CIDADE COMERCIAL']).filter(Boolean)).size;
+  const supervisoresUnicos = new Set(filteredData.map(i => selectedModule === 'DSS' ? i['Líder'] : (i['Supervisor'] || i['SUPERVISOR'] || i['GESTOR'])).filter(Boolean)).size;
 
   const getAvgTimeStr = (totalSecs: number, validCount: number) => {
     const avgSecs = validCount > 0 ? Math.round(totalSecs / validCount) : 0;
@@ -304,44 +360,81 @@ export default function Dashboard() {
     return wd[m] || 22;
   };
 
+  const getWorkingWeeks = (m: number) => {
+    const ww: Record<number, number> = { 1:4.4, 2:4, 3:4.4, 4:4.2, 5:4.2, 6:4.4, 7:4.6, 8:4.2, 9:4.4, 10:4.4, 11:4.2, 12:4.6 };
+    return Math.floor(ww[m] || 4);
+  };
+
   const targetAprs = useMemo(() => {
     const monthsToConsider = selectedMonths.length > 0 ? selectedMonths : allMonths;
+    if (selectedModule === 'DSS') {
+      let totalWw = 0;
+      monthsToConsider.forEach(m => totalWw += getWorkingWeeks(parseInt(m, 10)));
+      return totalWw * 1; // 1 DSS por semana por líder
+    }
     let totalWd = 0;
     monthsToConsider.forEach(m => totalWd += getWorkingDays(parseInt(m, 10)));
     return totalWd * 2;
-  }, [selectedMonths, allMonths]);
+  }, [selectedMonths, allMonths, selectedModule]);
 
-  // Main list
+  // Main list (Distribuição / Ranking principal)
   const mainAgg = useMemo(() => {
     const agg: Record<string, number> = {};
-    filteredData.forEach(item => {
-      let val = cleanTipo(item['Questionário']);
-      agg[val] = (agg[val] || 0) + 1;
-    });
+    if (selectedModule === 'DSS') {
+      const uniqueDSS = new Set();
+      filteredData.forEach(item => {
+        const dssId = item['Número do Diálogo'];
+        if (!uniqueDSS.has(dssId)) {
+          uniqueDSS.add(dssId);
+          let val = item['Líder'] || 'Não Identificado';
+          agg[val] = (agg[val] || 0) + 1;
+        }
+      });
+    } else {
+      filteredData.forEach(item => {
+        let val = cleanTipo(item['Questionário']);
+        agg[val] = (agg[val] || 0) + 1;
+      });
+    }
     return Object.entries(agg).sort((a, b) => b[1] - a[1]);
-  }, [filteredData]);
+  }, [filteredData, selectedModule]);
   const maxMain = mainAgg.length > 0 ? mainAgg[0][1] : 1;
 
   // Rank list
   const rankAgg = useMemo(() => {
-    const agg: Record<string, { count: number, name: string, data: any[], totalSecs: number, validCount: number }> = {};
-    filteredData.forEach(item => {
-      const mat = item['Matrícula Auditor'] || 'N/A';
-      const name = item['Nome Auditor'] || mat;
-      if (selectedAuditores.length > 0 && !selectedAuditores.includes(name) && !selectedAuditores.includes(mat)) return;
-      if (!agg[mat]) agg[mat] = { count: 0, name, data: [], totalSecs: 0, validCount: 0 };
-      agg[mat].count += 1; agg[mat].data.push(item);
-      const durKey = Object.keys(item).find(k => k.toLowerCase().includes('dura') && k.toLowerCase().includes('o'));
-      if (durKey && typeof item[durKey] === 'string') {
-        const parts = item[durKey].split(':');
-        if (parts.length === 3) {
-          const h = parseInt(parts[0], 10); const m = parseInt(parts[1], 10); const s = parseInt(parts[2], 10);
-          if (!isNaN(h) && !isNaN(m) && !isNaN(s)) { agg[mat].totalSecs += h * 3600 + m * 60 + s; agg[mat].validCount++; }
+    const agg: Record<string, { count: number, name: string, data: any[], totalSecs: number, validCount: number, dssSet: Set<string> }> = {};
+    
+    if (selectedModule === 'DSS') {
+      filteredData.forEach(item => {
+        const name = item['Líder'] || 'Não Identificado';
+        if (selectedAuditores.length > 0 && !selectedAuditores.includes(name)) return;
+        if (!agg[name]) agg[name] = { count: 0, name, data: [], totalSecs: 0, validCount: 0, dssSet: new Set() };
+        agg[name].data.push(item);
+        const dssId = item['Número do Diálogo'];
+        if (dssId && !agg[name].dssSet.has(dssId)) {
+          agg[name].dssSet.add(dssId);
+          agg[name].count += 1;
         }
-      }
-    });
+      });
+    } else {
+      filteredData.forEach(item => {
+        const mat = item['Matrícula Auditor'] || 'N/A';
+        const name = item['Nome Auditor'] || mat;
+        if (selectedAuditores.length > 0 && !selectedAuditores.includes(name) && !selectedAuditores.includes(mat)) return;
+        if (!agg[mat]) agg[mat] = { count: 0, name, data: [], totalSecs: 0, validCount: 0, dssSet: new Set() };
+        agg[mat].count += 1; agg[mat].data.push(item);
+        const durKey = Object.keys(item).find(k => k.toLowerCase().includes('dura') && k.toLowerCase().includes('o'));
+        if (durKey && typeof item[durKey] === 'string') {
+          const parts = item[durKey].split(':');
+          if (parts.length === 3) {
+            const h = parseInt(parts[0], 10); const m = parseInt(parts[1], 10); const s = parseInt(parts[2], 10);
+            if (!isNaN(h) && !isNaN(m) && !isNaN(s)) { agg[mat].totalSecs += h * 3600 + m * 60 + s; agg[mat].validCount++; }
+          }
+        }
+      });
+    }
     return Object.values(agg).sort((a, b) => b.count - a.count);
-  }, [filteredData]);
+  }, [filteredData, selectedModule, selectedAuditores]);
   const maxRank = rankAgg.length > 0 ? rankAgg[0].count : 1;
 
   // Month cols
@@ -449,13 +542,13 @@ export default function Dashboard() {
         <div className="bg-gray-50/50 backdrop-blur-md border-t border-gray-100">
           <div className="max-w-[1600px] mx-auto px-6 py-2 flex flex-wrap items-center gap-4">
             
-            <PremiumMultiSelect label="Tipo de APR" options={allTipos} selected={selectedTipos} onChange={handleMultiSelect(setSelectedTipos)} icon={FileText} />
+            <PremiumMultiSelect label={selectedModule === 'DSS' ? "Assunto" : "Tipo de APR"} options={allTipos} selected={selectedTipos} onChange={handleMultiSelect(setSelectedTipos)} icon={FileText} />
 
             <div className="w-px h-12 bg-gray-200 hidden md:block"></div>
 
-            <PremiumMultiSelect label="Diretoria" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-[340px]" />
-            <PremiumMultiSelect label="Supervisor" options={allSupervisors} selected={selectedSupervisors} onChange={handleMultiSelect(setSelectedSupervisors)} icon={Users} />
-            <PremiumMultiSelect label="Cidade" options={allCities} selected={selectedCities} onChange={handleMultiSelect(setSelectedCities)} icon={MapPin} />
+            <PremiumMultiSelect label={selectedModule === 'DSS' ? "Base" : "Diretoria"} options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-[340px]" />
+            <PremiumMultiSelect label={selectedModule === 'DSS' ? "Líder" : "Supervisor"} options={allSupervisors} selected={selectedSupervisors} onChange={handleMultiSelect(setSelectedSupervisors)} icon={Users} />
+            <PremiumMultiSelect label={selectedModule === 'DSS' ? "Localidade" : "Cidade"} options={allCities} selected={selectedCities} onChange={handleMultiSelect(setSelectedCities)} icon={MapPin} />
 
             {(selectedMonths.length > 0 || selectedTipos.length > 0 || selectedDiretorias.length > 0 || selectedSupervisors.length > 0 || selectedCities.length > 0 || selectedAuditores.length > 0) && (
               <div className="flex flex-col gap-1.5 ml-auto">
@@ -479,10 +572,10 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           {[
             { v: formatNum(totalAprs), l: `${selectedModule}s no filtro`, icon: FileText, c: 'border-l-pink-500', t: 'text-pink-500' },
-            { v: formatNum(diretoriasUnicas), l: 'diretorias', icon: Building, c: 'border-l-blue-500', t: 'text-blue-500' },
-            { v: formatNum(supervisoresUnicos), l: 'supervisores', icon: Users, c: 'border-l-orange-500', t: 'text-orange-500' },
-            { v: formatNum(cidadesUnicas), l: 'cidades', icon: MapPin, c: 'border-l-teal-500', t: 'text-teal-500' },
-            { v: formatNum(totalAuditores), l: 'colaboradores', icon: UserCheck, c: 'border-l-purple-500', t: 'text-purple-500' }
+            { v: formatNum(diretoriasUnicas), l: selectedModule === 'DSS' ? 'bases' : 'diretorias', icon: Building, c: 'border-l-blue-500', t: 'text-blue-500' },
+            { v: formatNum(supervisoresUnicos), l: selectedModule === 'DSS' ? 'líderes' : 'supervisores', icon: Users, c: 'border-l-orange-500', t: 'text-orange-500' },
+            { v: formatNum(cidadesUnicas), l: selectedModule === 'DSS' ? 'localidades' : 'cidades', icon: MapPin, c: 'border-l-teal-500', t: 'text-teal-500' },
+            { v: formatNum(totalAuditores), l: selectedModule === 'DSS' ? 'participantes' : 'colaboradores', icon: UserCheck, c: 'border-l-purple-500', t: 'text-purple-500' }
           ].map((kpi, i) => (
             <motion.div 
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
@@ -536,7 +629,7 @@ export default function Dashboard() {
           {/* Main List (Width decreased to col-span-1) */}
           <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm col-span-1 flex flex-col h-[600px]">
             <h2 className="text-lg font-bold text-gray-900 mb-4">
-              Distribuição por Tipo
+              {selectedModule === 'DSS' ? 'DSS por Líder' : 'Distribuição por Tipo'}
             </h2>
             
             <div className="flex-1 overflow-y-auto scrollbar-thin pr-2">
@@ -569,24 +662,24 @@ export default function Dashboard() {
           {/* Ranking List (Width increased to col-span-2) */}
           <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm col-span-1 lg:col-span-2 flex flex-col h-[600px]">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-              <h2 className="text-lg font-bold text-gray-900">Ranking de Colaboradores</h2>
+              <h2 className="text-lg font-bold text-gray-900">Ranking de {selectedModule === 'DSS' ? 'Líderes' : 'Colaboradores'}</h2>
               <div className="z-20">
-                <PremiumMultiSelect label="Filtrar Nome" options={allAuditores} selected={selectedAuditores} onChange={handleMultiSelect(setSelectedAuditores)} icon={UserCheck} widthClass="w-[280px]" />
+                <PremiumMultiSelect label={selectedModule === 'DSS' ? 'Filtrar Líder' : 'Filtrar Nome'} options={allAuditores} selected={selectedAuditores} onChange={handleMultiSelect(setSelectedAuditores)} icon={UserCheck} widthClass="w-[280px]" />
               </div>
             </div>
             
             {/* Table Header */}
             <div className="grid grid-cols-[30px_1fr_80px_100px_110px] items-center gap-4 px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100 mb-3">
               <div>#</div>
-              <div>Colaborador</div>
-              <div className="text-center">APR</div>
+              <div>{selectedModule === 'DSS' ? 'Líder' : 'Colaborador'}</div>
+              <div className="text-center">{selectedModule}</div>
               <div className="flex items-center justify-center gap-1">
                 Meta
                 <button onClick={() => setIsMetaModalOpen(true)} className="focus:outline-none rounded-full hover:bg-gray-100 p-0.5 transition-colors">
                   <HelpCircle size={14} className="text-gray-400 cursor-pointer hover:text-purple-600" />
                 </button>
               </div>
-              <div className="text-center">Duração</div>
+              <div className="text-center">{selectedModule === 'DSS' ? 'Participantes' : 'Duração'}</div>
             </div>
 
             <div className="flex-1 overflow-y-auto scrollbar-thin pr-2">
@@ -622,8 +715,11 @@ export default function Dashboard() {
 
                       <div className="flex justify-center items-center">
                         <div className="text-xs text-gray-600 font-medium flex items-center justify-center gap-1.5 bg-white px-2 py-1 rounded-md border border-gray-100">
-                          <Clock size={12} className="text-[#660099]"/> 
-                          {getAvgTimeStr(item.totalSecs, item.validCount)}
+                          {selectedModule === 'DSS' ? (
+                            <><Users size={12} className="text-blue-500"/> {item.data.length}</>
+                          ) : (
+                            <><Clock size={12} className="text-[#660099]"/> {getAvgTimeStr(item.totalSecs, item.validCount)}</>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -660,10 +756,15 @@ export default function Dashboard() {
                   A meta de {selectedModule}s é calculada com base na seguinte regra:
                 </p>
                 <div className="mt-4 p-4 bg-purple-50 rounded-xl border border-purple-100">
-                  <p className="font-bold text-purple-900 text-center">2 {selectedModule}s por dia × Dias úteis do mês</p>
+                  <p className="font-bold text-purple-900 text-center">
+                    {selectedModule === 'APR' ? '2 APRs por dia × Dias úteis do mês' : '1 DSS por semana × Semanas úteis do mês'}
+                  </p>
                 </div>
                 <p className="mt-4 text-gray-600 text-sm leading-relaxed">
-                  Isso significa que cada colaborador tem o objetivo de realizar ao menos 2 {selectedModule === 'APR' ? 'Análises Preliminares de Riscos' : 'Diálogos Semanais de Segurança'} para cada dia útil trabalhado nos meses selecionados no filtro.
+                  {selectedModule === 'APR' 
+                    ? 'Isso significa que cada colaborador tem o objetivo de realizar ao menos 2 Análises Preliminares de Riscos para cada dia útil trabalhado nos meses selecionados no filtro.'
+                    : 'Isso significa que cada Líder tem o objetivo de aplicar 1 Diálogo Semanal de Segurança por semana nas bases filtradas.'
+                  }
                 </p>
                 <div className="mt-6 flex justify-end">
                   <button 
@@ -794,8 +895,12 @@ export default function Dashboard() {
                       <div className="p-2 bg-purple-100 rounded-lg group-hover:bg-[#660099] text-[#660099] group-hover:text-white transition-colors"><UploadCloud size={20} /></div>
                       <div className="text-left"><p className="font-bold text-gray-900">Importar APRs</p><p className="text-xs text-gray-500">Subir nova planilha XLSX de APRs</p></div>
                     </button>
-                    <button onClick={() => setAdminAction('plano')} className="flex items-center gap-3 p-4 rounded-xl border border-gray-200 hover:border-blue-600 hover:bg-blue-50 transition-all group">
-                      <div className="p-2 bg-blue-100 rounded-lg group-hover:bg-blue-600 text-blue-600 group-hover:text-white transition-colors"><Users size={20} /></div>
+                    <button onClick={() => setAdminAction('dss')} className="flex items-center gap-3 p-4 rounded-xl border border-gray-200 hover:border-blue-600 hover:bg-blue-50 transition-all group">
+                      <div className="p-2 bg-blue-100 rounded-lg group-hover:bg-blue-600 text-blue-600 group-hover:text-white transition-colors"><ShieldAlert size={20} /></div>
+                      <div className="text-left"><p className="font-bold text-gray-900">Importar DSS</p><p className="text-xs text-gray-500">Subir nova planilha CSV de DSS</p></div>
+                    </button>
+                    <button onClick={() => setAdminAction('plano')} className="flex items-center gap-3 p-4 rounded-xl border border-gray-200 hover:border-teal-600 hover:bg-teal-50 transition-all group">
+                      <div className="p-2 bg-teal-100 rounded-lg group-hover:bg-teal-600 text-teal-600 group-hover:text-white transition-colors"><Users size={20} /></div>
                       <div className="text-left"><p className="font-bold text-gray-900">Importar Plano de Ocupações</p><p className="text-xs text-gray-500">Atualizar lista de colaboradores e diretorias</p></div>
                     </button>
                   </div>
@@ -803,14 +908,16 @@ export default function Dashboard() {
                   <div className="flex flex-col items-center gap-4">
                     <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-2"><UploadCloud size={24} /></div>
                     <h4 className="font-bold text-gray-900">
-                      {adminAction === 'apr' ? 'Upload de APRs' : 'Upload do Plano'}
+                      {adminAction === 'apr' ? 'Upload de APRs' : adminAction === 'dss' ? 'Upload de DSS' : 'Upload do Plano'}
                     </h4>
-                    <p className="text-sm text-gray-500 text-center mb-2">Selecione o arquivo XLSX para importar os dados para o banco.</p>
+                    <p className="text-sm text-gray-500 text-center mb-2">
+                      Selecione o arquivo {adminAction === 'dss' ? 'CSV' : 'XLSX'} para importar os dados para o banco.
+                    </p>
                     
                     <label className="w-full border-2 border-dashed border-gray-300 rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer hover:border-[#660099] hover:bg-purple-50 transition-all">
                       <UploadCloud className="text-gray-400 mb-2" size={32} />
                       <span className="text-sm font-semibold text-gray-600">Clique para selecionar o arquivo</span>
-                      <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleFileUpload} />
+                      <input type="file" accept={adminAction === 'dss' ? ".csv" : ".xlsx, .xls"} className="hidden" onChange={handleFileUpload} />
                     </label>
 
                     {uploadStatus && (
