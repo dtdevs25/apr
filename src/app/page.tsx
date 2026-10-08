@@ -342,7 +342,7 @@ export default function Dashboard() {
   // KPIs
   const totalAprs = selectedModule === 'DSS' ? new Set(filteredData.map(i => i['Número do Diálogo'])).size : filteredData.length;
   const auditoresSet = new Set(filteredData.map(i => selectedModule === 'DSS' ? (i['Matrícula'] || i['Nome']) : (i['Matrícula Auditor'] || i['Nome Auditor'])));
-  const totalAuditores = auditoresSet.size;
+  const totalAuditores = selectedModule === 'DSS' ? filteredData.length : auditoresSet.size;
   const diretoriasUnicas = new Set(filteredData.map(i => i['DIRETORIA 3']).filter(Boolean)).size;
   const cidadesUnicas = new Set(filteredData.map(i => i['CIDADE COMERCIAL']).filter(Boolean)).size;
   const supervisoresUnicos = new Set(filteredData.map(i => i['Supervisor'] || i['SUPERVISOR'] || i['GESTOR']).filter(Boolean)).size;
@@ -440,9 +440,24 @@ export default function Dashboard() {
   // Month cols
   const monthAgg = useMemo(() => {
     const agg: Record<string, number> = {};
-    filteredData.forEach(item => { const m = String(item['Mês']); agg[m] = (agg[m] || 0) + 1; });
+    if (selectedModule === 'DSS') {
+      const uniqueDSS = new Set<string>();
+      filteredData.forEach(item => {
+        const m = String(item['Mês']);
+        const dssId = item['Número do Diálogo'];
+        if (dssId) {
+          const key = `${m}-${dssId}`;
+          if (!uniqueDSS.has(key)) {
+            uniqueDSS.add(key);
+            agg[m] = (agg[m] || 0) + 1;
+          }
+        }
+      });
+    } else {
+      filteredData.forEach(item => { const m = String(item['Mês']); agg[m] = (agg[m] || 0) + 1; });
+    }
     return allMonths.map(m => ({ month: m, count: agg[m] || 0 }));
-  }, [filteredData, allMonths]);
+  }, [filteredData, allMonths, selectedModule]);
   const maxMonth = Math.max(1, ...monthAgg.map(m => m.count));
 
   const exportToExcel = () => {
@@ -574,10 +589,10 @@ export default function Dashboard() {
           const percAtendimento = totalEsperadoDss > 0 ? ((totalAprs / totalEsperadoDss) * 100).toFixed(1) : '0.0';
           const kpisToRender = selectedModule === 'DSS' ? [
             { v: formatNum(totalAuditores), l: 'Participantes', icon: Users, c: 'border-l-purple-500', t: 'text-purple-500' },
+            { v: formatNum(supervisoresUnicos), l: 'Supervisores', icon: UserCheck, c: 'border-l-teal-500', t: 'text-teal-500' },
             { v: formatNum(totalEsperadoDss), l: 'DSS Esperados', icon: FileCheck, c: 'border-l-blue-500', t: 'text-blue-500' },
             { v: formatNum(totalAprs), l: 'DSS Realizados', icon: FileText, c: 'border-l-pink-500', t: 'text-pink-500' },
-            { v: `${percAtendimento}%`, l: 'Atendimento', icon: Activity, c: 'border-l-orange-500', t: 'text-orange-500' },
-            { v: formatNum(supervisoresUnicos), l: 'Supervisores', icon: UserCheck, c: 'border-l-teal-500', t: 'text-teal-500' }
+            { v: `${percAtendimento}%`, l: 'Atendimento', icon: Activity, c: 'border-l-orange-500', t: 'text-orange-500' }
           ] : [
             { v: formatNum(totalAprs), l: `${selectedModule}s no filtro`, icon: FileText, c: 'border-l-pink-500', t: 'text-pink-500' },
             { v: formatNum(diretoriasUnicas), l: 'diretorias', icon: Building, c: 'border-l-blue-500', t: 'text-blue-500' },
