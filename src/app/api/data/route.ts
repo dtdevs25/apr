@@ -10,7 +10,28 @@ export async function GET(req: NextRequest) {
     
     if (type === 'DSS') {
       try {
+        const ACC_FROM = 'ÁÀÂÃÄáàâãäÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÕÖóòôõöÚÙÛÜúùûüÇçÑñ';
+        const ACC_TO   = 'AAAAAaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuCcNn';
+        const normNome = (col: string) =>
+          `NULLIF(UPPER(TRIM(REGEXP_REPLACE(TRANSLATE(${col}::text, '${ACC_FROM}', '${ACC_TO}'), '\\s+', ' ', 'g'))), '')`;
+        const normId = (col: string) =>
+          `NULLIF(LTRIM(REGEXP_REPLACE(REGEXP_REPLACE(TRIM(${col}::text), '\\.0+$', ''), '[^0-9]', '', 'g'), '0'), '')`;
+
         const res = await pool.query(`
+          WITH po_norm AS (
+            SELECT id,
+              ${normNome('nome')} AS nome_n,
+              diretoria_3, gerencia, gestor, cidade_comercial, uf_comercial
+            FROM po
+          ),
+          po_by_nome AS (
+            SELECT DISTINCT ON (nome_n) * FROM po_norm WHERE nome_n IS NOT NULL ORDER BY nome_n, id DESC
+          ),
+          d_norm AS (
+            SELECT dss.*,
+              ${normNome('lider')} AS lider_n
+            FROM dss
+          )
           SELECT 
             d.assunto AS "Assunto",
             d.numero_dialogo AS "Número do Diálogo",
@@ -26,8 +47,12 @@ export async function GET(req: NextRequest) {
             d.assinado AS "Assinado",
             d.justificativa AS "Justificativa",
             d.mes AS "Mês",
-            d.ano AS "Ano"
-          FROM dss d
+            d.ano AS "Ano",
+            COALESCE(p3.diretoria_3, d.base) AS "DIRETORIA 3",
+            COALESCE(p3.gestor, d.lider) AS "Supervisor",
+            COALESCE(p3.cidade_comercial, d.localidade) AS "CIDADE COMERCIAL"
+          FROM d_norm d
+          LEFT JOIN po_by_nome p3 ON p3.nome_n = d.lider_n
           ORDER BY d.data_fechamento DESC
         `);
         rows = res.rows;

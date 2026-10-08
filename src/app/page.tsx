@@ -213,9 +213,9 @@ export default function Dashboard() {
     if (selectedModule === 'DSS') {
       const base = data.filter(i => 
         (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
-        (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['Base'])) &&
-        (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Líder'])) &&
-        (selectedCities.length === 0 || selectedCities.includes(i['Localidade']))
+        (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
+        (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor'])) &&
+        (selectedCities.length === 0 || selectedCities.includes(i['CIDADE COMERCIAL']))
       );
       return Array.from(new Set(base.map(i => i['Assunto']))).filter(Boolean).sort();
     }
@@ -233,10 +233,10 @@ export default function Dashboard() {
       const base = data.filter(i => 
         (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
         (selectedTipos.length === 0 || selectedTipos.includes(i['Assunto'])) &&
-        (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Líder'])) &&
-        (selectedCities.length === 0 || selectedCities.includes(i['Localidade']))
+        (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor'])) &&
+        (selectedCities.length === 0 || selectedCities.includes(i['CIDADE COMERCIAL']))
       );
-      return Array.from(new Set(base.map(i => i['Base']))).filter(Boolean).sort();
+      return Array.from(new Set(base.map(i => i['DIRETORIA 3']))).filter(Boolean).sort();
     }
     const base = data.filter(i => 
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
@@ -252,10 +252,10 @@ export default function Dashboard() {
       const base = data.filter(i => 
         (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
         (selectedTipos.length === 0 || selectedTipos.includes(i['Assunto'])) &&
-        (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['Base'])) &&
-        (selectedCities.length === 0 || selectedCities.includes(i['Localidade']))
+        (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
+        (selectedCities.length === 0 || selectedCities.includes(i['CIDADE COMERCIAL']))
       );
-      return Array.from(new Set(base.map(i => i['Líder']))).filter(Boolean).sort();
+      return Array.from(new Set(base.map(i => i['Supervisor']))).filter(Boolean).sort();
     }
     const base = data.filter(i => 
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
@@ -271,10 +271,10 @@ export default function Dashboard() {
       const base = data.filter(i => 
         (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
         (selectedTipos.length === 0 || selectedTipos.includes(i['Assunto'])) &&
-        (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['Base'])) &&
-        (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Líder']))
+        (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
+        (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor']))
       );
-      return Array.from(new Set(base.map(i => i['Localidade']))).filter(Boolean).sort();
+      return Array.from(new Set(base.map(i => i['CIDADE COMERCIAL']))).filter(Boolean).sort();
     }
     const base = data.filter(i => 
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
@@ -290,9 +290,9 @@ export default function Dashboard() {
       const base = data.filter(i => 
         (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
         (selectedTipos.length === 0 || selectedTipos.includes(i['Assunto'])) &&
-        (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['Base'])) &&
-        (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Líder'])) &&
-        (selectedCities.length === 0 || selectedCities.includes(i['Localidade']))
+        (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
+        (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor'])) &&
+        (selectedCities.length === 0 || selectedCities.includes(i['CIDADE COMERCIAL']))
       );
       return Array.from(new Set(base.map(i => i['Nome'] || i['Matrícula']))).filter(Boolean).sort();
     }
@@ -327,9 +327,9 @@ export default function Dashboard() {
       if (selectedModule === 'DSS') {
         return (selectedMonths.length === 0 || selectedMonths.includes(String(item['Mês']))) &&
                (selectedTipos.length === 0 || selectedTipos.includes(item['Assunto'])) &&
-               (selectedDiretorias.length === 0 || selectedDiretorias.includes(item['Base'])) &&
-               (selectedSupervisors.length === 0 || selectedSupervisors.includes(item['Líder'])) &&
-               (selectedCities.length === 0 || selectedCities.includes(item['Localidade']));
+               (selectedDiretorias.length === 0 || selectedDiretorias.includes(item['DIRETORIA 3'])) &&
+               (selectedSupervisors.length === 0 || selectedSupervisors.includes(item['Supervisor'])) &&
+               (selectedCities.length === 0 || selectedCities.includes(item['CIDADE COMERCIAL']));
       }
       return (selectedMonths.length === 0 || selectedMonths.includes(String(item['Mês']))) &&
              (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(item['Questionário']))) &&
@@ -343,9 +343,9 @@ export default function Dashboard() {
   const totalAprs = selectedModule === 'DSS' ? new Set(filteredData.map(i => i['Número do Diálogo'])).size : filteredData.length;
   const auditoresSet = new Set(filteredData.map(i => selectedModule === 'DSS' ? (i['Matrícula'] || i['Nome']) : (i['Matrícula Auditor'] || i['Nome Auditor'])));
   const totalAuditores = auditoresSet.size;
-  const diretoriasUnicas = new Set(filteredData.map(i => selectedModule === 'DSS' ? i['Base'] : i['DIRETORIA 3']).filter(Boolean)).size;
-  const cidadesUnicas = new Set(filteredData.map(i => selectedModule === 'DSS' ? i['Localidade'] : i['CIDADE COMERCIAL']).filter(Boolean)).size;
-  const supervisoresUnicos = new Set(filteredData.map(i => selectedModule === 'DSS' ? i['Líder'] : (i['Supervisor'] || i['SUPERVISOR'] || i['GESTOR'])).filter(Boolean)).size;
+  const diretoriasUnicas = new Set(filteredData.map(i => i['DIRETORIA 3']).filter(Boolean)).size;
+  const cidadesUnicas = new Set(filteredData.map(i => i['CIDADE COMERCIAL']).filter(Boolean)).size;
+  const supervisoresUnicos = new Set(filteredData.map(i => i['Supervisor'] || i['SUPERVISOR'] || i['GESTOR']).filter(Boolean)).size;
 
   const getAvgTimeStr = (totalSecs: number, validCount: number) => {
     const avgSecs = validCount > 0 ? Math.round(totalSecs / validCount) : 0;
@@ -386,7 +386,7 @@ export default function Dashboard() {
         const dssId = item['Número do Diálogo'];
         if (!uniqueDSS.has(dssId)) {
           uniqueDSS.add(dssId);
-          let val = item['Líder'] || 'Não Identificado';
+          let val = item['Supervisor'] || item['Líder'] || 'Não Identificado';
           agg[val] = (agg[val] || 0) + 1;
         }
       });
@@ -406,7 +406,7 @@ export default function Dashboard() {
     
     if (selectedModule === 'DSS') {
       filteredData.forEach(item => {
-        const name = item['Líder'] || 'Não Identificado';
+        const name = item['Supervisor'] || item['Líder'] || 'Não Identificado';
         if (selectedAuditores.length > 0 && !selectedAuditores.includes(name)) return;
         if (!agg[name]) agg[name] = { count: 0, name, data: [], totalSecs: 0, validCount: 0, dssSet: new Set() };
         agg[name].data.push(item);
@@ -546,9 +546,9 @@ export default function Dashboard() {
 
             <div className="w-px h-12 bg-gray-200 hidden md:block"></div>
 
-            <PremiumMultiSelect label={selectedModule === 'DSS' ? "Base" : "Diretoria"} options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-[340px]" />
-            <PremiumMultiSelect label={selectedModule === 'DSS' ? "Líder" : "Supervisor"} options={allSupervisors} selected={selectedSupervisors} onChange={handleMultiSelect(setSelectedSupervisors)} icon={Users} />
-            <PremiumMultiSelect label={selectedModule === 'DSS' ? "Localidade" : "Cidade"} options={allCities} selected={selectedCities} onChange={handleMultiSelect(setSelectedCities)} icon={MapPin} />
+            <PremiumMultiSelect label="Diretoria" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-[340px]" />
+            <PremiumMultiSelect label="Supervisor" options={allSupervisors} selected={selectedSupervisors} onChange={handleMultiSelect(setSelectedSupervisors)} icon={Users} />
+            <PremiumMultiSelect label="Cidade" options={allCities} selected={selectedCities} onChange={handleMultiSelect(setSelectedCities)} icon={MapPin} />
 
             {(selectedMonths.length > 0 || selectedTipos.length > 0 || selectedDiretorias.length > 0 || selectedSupervisors.length > 0 || selectedCities.length > 0 || selectedAuditores.length > 0) && (
               <div className="flex flex-col gap-1.5 ml-auto">
@@ -572,9 +572,9 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           {[
             { v: formatNum(totalAprs), l: `${selectedModule}s no filtro`, icon: FileText, c: 'border-l-pink-500', t: 'text-pink-500' },
-            { v: formatNum(diretoriasUnicas), l: selectedModule === 'DSS' ? 'bases' : 'diretorias', icon: Building, c: 'border-l-blue-500', t: 'text-blue-500' },
-            { v: formatNum(supervisoresUnicos), l: selectedModule === 'DSS' ? 'líderes' : 'supervisores', icon: Users, c: 'border-l-orange-500', t: 'text-orange-500' },
-            { v: formatNum(cidadesUnicas), l: selectedModule === 'DSS' ? 'localidades' : 'cidades', icon: MapPin, c: 'border-l-teal-500', t: 'text-teal-500' },
+            { v: formatNum(diretoriasUnicas), l: 'diretorias', icon: Building, c: 'border-l-blue-500', t: 'text-blue-500' },
+            { v: formatNum(supervisoresUnicos), l: 'supervisores', icon: Users, c: 'border-l-orange-500', t: 'text-orange-500' },
+            { v: formatNum(cidadesUnicas), l: 'cidades', icon: MapPin, c: 'border-l-teal-500', t: 'text-teal-500' },
             { v: formatNum(totalAuditores), l: selectedModule === 'DSS' ? 'participantes' : 'colaboradores', icon: UserCheck, c: 'border-l-purple-500', t: 'text-purple-500' }
           ].map((kpi, i) => (
             <motion.div 
@@ -629,7 +629,7 @@ export default function Dashboard() {
           {/* Main List (Width decreased to col-span-1) */}
           <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm col-span-1 flex flex-col h-[600px]">
             <h2 className="text-lg font-bold text-gray-900 mb-4">
-              {selectedModule === 'DSS' ? 'DSS por Líder' : 'Distribuição por Tipo'}
+              {selectedModule === 'DSS' ? 'DSS por Supervisor' : 'Distribuição por Tipo'}
             </h2>
             
             <div className="flex-1 overflow-y-auto scrollbar-thin pr-2">
