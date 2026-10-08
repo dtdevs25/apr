@@ -155,7 +155,19 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    return NextResponse.json(formattedData);
+    const ALLOWED_DIRETORIAS = [
+      'DIR ENGENHARIA TRANSPORTE E INFRA',
+      'DIR EXPERIENCIA COLABORADOR',
+      'DIR SERVICOS AO CLIENTE SP CAPITAL',
+      'DIR SERVICOS AO CLIENTE SP INTERIOR'
+    ];
+
+    const finalData = formattedData.filter(r => {
+      const dir = (r["DIRETORIA 3"] || '').toString().trim().toUpperCase();
+      return ALLOWED_DIRETORIAS.includes(dir);
+    });
+
+    return NextResponse.json(finalData);
   } catch (error) {
     console.error("Erro ao carregar dados do banco:", error);
     return NextResponse.json([], { status: 500 });
