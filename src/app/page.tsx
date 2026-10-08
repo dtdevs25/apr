@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, ChevronDown, CheckSquare, Square, Building, Users, MapPin, Calendar, Search, FileText, UserCheck, Clock, HelpCircle, X, Settings, UploadCloud, Lock, Eye, EyeOff } from 'lucide-react';
+import { Download, ChevronDown, CheckSquare, Square, Building, Users, MapPin, Calendar, Search, FileText, UserCheck, Clock, HelpCircle, X, Settings, UploadCloud, Lock, Eye, EyeOff, ArrowLeft, ShieldAlert } from 'lucide-react';
 
 const formatNum = (n: number) => n.toLocaleString('pt-BR');
 
@@ -133,8 +133,9 @@ const PremiumMultiSelect = ({
 }
 
 export default function Dashboard() {
+  const [selectedModule, setSelectedModule] = useState<'APR' | 'DSS' | null>(null);
   const [data, setData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [isMetaModalOpen, setIsMetaModalOpen] = useState(false);
 
   // Filters
@@ -197,33 +198,43 @@ export default function Dashboard() {
   const [selectedAuditorDetails, setSelectedAuditorDetails] = useState<any | null>(null);
 
   useEffect(() => {
-    fetch('/api/data').then(res => res.json()).then(json => { setData(json); setLoading(false); });
-  }, []);
+    if (!selectedModule) return;
+    setLoading(true);
+    fetch(`/api/data?type=${selectedModule}`).then(res => res.json()).then(json => { setData(json); setLoading(false); });
+  }, [selectedModule]);
 
   const allMonths = useMemo(() => Array.from(new Set(data.map(i => String(i['Mês'])))).filter(Boolean).sort(), [data]);
 
-  // Filtros em Cascata
+  // Filtros Cruzados (Cross-filtering)
   const allTipos = useMemo(() => {
-    const base = data.filter(i => selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês'])));
+    const base = data.filter(i => 
+      (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
+      (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
+      (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor'] || i['SUPERVISOR'] || i['GESTOR'])) &&
+      (selectedCities.length === 0 || selectedCities.includes(i['CIDADE COMERCIAL']))
+    );
     return Array.from(new Set(base.map(i => cleanTipo(i['Questionário'])))).filter(Boolean).sort();
-  }, [data, selectedMonths]);
+  }, [data, selectedMonths, selectedDiretorias, selectedSupervisors, selectedCities]);
 
   const allDiretorias = useMemo(() => {
     const base = data.filter(i => 
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
-      (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário'])))
+      (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
+      (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor'] || i['SUPERVISOR'] || i['GESTOR'])) &&
+      (selectedCities.length === 0 || selectedCities.includes(i['CIDADE COMERCIAL']))
     );
     return Array.from(new Set(base.map(i => i['DIRETORIA 3']))).filter(Boolean).sort();
-  }, [data, selectedMonths, selectedTipos]);
+  }, [data, selectedMonths, selectedTipos, selectedSupervisors, selectedCities]);
 
   const allSupervisors = useMemo(() => {
     const base = data.filter(i => 
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
-      (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3']))
+      (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
+      (selectedCities.length === 0 || selectedCities.includes(i['CIDADE COMERCIAL']))
     );
     return Array.from(new Set(base.map(i => i['Supervisor'] || i['SUPERVISOR'] || i['GESTOR']))).filter(Boolean).sort();
-  }, [data, selectedMonths, selectedTipos, selectedDiretorias]);
+  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedCities]);
 
   const allCities = useMemo(() => {
     const base = data.filter(i => 
@@ -348,9 +359,52 @@ export default function Dashboard() {
     XLSX.writeFile(wb, "vivo_aprs.xlsx");
   };
 
+  if (!selectedModule) return (
+    <div className="min-h-screen bg-[#f8f9fa] flex flex-col items-center justify-center p-6 relative overflow-hidden">
+      {/* Background Decorativo Premium */}
+      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-purple-200/30 rounded-full blur-[120px] pointer-events-none"></div>
+      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-200/30 rounded-full blur-[120px] pointer-events-none"></div>
+
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-12 z-10">
+        <img src="/icone.png" alt="Vivo" className="h-14 object-contain mx-auto mb-6 drop-shadow-sm" />
+        <h1 className="text-4xl font-extrabold text-gray-900 mb-3 tracking-tight">Painel de Liderança</h1>
+        <p className="text-gray-500 font-medium">Selecione o módulo que deseja visualizar e gerenciar</p>
+      </motion.div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-2xl z-10">
+        <motion.div 
+          initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}
+          whileHover={{ scale: 1.03, y: -5 }} whileTap={{ scale: 0.98 }}
+          onClick={() => setSelectedModule('APR')}
+          className="bg-white/80 backdrop-blur-xl p-10 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_20px_40px_rgba(102,0,153,0.1)] border border-white/40 hover:border-purple-300 cursor-pointer transition-all flex flex-col items-center text-center group"
+        >
+          <div className="w-20 h-20 bg-gradient-to-br from-purple-50 to-purple-100 text-[#660099] rounded-2xl flex items-center justify-center mb-5 group-hover:from-[#660099] group-hover:to-[#8000bf] group-hover:text-white transition-all duration-300 shadow-sm">
+            <FileText size={40} strokeWidth={1.5} />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">APR</h2>
+          <p className="text-sm text-gray-500">Análise Preliminar de Riscos</p>
+        </motion.div>
+        
+        <motion.div 
+          initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}
+          whileHover={{ scale: 1.03, y: -5 }} whileTap={{ scale: 0.98 }}
+          onClick={() => setSelectedModule('DSS')}
+          className="bg-white/80 backdrop-blur-xl p-10 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_20px_40px_rgba(59,130,246,0.1)] border border-white/40 hover:border-blue-300 cursor-pointer transition-all flex flex-col items-center text-center group"
+        >
+          <div className="w-20 h-20 bg-gradient-to-br from-blue-50 to-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-5 group-hover:from-blue-500 group-hover:to-blue-600 group-hover:text-white transition-all duration-300 shadow-sm">
+            <ShieldAlert size={40} strokeWidth={1.5} />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">DSS</h2>
+          <p className="text-sm text-gray-500">Diálogo Semanal de Segurança</p>
+        </motion.div>
+      </div>
+    </div>
+  );
+
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-[#f8f9fa]">
-      <div className="w-10 h-10 border-4 border-purple-200 border-t-[#660099] rounded-full animate-spin"></div>
+    <div className="min-h-screen flex flex-col gap-4 items-center justify-center bg-[#f8f9fa]">
+      <div className="w-12 h-12 border-4 border-purple-200 border-t-[#660099] rounded-full animate-spin"></div>
+      <p className="text-sm font-semibold text-gray-500 animate-pulse">Carregando dados de {selectedModule}...</p>
     </div>
   );
 
@@ -360,11 +414,18 @@ export default function Dashboard() {
       {/* Header Premium - Light Theme */}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-40">
         <div className="max-w-[1600px] mx-auto px-6 py-2.5 flex items-center justify-between">
-          <div>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => { setSelectedModule(null); setData([]); }}
+              className="flex items-center justify-center w-8 h-8 bg-gray-50 border border-gray-200 text-gray-500 rounded-lg hover:bg-purple-50 hover:text-[#660099] hover:border-purple-200 transition-all shadow-sm"
+              title="Voltar aos Módulos"
+            >
+              <ArrowLeft size={16} />
+            </button>
             <h1 className="text-xl font-bold text-gray-900 flex items-center gap-3">
               <img src="/icone.png" alt="Vivo" className="h-7 object-contain" />
               <span className="h-5 w-px bg-gray-300 ml-1"></span>
-              Painel de APRs
+              Painel de {selectedModule === 'APR' ? 'APRs' : 'DSS'}
             </h1>
           </div>
           <div className="flex items-center gap-3">
@@ -417,7 +478,7 @@ export default function Dashboard() {
         {/* KPIs (Premium Cards - matching requested layout exactly) */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           {[
-            { v: formatNum(totalAprs), l: 'APRs no filtro', icon: FileText, c: 'border-l-pink-500', t: 'text-pink-500' },
+            { v: formatNum(totalAprs), l: `${selectedModule}s no filtro`, icon: FileText, c: 'border-l-pink-500', t: 'text-pink-500' },
             { v: formatNum(diretoriasUnicas), l: 'diretorias', icon: Building, c: 'border-l-blue-500', t: 'text-blue-500' },
             { v: formatNum(supervisoresUnicos), l: 'supervisores', icon: Users, c: 'border-l-orange-500', t: 'text-orange-500' },
             { v: formatNum(cidadesUnicas), l: 'cidades', icon: MapPin, c: 'border-l-teal-500', t: 'text-teal-500' },
@@ -596,13 +657,13 @@ export default function Dashboard() {
               </div>
               <div className="p-6">
                 <p className="text-gray-600 text-sm leading-relaxed">
-                  A meta de APRs é calculada com base na seguinte regra:
+                  A meta de {selectedModule}s é calculada com base na seguinte regra:
                 </p>
                 <div className="mt-4 p-4 bg-purple-50 rounded-xl border border-purple-100">
-                  <p className="font-bold text-purple-900 text-center">2 APRs por dia × Dias úteis do mês</p>
+                  <p className="font-bold text-purple-900 text-center">2 {selectedModule}s por dia × Dias úteis do mês</p>
                 </div>
                 <p className="mt-4 text-gray-600 text-sm leading-relaxed">
-                  Isso significa que cada colaborador tem o objetivo de realizar ao menos 2 Análises Preliminares de Riscos para cada dia útil trabalhado nos meses selecionados no filtro.
+                  Isso significa que cada colaborador tem o objetivo de realizar ao menos 2 {selectedModule === 'APR' ? 'Análises Preliminares de Riscos' : 'Diálogos Semanais de Segurança'} para cada dia útil trabalhado nos meses selecionados no filtro.
                 </p>
                 <div className="mt-6 flex justify-end">
                   <button 
@@ -630,7 +691,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gray-50/50 shrink-0">
                 <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                   <UserCheck className="text-[#660099]" size={20} />
-                  APRs de {selectedAuditorDetails.name}
+                  {selectedModule}s de {selectedAuditorDetails.name}
                 </h3>
                 <button onClick={() => setSelectedAuditorDetails(null)} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100">
                   <X size={20} />
