@@ -673,16 +673,17 @@ export default function Dashboard() {
             </div>
             
             {/* Table Header */}
-            <div className="grid grid-cols-[30px_1fr_80px_100px_110px] items-center gap-4 px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100 mb-3">
+            <div className="grid grid-cols-[30px_1fr_80px_80px_80px_110px] items-center gap-4 px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100 mb-2">
               <div>#</div>
-              <div>{selectedModule === 'DSS' ? 'Líder' : 'Colaborador'}</div>
-              <div className="text-center">{selectedModule}</div>
+              <div>{selectedModule === 'DSS' ? (rankingGroup === 'supervisor' ? 'Líder' : 'Cidade') : (rankingGroup === 'supervisor' ? 'Supervisor' : 'Cidade')}</div>
+              <div className="text-center">Realizado</div>
               <div className="flex items-center justify-center gap-1">
-                Meta
+                Esperado
                 <button onClick={() => setIsMetaModalOpen(true)} className="focus:outline-none rounded-full hover:bg-gray-100 p-0.5 transition-colors">
                   <HelpCircle size={14} className="text-gray-400 cursor-pointer hover:text-purple-600" />
                 </button>
               </div>
+              <div className="text-center">Meta (%)</div>
               <div className="text-center">{selectedModule === 'DSS' ? 'Participantes' : 'Duração'}</div>
             </div>
 
@@ -691,34 +692,39 @@ export default function Dashboard() {
                 const pct = (item.count / maxRank) * 100;
                 const colors = ['bg-pink-500', 'bg-blue-500', 'bg-green-500', 'bg-orange-500', 'bg-purple-500', 'bg-teal-500', 'bg-yellow-500'];
                 const barColor = colors[idx % colors.length];
+                const expected = Math.round(targetAprs * (item.uniquePeople?.size || 1));
 
                 return (
-                  <div key={`${item.name}-${idx}`} className="mb-2">
+                  <div key={`${item.name}-${idx}`} className="mb-1">
                     <div 
                       onClick={() => setSelectedAuditorDetails(item)}
-                      className="grid grid-cols-[30px_1fr_80px_100px_110px] items-center gap-4 p-3 rounded-xl cursor-pointer transition-all border bg-white border-transparent hover:bg-purple-50/50 hover:border-purple-100"
+                      className="grid grid-cols-[30px_1fr_80px_80px_80px_110px] items-center gap-4 py-1.5 px-3 rounded-xl cursor-pointer transition-all border bg-white border-transparent hover:bg-purple-50/50 hover:border-purple-100"
                     >
                       <div className="text-sm font-bold text-gray-400">{idx + 1}º</div>
                       
                       <div className="overflow-hidden pr-2">
                         <div className="text-sm font-semibold truncate text-gray-800" title={item.name}>{item.name}</div>
-                        <div className="h-1.5 w-full bg-gray-100 rounded-full mt-1.5 overflow-hidden">
+                        <div className="h-1.5 w-full bg-gray-100 rounded-full mt-1 overflow-hidden">
                           <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} className={`h-full ${barColor} rounded-full opacity-80`} />
                         </div>
                       </div>
                       
                       <div className="flex justify-center items-center">
-                        <div className="text-base font-bold text-gray-900">{formatNum(item.count)}</div>
+                        <div className="text-sm font-bold text-gray-900">{formatNum(item.count)}</div>
                       </div>
 
                       <div className="flex justify-center items-center">
-                        <div className={`text-sm font-bold ${((item.count/(targetAprs * (item.uniquePeople?.size || 1)))*100) >= 100 ? 'text-green-600' : 'text-gray-600'}`}>
-                          {targetAprs > 0 ? ((item.count/(targetAprs * (item.uniquePeople?.size || 1)))*100).toFixed(1) : 0}%
+                        <div className="text-xs font-semibold text-gray-500">{formatNum(expected)}</div>
+                      </div>
+
+                      <div className="flex justify-center items-center">
+                        <div className={`text-xs font-bold ${((item.count/expected)*100) >= 100 ? 'text-green-600' : 'text-gray-600'}`}>
+                          {expected > 0 ? ((item.count/expected)*100).toFixed(1) : 0}%
                         </div>
                       </div>
 
                       <div className="flex justify-center items-center">
-                        <div className="text-xs text-gray-600 font-medium flex items-center justify-center gap-1.5 bg-white px-2 py-1 rounded-md border border-gray-100">
+                        <div className="text-[11px] text-gray-600 font-medium flex items-center justify-center gap-1.5 bg-white px-2 py-0.5 rounded-md border border-gray-100">
                           {selectedModule === 'DSS' ? (
                             <><Users size={12} className="text-blue-500"/> {item.data.length}</>
                           ) : (
