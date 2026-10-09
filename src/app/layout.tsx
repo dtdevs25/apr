@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Painel APRs",
-  description: "Dashboard interativo de análise de APRs",
+  title: "Painel de Segurança",
+  description: "Dashboard interativo de Segurança",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
