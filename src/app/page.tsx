@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo, useRef } from 'react';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Download, ChevronDown, CheckSquare, Square, Building, Users, MapPin, Calendar, Search, FileText, UserCheck, Clock, HelpCircle, X, Settings, UploadCloud, Lock, Eye, EyeOff, ArrowLeft, ShieldAlert, FileCheck, Activity } from 'lucide-react';
 
@@ -450,10 +450,64 @@ export default function Dashboard() {
   const maxMonth = Math.max(1, ...monthAgg.map(m => m.count));
 
   const exportToExcel = () => {
-    const ws = XLSX.utils.json_to_sheet(filteredData);
+    // Planilha 1: Dados Brutos (Filtro Atual)
+    const ws_dados = XLSX.utils.json_to_sheet(filteredData);
+    
+    // Formatar Cabeçalhos da Planilha de Dados
+    const rangeDados = XLSX.utils.decode_range(ws_dados['!ref'] || 'A1:A1');
+    for (let C = rangeDados.s.c; C <= rangeDados.e.c; ++C) {
+      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
+      if (!ws_dados[cellAddress]) continue;
+      ws_dados[cellAddress].s = {
+        fill: { fgColor: { rgb: "660099" } },
+        font: { color: { rgb: "FFFFFF" }, bold: true },
+        alignment: { horizontal: "center", vertical: "center" }
+      };
+    }
+
+    // Planilha 2: Ranking
+    const rankingData = rankAgg.map((item, idx) => {
+      const expected = Math.round(targetAprs * (item.uniquePeople?.size || 1));
+      const perc = expected > 0 ? ((item.count / expected) * 100).toFixed(1) + '%' : '0%';
+      return {
+        "Posição": `${idx + 1}º`,
+        [selectedModule === 'DSS' ? (rankingGroup === 'supervisor' ? 'Líder' : 'Cidade') : (rankingGroup === 'supervisor' ? 'Supervisor' : 'Cidade')]: item.name,
+        "Realizado": item.count,
+        "Esperado": expected,
+        "Meta (%)": perc,
+        [selectedModule === 'DSS' ? "Participantes" : "Duração Total (Segundos)"]: selectedModule === 'DSS' ? item.data.length : item.totalSecs
+      };
+    });
+    
+    const ws_ranking = XLSX.utils.json_to_sheet(rankingData);
+
+    // Formatar Cabeçalhos da Planilha de Ranking
+    const rangeRanking = XLSX.utils.decode_range(ws_ranking['!ref'] || 'A1:A1');
+    for (let C = rangeRanking.s.c; C <= rangeRanking.e.c; ++C) {
+      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
+      if (!ws_ranking[cellAddress]) continue;
+      ws_ranking[cellAddress].s = {
+        fill: { fgColor: { rgb: "660099" } },
+        font: { color: { rgb: "FFFFFF" }, bold: true },
+        alignment: { horizontal: "center", vertical: "center" }
+      };
+    }
+
+    // Ajustar a largura das colunas do ranking
+    ws_ranking['!cols'] = [
+      { wch: 10 },  // Posição
+      { wch: 40 },  // Nome / Cidade
+      { wch: 15 },  // Realizado
+      { wch: 15 },  // Esperado
+      { wch: 15 },  // Meta %
+      { wch: 20 },  // Participantes / Duração
+    ];
+
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "APRs");
-    XLSX.writeFile(wb, "vivo_aprs.xlsx");
+    XLSX.utils.book_append_sheet(wb, ws_dados, `Dados ${selectedModule}`);
+    XLSX.utils.book_append_sheet(wb, ws_ranking, `Ranking por ${rankingGroup === 'supervisor' ? 'Supervisor' : 'Cidade'}`);
+    
+    XLSX.writeFile(wb, `vivo_painel_${selectedModule?.toLowerCase()}.xlsx`);
   };
 
   if (!selectedModule) return (
