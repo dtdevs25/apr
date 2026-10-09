@@ -530,15 +530,7 @@ export default function Dashboard() {
       const atividadeData = rankAtividade.map((item, idx) => ({
         "Posição": `${idx + 1}º`,
         "Tipo de Atividade": item.name,
-        "Realizado": item.count,
-        "Duração Média (Segundos)": Math.round(item.data.reduce((acc: number, curr: any) => {
-          const durKey = Object.keys(curr).find(k => k.toLowerCase().includes('dura') && k.toLowerCase().includes('o'));
-          if (durKey && typeof curr[durKey] === 'string') {
-             const parts = curr[durKey].split(':');
-             if (parts.length === 3) return acc + (parseInt(parts[0], 10) * 3600 + parseInt(parts[1], 10) * 60 + parseInt(parts[2], 10));
-          }
-          return acc;
-        }, 0) / (item.data.length || 1))
+        "Realizado": item.count
       }));
       const ws_atividade = XLSX.utils.json_to_sheet(atividadeData);
       
@@ -548,7 +540,7 @@ export default function Dashboard() {
         if (!ws_atividade[cellAddress]) continue;
         ws_atividade[cellAddress].s = { fill: { fgColor: { rgb: "660099" } }, font: { color: { rgb: "FFFFFF" }, bold: true }, alignment: { horizontal: "center", vertical: "center" } };
       }
-      ws_atividade['!cols'] = [{ wch: 10 }, { wch: 40 }, { wch: 15 }, { wch: 25 }];
+      ws_atividade['!cols'] = [{ wch: 10 }, { wch: 40 }, { wch: 15 }];
       XLSX.utils.book_append_sheet(wb, ws_atividade, `Ranking Atividades`);
     }
     
@@ -760,7 +752,7 @@ export default function Dashboard() {
         </div>
 
         {/* Dashboard Grid */}
-        <div className={`grid grid-cols-1 ${selectedModule === 'APR' ? 'lg:grid-cols-[2fr_1.5fr]' : ''} gap-6`}>
+        <div className={`grid grid-cols-1 ${selectedModule === 'APR' ? 'lg:grid-cols-[2.5fr_1fr]' : ''} gap-6`}>
 
           {/* Ranking List (Main) */}
           <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm flex flex-col h-[600px]">
@@ -845,28 +837,19 @@ export default function Dashboard() {
                 <h2 className="text-lg font-bold text-gray-900">Ranking por Atividade</h2>
               </div>
               
-              <div className="grid grid-cols-[30px_1fr_80px_110px] items-center gap-4 px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100 mb-2">
+              <div className="grid grid-cols-[30px_1fr_60px] items-center gap-4 px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100 mb-2">
                 <div>#</div>
                 <div>Atividade</div>
                 <div className="text-center">Qtd</div>
-                <div className="text-center">Dur. Média</div>
               </div>
 
               <div className="flex-1 overflow-y-auto scrollbar-thin pr-2">
                 {rankAtividade.map((item, idx) => {
                   const pct = (item.count / maxAtiv) * 100;
-                  const totalSecs = item.data.reduce((acc: number, curr: any) => {
-                    const durKey = Object.keys(curr).find(k => k.toLowerCase().includes('dura') && k.toLowerCase().includes('o'));
-                    if (durKey && typeof curr[durKey] === 'string') {
-                       const parts = curr[durKey].split(':');
-                       if (parts.length === 3) return acc + (parseInt(parts[0], 10) * 3600 + parseInt(parts[1], 10) * 60 + parseInt(parts[2], 10));
-                    }
-                    return acc;
-                  }, 0);
                   
                   return (
                     <div key={`${item.name}-${idx}`} className="mb-1">
-                      <div className="grid grid-cols-[30px_1fr_80px_110px] items-center gap-4 py-1.5 px-3 rounded-xl transition-all border border-transparent hover:bg-gray-50">
+                      <div className="grid grid-cols-[30px_1fr_60px] items-center gap-4 py-1.5 px-3 rounded-xl transition-all border border-transparent hover:bg-gray-50">
                         <div className="text-sm font-bold text-gray-400">{idx + 1}º</div>
                         
                         <div className="overflow-hidden pr-2">
@@ -878,12 +861,6 @@ export default function Dashboard() {
                         
                         <div className="flex justify-center items-center">
                           <div className="text-sm font-bold text-gray-900">{formatNum(item.count)}</div>
-                        </div>
-
-                        <div className="flex justify-center items-center">
-                          <div className="text-[11px] text-gray-600 font-medium flex items-center justify-center gap-1.5 bg-white px-2 py-0.5 rounded-md border border-gray-100">
-                            <Clock size={12} className="text-[#660099]"/> {getAvgTimeStr(totalSecs, item.count)}
-                          </div>
                         </div>
                       </div>
                     </div>
