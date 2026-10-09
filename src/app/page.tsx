@@ -17,6 +17,7 @@ const formatDate = (dateStr: string) => {
   if (!dateStr) return '-';
   try {
     const [datePart] = dateStr.split(' ');
+    if (datePart.includes('/')) return datePart;
     const [y, m, d] = datePart.split('-');
     return `${d}/${m}/${y}`;
   } catch {
@@ -867,34 +868,52 @@ export default function Dashboard() {
               <div className="flex-1 overflow-y-auto p-0 scrollbar-thin">
                 <table className="w-full text-left text-sm whitespace-nowrap">
                   <thead className="bg-gray-50 sticky top-0 border-b border-gray-100 z-10 shadow-sm">
-                    <tr>
-                      <th className="px-6 py-3.5 font-semibold text-gray-500 uppercase text-xs">Data</th>
-                      <th className="px-6 py-3.5 font-semibold text-gray-500 uppercase text-xs">{selectedModule === 'DSS' ? 'Diálogo' : 'Duração'}</th>
-                      <th className="px-6 py-3.5 font-semibold text-gray-500 uppercase text-xs">Cidade</th>
-                      <th className="px-6 py-3.5 font-semibold text-gray-500 uppercase text-xs w-full">{selectedModule === 'DSS' ? 'Assunto' : 'Questionário'}</th>
-                    </tr>
+                    {selectedModule === 'DSS' ? (
+                      <tr>
+                        <th className="px-6 py-3.5 font-semibold text-gray-500 uppercase text-xs">Data</th>
+                        <th className="px-6 py-3.5 font-semibold text-gray-500 uppercase text-xs">Diálogo</th>
+                        <th className="px-6 py-3.5 font-semibold text-gray-500 uppercase text-xs">Cidade</th>
+                        <th className="px-6 py-3.5 font-semibold text-gray-500 uppercase text-xs">Assunto</th>
+                        <th className="px-6 py-3.5 font-semibold text-gray-500 uppercase text-xs w-full">Participante</th>
+                      </tr>
+                    ) : (
+                      <tr>
+                        <th className="px-6 py-3.5 font-semibold text-gray-500 uppercase text-xs">Data Início</th>
+                        <th className="px-6 py-3.5 font-semibold text-gray-500 uppercase text-xs">Duração</th>
+                        <th className="px-6 py-3.5 font-semibold text-gray-500 uppercase text-xs">Cidade</th>
+                        <th className="px-6 py-3.5 font-semibold text-gray-500 uppercase text-xs w-full">Questionário / Situação</th>
+                      </tr>
+                    )}
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {selectedAuditorDetails.data.map((apr: any, i: number) => (
-                      <tr key={i} className="hover:bg-purple-50/30 transition-colors">
-                        <td className="px-6 py-3 text-gray-700">{formatDate(selectedModule === 'DSS' ? apr['Data Fechamento'] : apr['Data Início'])}</td>
-                        <td className="px-6 py-3 text-gray-700 font-medium">
-                          {selectedModule === 'DSS' ? (
+                      selectedModule === 'DSS' ? (
+                        <tr key={i} className="hover:bg-purple-50/30 transition-colors">
+                          <td className="px-6 py-3 text-gray-700">{formatDate(apr['Data Fechamento'])}</td>
+                          <td className="px-6 py-3 text-gray-700 font-medium">
                             <span className="flex items-center gap-1.5"><FileText size={14} className="text-blue-600" />{apr['Número do Diálogo'] || '-'}</span>
-                          ) : (
+                          </td>
+                          <td className="px-6 py-3 text-gray-700">{apr['CIDADE COMERCIAL'] || '-'}</td>
+                          <td className="px-6 py-3 text-gray-800 font-medium truncate max-w-xs" title={apr['Assunto']}>
+                            {apr['Assunto'] || '-'}
+                          </td>
+                          <td className="px-6 py-3 text-gray-700 text-sm truncate max-w-xs" title={apr['Nome']}>
+                            {apr['Nome'] || apr['Matrícula'] || '-'}
+                          </td>
+                        </tr>
+                      ) : (
+                        <tr key={i} className="hover:bg-purple-50/30 transition-colors">
+                          <td className="px-6 py-3 text-gray-700">{formatDate(apr['Data Início'])}</td>
+                          <td className="px-6 py-3 text-gray-700 font-medium">
                             <span className="flex items-center gap-1.5"><Clock size={14} className="text-[#660099]" />{apr['Duração'] || '-'}</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-3 text-gray-700">{apr['CIDADE COMERCIAL'] || '-'}</td>
-                        <td className="px-6 py-3">
-                          <div className="text-gray-800 font-medium truncate max-w-lg" title={selectedModule === 'DSS' ? apr['Assunto'] : apr['Questionário']}>
-                            {selectedModule === 'DSS' ? apr['Assunto'] : cleanTipo(apr['Questionário'])}
-                          </div>
-                          <div className={`text-xs mt-1 ${selectedModule === 'DSS' ? 'text-green-600' : (apr['Situação'] === 'FECHADO' ? 'text-green-600' : 'text-orange-500')}`}>
-                            {selectedModule === 'DSS' ? apr['Status'] : (apr['Situação'] || '-')}
-                          </div>
-                        </td>
-                      </tr>
+                          </td>
+                          <td className="px-6 py-3 text-gray-700">{apr['CIDADE COMERCIAL'] || '-'}</td>
+                          <td className="px-6 py-3">
+                            <div className="text-gray-800 font-medium truncate max-w-lg" title={apr['Questionário']}>{cleanTipo(apr['Questionário'])}</div>
+                            <div className={`text-xs mt-1 ${apr['Situação'] === 'FECHADO' ? 'text-green-600' : 'text-orange-500'}`}>{apr['Situação'] || '-'}</div>
+                          </td>
+                        </tr>
+                      )
                     ))}
                   </tbody>
                 </table>
