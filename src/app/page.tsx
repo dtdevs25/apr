@@ -215,7 +215,7 @@ export default function Dashboard() {
       const base = data.filter(i => 
         (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
         (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
-        (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor'])) &&
+        (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Gestor']) || selectedSupervisors.includes(i['Lider'])) &&
         (selectedCities.length === 0 || selectedCities.includes(i['CIDADE COMERCIAL']))
       );
       return Array.from(new Set(base.map(i => i['Assunto']))).filter(Boolean).sort();
@@ -234,7 +234,7 @@ export default function Dashboard() {
       const base = data.filter(i => 
         (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
         (selectedTipos.length === 0 || selectedTipos.includes(i['Assunto'])) &&
-        (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor'])) &&
+        (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Gestor']) || selectedSupervisors.includes(i['Lider'])) &&
         (selectedCities.length === 0 || selectedCities.includes(i['CIDADE COMERCIAL']))
       );
       return Array.from(new Set(base.map(i => i['DIRETORIA 3']))).filter(Boolean).sort();
@@ -256,7 +256,7 @@ export default function Dashboard() {
         (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
         (selectedCities.length === 0 || selectedCities.includes(i['CIDADE COMERCIAL']))
       );
-      return Array.from(new Set(base.map(i => i['Supervisor']))).filter(Boolean).sort();
+      return Array.from(new Set(base.flatMap(i => [i['Gestor'], i['Lider']]))).filter(Boolean).sort();
     }
     const base = data.filter(i => 
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
@@ -273,7 +273,7 @@ export default function Dashboard() {
         (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
         (selectedTipos.length === 0 || selectedTipos.includes(i['Assunto'])) &&
         (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
-        (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor']))
+        (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Gestor']) || selectedSupervisors.includes(i['Lider']))
       );
       return Array.from(new Set(base.map(i => i['CIDADE COMERCIAL']))).filter(Boolean).sort();
     }
@@ -292,7 +292,7 @@ export default function Dashboard() {
         (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
         (selectedTipos.length === 0 || selectedTipos.includes(i['Assunto'])) &&
         (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
-        (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor'])) &&
+        (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Gestor']) || selectedSupervisors.includes(i['Lider'])) &&
         (selectedCities.length === 0 || selectedCities.includes(i['CIDADE COMERCIAL']))
       );
       return Array.from(new Set(base.map(i => i['Nome'] || i['Matrícula']))).filter(Boolean).sort();
@@ -329,7 +329,7 @@ export default function Dashboard() {
         return (selectedMonths.length === 0 || selectedMonths.includes(String(item['Mês']))) &&
                (selectedTipos.length === 0 || selectedTipos.includes(item['Assunto'])) &&
                (selectedDiretorias.length === 0 || selectedDiretorias.includes(item['DIRETORIA 3'])) &&
-               (selectedSupervisors.length === 0 || selectedSupervisors.includes(item['Supervisor'])) &&
+               (selectedSupervisors.length === 0 || selectedSupervisors.includes(item['Gestor']) || selectedSupervisors.includes(item['Lider'])) &&
                (selectedCities.length === 0 || selectedCities.includes(item['CIDADE COMERCIAL']));
       }
       return (selectedMonths.length === 0 || selectedMonths.includes(String(item['Mês']))) &&
@@ -346,7 +346,7 @@ export default function Dashboard() {
   const totalAuditores = selectedModule === 'DSS' ? filteredData.length : auditoresSet.size;
   const diretoriasUnicas = new Set(filteredData.map(i => i['DIRETORIA 3']).filter(Boolean)).size;
   const cidadesUnicas = new Set(filteredData.map(i => i['CIDADE COMERCIAL']).filter(Boolean)).size;
-  const supervisoresUnicos = new Set(filteredData.map(i => i['Supervisor'] || i['SUPERVISOR'] || i['GESTOR']).filter(Boolean)).size;
+  const supervisoresUnicos = new Set(filteredData.flatMap(i => selectedModule === 'DSS' ? [i['Gestor'], i['Lider']] : [i['Supervisor'] || i['SUPERVISOR'] || i['GESTOR']]).filter(Boolean)).size;
 
   const getAvgTimeStr = (totalSecs: number, validCount: number) => {
     const avgSecs = validCount > 0 ? Math.round(totalSecs / validCount) : 0;
@@ -384,13 +384,13 @@ export default function Dashboard() {
     
     if (selectedModule === 'DSS') {
       filteredData.forEach(item => {
-        const name = rankingGroup === 'cidade' ? (item['CIDADE COMERCIAL'] || 'Não Identificada') : (item['Supervisor'] || item['Líder'] || 'Não Identificado');
+        const name = rankingGroup === 'cidade' ? (item['CIDADE COMERCIAL'] || 'Não Identificada') : (item['Lider'] || item['Gestor'] || 'Não Identificado');
         
         if (selectedAuditores.length > 0 && !selectedAuditores.includes(item['Nome']) && !selectedAuditores.includes(item['Matrícula'])) return;
         
         if (!agg[name]) agg[name] = { count: 0, name, data: [], totalSecs: 0, validCount: 0, dssSet: new Set(), uniquePeople: new Set() };
         agg[name].data.push(item);
-        agg[name].uniquePeople.add(item['Supervisor'] || item['Líder'] || 'N/A');
+        agg[name].uniquePeople.add(item['Lider'] || item['Gestor'] || 'N/A');
         
         const dssId = item['Número do Diálogo'];
         if (dssId && !agg[name].dssSet.has(dssId)) {
