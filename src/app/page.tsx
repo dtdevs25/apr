@@ -546,7 +546,26 @@ export default function Dashboard() {
         <div className="bg-gray-50/50 backdrop-blur-md border-t border-gray-100">
           <div className="max-w-[1600px] mx-auto px-6 py-2 flex flex-wrap items-center gap-4">
             
-            <PremiumMultiSelect label={selectedModule === 'DSS' ? "Tipo" : "Tipo de APR"} options={allTipos} selected={selectedTipos} onChange={handleMultiSelect(setSelectedTipos)} icon={FileText} />
+            {selectedModule === 'DSS' ? (
+              <div className="relative">
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Tipo de Ranking</span>
+                  <div className="relative">
+                    <select
+                      value={rankingGroup}
+                      onChange={(e) => setRankingGroup(e.target.value as any)}
+                      className="appearance-none flex items-center justify-between px-3 py-1.5 w-48 bg-white border border-gray-200 rounded-xl shadow-sm text-xs font-medium text-gray-700 outline-none focus:border-purple-300 focus:ring-2 focus:ring-purple-200 cursor-pointer transition-all pr-8"
+                    >
+                      <option value="supervisor">Por Supervisor</option>
+                      <option value="cidade">Por Cidade</option>
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <PremiumMultiSelect label="Tipo de APR" options={allTipos} selected={selectedTipos} onChange={handleMultiSelect(setSelectedTipos)} icon={FileText} />
+            )}
 
             <div className="w-px h-12 bg-gray-200 hidden md:block"></div>
 
@@ -647,23 +666,7 @@ export default function Dashboard() {
           {/* Ranking List (Full width) */}
           <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm flex flex-col h-[600px]">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-              <div className="flex items-center gap-4">
-                <h2 className="text-lg font-bold text-gray-900">Ranking por</h2>
-                <div className="flex items-center bg-gray-100 p-1 rounded-lg">
-                  <button 
-                    onClick={() => setRankingGroup('supervisor')}
-                    className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-all ${rankingGroup === 'supervisor' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                  >
-                    Supervisor
-                  </button>
-                  <button 
-                    onClick={() => setRankingGroup('cidade')}
-                    className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-all ${rankingGroup === 'cidade' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                  >
-                    Cidade
-                  </button>
-                </div>
-              </div>
+              <h2 className="text-lg font-bold text-gray-900">Ranking por {rankingGroup === 'supervisor' ? 'Supervisor' : 'Cidade'}</h2>
               <div className="z-20">
                 <PremiumMultiSelect label={selectedModule === 'DSS' ? 'Filtrar Líder' : 'Filtrar Colaborador'} options={allAuditores} selected={selectedAuditores} onChange={handleMultiSelect(setSelectedAuditores)} icon={UserCheck} widthClass="w-[280px]" />
               </div>
