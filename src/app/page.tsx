@@ -786,10 +786,10 @@ export default function Dashboard() {
                 const expected = Math.round(targetAprs * (item.uniquePeople?.size || 1));
 
                 return (
-                  <div key={`${item.name}-${idx}`} className="mb-1">
+                  <div key={`${item.name}-${idx}`}>
                     <div 
                       onClick={() => setSelectedAuditorDetails(item)}
-                      className="grid grid-cols-[30px_1fr_80px_80px_80px_110px] items-center gap-4 py-1.5 px-3 rounded-xl cursor-pointer transition-all border bg-white border-transparent hover:bg-purple-50/50 hover:border-purple-100"
+                      className="grid grid-cols-[30px_1fr_80px_80px_80px_110px] items-center gap-4 py-1 px-3 rounded-lg cursor-pointer transition-all border bg-white border-transparent hover:bg-purple-50/50 hover:border-purple-100"
                     >
                       <div className="text-sm font-bold text-gray-400">{idx + 1}º</div>
                       
@@ -846,10 +846,14 @@ export default function Dashboard() {
               <div className="flex-1 overflow-y-auto scrollbar-thin pr-2">
                 {rankAtividade.map((item, idx) => {
                   const pct = (item.count / maxAtiv) * 100;
+                  const isSelected = selectedTipos.includes(item.name);
                   
                   return (
-                    <div key={`${item.name}-${idx}`} className="mb-1">
-                      <div className="grid grid-cols-[30px_1fr_60px] items-center gap-4 py-1.5 px-3 rounded-xl transition-all border border-transparent hover:bg-gray-50">
+                    <div key={`${item.name}-${idx}`}>
+                      <div 
+                        onClick={() => handleMultiSelect(setSelectedTipos)(item.name)}
+                        className={`grid grid-cols-[30px_1fr_60px] items-center gap-4 py-1 px-3 rounded-lg cursor-pointer transition-all border ${isSelected ? 'bg-purple-50 border-purple-200' : 'border-transparent hover:bg-gray-50'}`}
+                      >
                         <div className="text-sm font-bold text-gray-400">{idx + 1}º</div>
                         
                         <div className="overflow-hidden pr-2">
