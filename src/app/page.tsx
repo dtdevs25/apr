@@ -429,6 +429,22 @@ export default function Dashboard() {
   }, [filteredData, selectedModule, selectedAuditores, rankingGroup]);
   const maxRank = rankAgg.length > 0 ? rankAgg[0].count : 1;
 
+  // Rank Atividade
+  const rankAtividade = useMemo(() => {
+    if (selectedModule === 'DSS') return [];
+    const agg: Record<string, { count: number, name: string, data: any[] }> = {};
+    filteredData.forEach(item => {
+      const q = item['Questionário'];
+      const name = cleanTipo(q);
+      if (selectedTipos.length > 0 && !selectedTipos.includes(name)) return;
+      if (!agg[name]) agg[name] = { count: 0, name, data: [] };
+      agg[name].count += 1;
+      agg[name].data.push(item);
+    });
+    return Object.values(agg).sort((a, b) => b.count - a.count);
+  }, [filteredData, selectedModule, selectedTipos]);
+  const maxAtiv = rankAtividade.length > 0 ? rankAtividade[0].count : 1;
+
   // Month cols
   const monthAgg = useMemo(() => {
     const agg: Record<string, number> = {};
@@ -509,6 +525,32 @@ export default function Dashboard() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws_dados, `Dados ${selectedModule}`);
     XLSX.utils.book_append_sheet(wb, ws_ranking, `Ranking por ${rankingGroup === 'supervisor' ? 'Supervisor' : 'Cidade'}`);
+
+    if (selectedModule === 'APR') {
+      const atividadeData = rankAtividade.map((item, idx) => ({
+        "Posição": `${idx + 1}º`,
+        "Tipo de Atividade": item.name,
+        "Realizado": item.count,
+        "Duração Média (Segundos)": Math.round(item.data.reduce((acc: number, curr: any) => {
+          const durKey = Object.keys(curr).find(k => k.toLowerCase().includes('dura') && k.toLowerCase().includes('o'));
+          if (durKey && typeof curr[durKey] === 'string') {
+             const parts = curr[durKey].split(':');
+             if (parts.length === 3) return acc + (parseInt(parts[0], 10) * 3600 + parseInt(parts[1], 10) * 60 + parseInt(parts[2], 10));
+          }
+          return acc;
+        }, 0) / (item.data.length || 1))
+      }));
+      const ws_atividade = XLSX.utils.json_to_sheet(atividadeData);
+      
+      const rangeAtividade = XLSX.utils.decode_range(ws_atividade['!ref'] || 'A1:A1');
+      for (let C = rangeAtividade.s.c; C <= rangeAtividade.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
+        if (!ws_atividade[cellAddress]) continue;
+        ws_atividade[cellAddress].s = { fill: { fgColor: { rgb: "660099" } }, font: { color: { rgb: "FFFFFF" }, bold: true }, alignment: { horizontal: "center", vertical: "center" } };
+      }
+      ws_atividade['!cols'] = [{ wch: 10 }, { wch: 40 }, { wch: 15 }, { wch: 25 }];
+      XLSX.utils.book_append_sheet(wb, ws_atividade, `Ranking Atividades`);
+    }
     
     XLSX.writeFile(wb, `vivo_painel_${selectedModule?.toLowerCase()}.xlsx`);
   };
@@ -718,9 +760,9 @@ export default function Dashboard() {
         </div>
 
         {/* Dashboard Grid */}
-        <div className="grid grid-cols-1 gap-6">
+        <div className={`grid grid-cols-1 ${selectedModule === 'APR' ? 'lg:grid-cols-[2fr_1.5fr]' : ''} gap-6`}>
 
-          {/* Ranking List (Full width) */}
+          {/* Ranking List (Main) */}
           <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm flex flex-col h-[600px]">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
               <h2 className="text-lg font-bold text-gray-900">Ranking por {rankingGroup === 'supervisor' ? 'Supervisor' : 'Cidade'}</h2>
@@ -795,6 +837,61 @@ export default function Dashboard() {
               })}
             </div>
           </div>
+
+          {/* Ranking por Atividade (Apenas APR) */}
+          {selectedModule === 'APR' && (
+            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm flex flex-col h-[600px]">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                <h2 className="text-lg font-bold text-gray-900">Ranking por Atividade</h2>
+              </div>
+              
+              <div className="grid grid-cols-[30px_1fr_80px_110px] items-center gap-4 px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100 mb-2">
+                <div>#</div>
+                <div>Atividade</div>
+                <div className="text-center">Qtd</div>
+                <div className="text-center">Dur. Média</div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto scrollbar-thin pr-2">
+                {rankAtividade.map((item, idx) => {
+                  const pct = (item.count / maxAtiv) * 100;
+                  const totalSecs = item.data.reduce((acc: number, curr: any) => {
+                    const durKey = Object.keys(curr).find(k => k.toLowerCase().includes('dura') && k.toLowerCase().includes('o'));
+                    if (durKey && typeof curr[durKey] === 'string') {
+                       const parts = curr[durKey].split(':');
+                       if (parts.length === 3) return acc + (parseInt(parts[0], 10) * 3600 + parseInt(parts[1], 10) * 60 + parseInt(parts[2], 10));
+                    }
+                    return acc;
+                  }, 0);
+                  
+                  return (
+                    <div key={`${item.name}-${idx}`} className="mb-1">
+                      <div className="grid grid-cols-[30px_1fr_80px_110px] items-center gap-4 py-1.5 px-3 rounded-xl transition-all border border-transparent hover:bg-gray-50">
+                        <div className="text-sm font-bold text-gray-400">{idx + 1}º</div>
+                        
+                        <div className="overflow-hidden pr-2">
+                          <div className="text-sm font-semibold truncate text-gray-800" title={item.name}>{item.name}</div>
+                          <div className="h-1.5 w-full bg-gray-100 rounded-full mt-1 overflow-hidden">
+                            <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} className="h-full bg-purple-500 rounded-full opacity-80" />
+                          </div>
+                        </div>
+                        
+                        <div className="flex justify-center items-center">
+                          <div className="text-sm font-bold text-gray-900">{formatNum(item.count)}</div>
+                        </div>
+
+                        <div className="flex justify-center items-center">
+                          <div className="text-[11px] text-gray-600 font-medium flex items-center justify-center gap-1.5 bg-white px-2 py-0.5 rounded-md border border-gray-100">
+                            <Clock size={12} className="text-[#660099]"/> {getAvgTimeStr(totalSecs, item.count)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
         </div>
 
