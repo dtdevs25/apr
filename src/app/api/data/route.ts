@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
             d.mes AS "Mês",
             d.ano AS "Ano",
             COALESCE(p3.diretoria_3, pc.diretoria_3, d.base) AS "DIRETORIA 3",
-            COALESCE(p3.gestor, pc.gestor, d.lider) AS "Supervisor",
+            COALESCE(p3.gestor, d.lider) AS "Supervisor",
             COALESCE(p3.cidade_comercial, pc.cidade_comercial, d.localidade) AS "CIDADE COMERCIAL"
           FROM d_norm d
           LEFT JOIN po_by_nome p3 ON p3.nome_n = d.lider_n
