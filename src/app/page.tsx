@@ -918,14 +918,6 @@ export default function Dashboard() {
                   </tbody>
                 </table>
               </div>
-              <div className="p-4 border-t border-gray-100 bg-gray-50/50 flex justify-end shrink-0">
-                <button 
-                  onClick={() => setSelectedAuditorDetails(null)}
-                  className="px-6 py-2 bg-[#660099] text-white text-sm font-semibold rounded-xl hover:bg-[#8000bf] transition-colors shadow-sm"
-                >
-                  Fechar Detalhes
-                </button>
-              </div>
             </motion.div>
           </div>
         )}
