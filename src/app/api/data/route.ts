@@ -29,13 +29,13 @@ export async function GET(req: NextRequest) {
           ),
           po_by_cidade AS (
             SELECT DISTINCT ON (cidade_norm) *,
-              UPPER(TRIM(REGEXP_REPLACE(cidade_comercial, '^SP\\s+', '', 'i'))) AS cidade_norm
+              TRIM(REGEXP_REPLACE(${normNome('cidade_comercial')}, '^SP\\s+', '')) AS cidade_norm
             FROM po_norm WHERE cidade_comercial IS NOT NULL ORDER BY cidade_norm, id DESC
           ),
           d_norm AS (
             SELECT dss.*,
               ${normNome('lider')} AS lider_n,
-              UPPER(TRIM(REGEXP_REPLACE(localidade, '^SP\\s+', '', 'i'))) AS localidade_norm
+              TRIM(REGEXP_REPLACE(${normNome('localidade')}, '^SP\\s+', '')) AS localidade_norm
             FROM dss
           )
           SELECT 
