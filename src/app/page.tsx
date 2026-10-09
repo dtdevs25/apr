@@ -3,6 +3,8 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx-js-style';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Download, ChevronDown, CheckSquare, Square, Building, Users, MapPin, Calendar, Search, FileText, UserCheck, Clock, HelpCircle, X, Settings, UploadCloud, Lock, Eye, EyeOff, ArrowLeft, ShieldAlert, FileCheck, Activity } from 'lucide-react';
+import Image from 'next/image';
+import logo from './icon.png';
 
 const formatNum = (n: number) => n.toLocaleString('pt-BR');
 
@@ -590,9 +592,12 @@ export default function Dashboard() {
   );
 
   if (loading) return (
-    <div className="min-h-screen flex flex-col gap-4 items-center justify-center bg-[#f8f9fa]">
-      <div className="w-12 h-12 border-4 border-purple-200 border-t-[#660099] rounded-full animate-spin"></div>
-      <p className="text-sm font-semibold text-gray-500 animate-pulse">Carregando dados de {selectedModule}...</p>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#f8f9fa]">
+      <div className="relative flex items-center justify-center w-20 h-20 mb-4">
+        <div className="absolute inset-0 border-4 border-purple-200 border-t-[#660099] rounded-full animate-spin"></div>
+        <img src="/icone.png" alt="Logo Vivo" className="w-10 h-10 object-contain animate-pulse z-10" />
+      </div>
+      <p className="text-sm font-semibold text-[#660099] animate-pulse">Carregando painel...</p>
     </div>
   );
 

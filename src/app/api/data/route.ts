@@ -3,9 +3,17 @@ import pool from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
+const memCache: Record<string, { data: any, timestamp: number }> = {};
+const CACHE_TTL_MS = 60 * 1000; // 1 minute cache
+
 export async function GET(req: NextRequest) {
   try {
     const type = req.nextUrl.searchParams.get('type') || 'APR';
+    
+    if (memCache[type] && (Date.now() - memCache[type].timestamp < CACHE_TTL_MS)) {
+      return NextResponse.json(memCache[type].data);
+    }
+
     let rows;
     
     if (type === 'DSS') {
