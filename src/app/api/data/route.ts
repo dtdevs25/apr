@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
           WITH po_norm AS (
             SELECT id,
               ${normNome('nome')} AS nome_n,
-              diretoria_3, gerencia, gestor, cidade_comercial, uf_comercial
+              diretoria_3, gerencia, gestor, cidade_comercial, uf_comercial, cargo
             FROM po
           ),
           po_by_nome AS (
@@ -55,8 +55,10 @@ export async function GET(req: NextRequest) {
             d.mes AS "Mês",
             d.ano AS "Ano",
             COALESCE(p3.diretoria_3, pc.diretoria_3, d.base) AS "DIRETORIA 3",
-            p3.gestor AS "Gestor",
-            d.lider AS "Lider",
+            CASE 
+              WHEN p3.cargo ILIKE '%SUPERVISOR%' OR p3.cargo ILIKE '%COORDENADOR%' OR p3.cargo ILIKE '%COORD%' THEN d.lider
+              ELSE COALESCE(p3.gestor, d.lider)
+            END AS "Supervisor",
             COALESCE(p3.cidade_comercial, pc.cidade_comercial, d.localidade) AS "CIDADE COMERCIAL"
           FROM d_norm d
           LEFT JOIN po_by_nome p3 ON p3.nome_n = d.lider_n
@@ -91,7 +93,7 @@ export async function GET(req: NextRequest) {
             SELECT id,
               ${normId('user_id_ssff')} AS uid,
               ${normNome('nome')} AS nome_n,
-              diretoria_3, gerencia, gestor, cidade_comercial, uf_comercial
+              diretoria_3, gerencia, gestor, cidade_comercial, uf_comercial, cargo
             FROM po
           ),
           po_by_id AS (
@@ -124,7 +126,10 @@ export async function GET(req: NextRequest) {
             COALESCE(p1.diretoria_3, p2.diretoria_3, p3.diretoria_3, a.diretoria_3) AS "DIRETORIA 3",
             COALESCE(p1.gerencia, p2.gerencia, p3.gerencia, a.gerencia) AS "GERÊNCIA",
             COALESCE(p1.gestor, p2.gestor, p3.gestor, a.gestor) AS "GESTOR",
-            COALESCE(p1.gestor, p2.gestor, p3.gestor, a.gestor) AS "Supervisor",
+            CASE 
+              WHEN COALESCE(p1.cargo, p2.cargo, p3.cargo) ILIKE '%SUPERVISOR%' OR COALESCE(p1.cargo, p2.cargo, p3.cargo) ILIKE '%COORDENADOR%' OR COALESCE(p1.cargo, p2.cargo, p3.cargo) ILIKE '%COORD%' THEN a.nome_auditor
+              ELSE COALESCE(p1.gestor, p2.gestor, p3.gestor, a.gestor)
+            END AS "Supervisor",
             a.mes AS "Mês",
             a.ano AS "Ano"
           FROM a
