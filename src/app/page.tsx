@@ -886,8 +886,18 @@ export default function Dashboard() {
                     )}
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {selectedAuditorDetails.data.map((apr: any, i: number) => (
-                      selectedModule === 'DSS' ? (
+                    {selectedModule === 'DSS' ? (() => {
+                      const groupedDss = Object.values(
+                        selectedAuditorDetails.data.reduce((acc: any, curr: any) => {
+                          const dssId = curr['Número do Diálogo'] || curr['Data Fechamento'] || Math.random().toString();
+                          if (!acc[dssId]) {
+                            acc[dssId] = { ...curr, count: 0 };
+                          }
+                          acc[dssId].count += 1;
+                          return acc;
+                        }, {})
+                      );
+                      return groupedDss.map((apr: any, i: number) => (
                         <tr key={i} className="hover:bg-purple-50/30 transition-colors">
                           <td className="px-6 py-3 text-gray-700">{formatDate(apr['Data Fechamento'])}</td>
                           <td className="px-6 py-3 text-gray-700 font-medium">
@@ -897,23 +907,23 @@ export default function Dashboard() {
                           <td className="px-6 py-3 text-gray-800 font-medium truncate max-w-xs" title={apr['Assunto']}>
                             {apr['Assunto'] || '-'}
                           </td>
-                          <td className="px-6 py-3 text-gray-700 text-sm truncate max-w-xs" title={apr['Nome']}>
-                            {apr['Nome'] || apr['Matrícula'] || '-'}
+                          <td className="px-6 py-3 text-gray-700 font-bold">
+                            <span className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg w-fit"><Users size={14}/> {apr.count}</span>
                           </td>
                         </tr>
-                      ) : (
-                        <tr key={i} className="hover:bg-purple-50/30 transition-colors">
-                          <td className="px-6 py-3 text-gray-700">{formatDate(apr['Data Início'])}</td>
-                          <td className="px-6 py-3 text-gray-700 font-medium">
-                            <span className="flex items-center gap-1.5"><Clock size={14} className="text-[#660099]" />{apr['Duração'] || '-'}</span>
-                          </td>
-                          <td className="px-6 py-3 text-gray-700">{apr['CIDADE COMERCIAL'] || '-'}</td>
-                          <td className="px-6 py-3">
-                            <div className="text-gray-800 font-medium truncate max-w-lg" title={apr['Questionário']}>{cleanTipo(apr['Questionário'])}</div>
-                            <div className={`text-xs mt-1 ${apr['Situação'] === 'FECHADO' ? 'text-green-600' : 'text-orange-500'}`}>{apr['Situação'] || '-'}</div>
-                          </td>
-                        </tr>
-                      )
+                      ));
+                    })() : selectedAuditorDetails.data.map((apr: any, i: number) => (
+                      <tr key={i} className="hover:bg-purple-50/30 transition-colors">
+                        <td className="px-6 py-3 text-gray-700">{formatDate(apr['Data Início'])}</td>
+                        <td className="px-6 py-3 text-gray-700 font-medium">
+                          <span className="flex items-center gap-1.5"><Clock size={14} className="text-[#660099]" />{apr['Duração'] || '-'}</span>
+                        </td>
+                        <td className="px-6 py-3 text-gray-700">{apr['CIDADE COMERCIAL'] || '-'}</td>
+                        <td className="px-6 py-3">
+                          <div className="text-gray-800 font-medium truncate max-w-lg" title={apr['Questionário']}>{cleanTipo(apr['Questionário'])}</div>
+                          <div className={`text-xs mt-1 ${apr['Situação'] === 'FECHADO' ? 'text-green-600' : 'text-orange-500'}`}>{apr['Situação'] || '-'}</div>
+                        </td>
+                      </tr>
                     ))}
                   </tbody>
                 </table>
