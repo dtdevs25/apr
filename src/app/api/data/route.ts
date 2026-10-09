@@ -27,9 +27,15 @@ export async function GET(req: NextRequest) {
           po_by_nome AS (
             SELECT DISTINCT ON (nome_n) * FROM po_norm WHERE nome_n IS NOT NULL ORDER BY nome_n, id DESC
           ),
+          po_by_cidade AS (
+            SELECT DISTINCT ON (cidade_norm) *,
+              UPPER(TRIM(REGEXP_REPLACE(cidade_comercial, '^SP\\s+', '', 'i'))) AS cidade_norm
+            FROM po_norm WHERE cidade_comercial IS NOT NULL ORDER BY cidade_norm, id DESC
+          ),
           d_norm AS (
             SELECT dss.*,
-              ${normNome('lider')} AS lider_n
+              ${normNome('lider')} AS lider_n,
+              UPPER(TRIM(REGEXP_REPLACE(localidade, '^SP\\s+', '', 'i'))) AS localidade_norm
             FROM dss
           )
           SELECT 
@@ -48,11 +54,12 @@ export async function GET(req: NextRequest) {
             d.justificativa AS "Justificativa",
             d.mes AS "Mês",
             d.ano AS "Ano",
-            COALESCE(p3.diretoria_3, d.base) AS "DIRETORIA 3",
-            COALESCE(p3.gestor, d.lider) AS "Supervisor",
-            COALESCE(p3.cidade_comercial, d.localidade) AS "CIDADE COMERCIAL"
+            COALESCE(p3.diretoria_3, pc.diretoria_3, d.base) AS "DIRETORIA 3",
+            COALESCE(p3.gestor, pc.gestor, d.lider) AS "Supervisor",
+            COALESCE(p3.cidade_comercial, pc.cidade_comercial, d.localidade) AS "CIDADE COMERCIAL"
           FROM d_norm d
           LEFT JOIN po_by_nome p3 ON p3.nome_n = d.lider_n
+          LEFT JOIN po_by_cidade pc ON pc.cidade_norm = d.localidade_norm
           ORDER BY d.data_fechamento DESC
         `);
         rows = res.rows;
