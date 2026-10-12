@@ -6,40 +6,6 @@ export const dynamic = 'force-dynamic';
 
 const CACHE_TTL_MS = 60 * 1000; // 1 minute cache
 
-let schemaEnsured = false;
-async function ensureSchema() {
-  if (schemaEnsured) return;
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS po_spi_override (
-        id SERIAL PRIMARY KEY,
-        ano INT,
-        mes VARCHAR(50),
-        matricula VARCHAR(50) NOT NULL,
-        nome VARCHAR(255),
-        gestor_original VARCHAR(255),
-        gestor_atual VARCHAR(255) NOT NULL,
-        ativo INT DEFAULT 1,
-        diretoria_3 VARCHAR(255) DEFAULT 'DIR SERVICOS AO CLIENTE SP INTERIOR',
-        gerencia VARCHAR(255),
-        cidade_comercial VARCHAR(255),
-        cargo VARCHAR(255),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT po_spi_override_uniq UNIQUE (ano, mes, matricula)
-      );
-      CREATE INDEX IF NOT EXISTS idx_po_spi_override_mat ON po_spi_override (matricula);
-      CREATE INDEX IF NOT EXISTS idx_po_spi_override_gestor ON po_spi_override (gestor_atual);
-      CREATE INDEX IF NOT EXISTS idx_aprs_mat ON aprs (matricula_auditor);
-      CREATE INDEX IF NOT EXISTS idx_aprs_re ON aprs (re);
-      CREATE INDEX IF NOT EXISTS idx_aprs_data_inicio ON aprs (data_inicio DESC);
-      DROP MATERIALIZED VIEW IF EXISTS mv_apr_data CASCADE;
-    `);
-    schemaEnsured = true;
-  } catch (e) {
-    // Se falhar (ex: falta de permissão ou tabela aprs ainda não criada), prossegue
-  }
-}
-
 export async function GET(req: NextRequest) {
   try {
     const type = req.nextUrl.searchParams.get('type') || 'APR';
@@ -47,8 +13,6 @@ export async function GET(req: NextRequest) {
     if (dataCache[type] && (Date.now() - dataCache[type].timestamp < CACHE_TTL_MS)) {
       return NextResponse.json(dataCache[type].data);
     }
-
-    await ensureSchema();
 
     let rows;
 
@@ -143,22 +107,21 @@ export async function GET(req: NextRequest) {
             a.localidade_objeto AS "Localidade Objeto",
             a.questionario AS "Questionário",
             a.re AS "RE",
-            COALESCE(spi.cidade_comercial, a.cidade_comercial, p.cidade_comercial) AS "CIDADE COMERCIAL",
-            COALESCE(a.uf_comercial, p.uf_comercial, 'SP') AS "UF COMERCIAL",
+            COALESCE(spi.cidade_comercial, a.cidade_comercial) AS "CIDADE COMERCIAL",
+            COALESCE(a.uf_comercial, 'SP') AS "UF COMERCIAL",
             COALESCE(
               CASE WHEN spi.matricula IS NOT NULL THEN 'DIR SERVICOS AO CLIENTE SP INTERIOR' ELSE NULL END,
               a.diretoria_3,
-              p.diretoria_3,
               'DIR SERVICOS AO CLIENTE CAPITAL'
             ) AS "DIRETORIA 3",
-            COALESCE(spi.gerencia, a.gerencia, p.gerencia) AS "GERÊNCIA",
+            COALESCE(spi.gerencia, a.gerencia) AS "GERÊNCIA",
             CASE 
               WHEN spi.gestor_atual IS NOT NULL THEN spi.gestor_atual
-              ELSE COALESCE(a.gestor, p.gestor)
+              ELSE a.gestor
             END AS "GESTOR",
             CASE 
               WHEN spi.gestor_atual IS NOT NULL THEN spi.gestor_atual
-              ELSE COALESCE(a.gestor, p.gestor)
+              ELSE a.gestor
             END AS "Supervisor",
             a.mes AS "Mês",
             a.ano AS "Ano"
@@ -168,14 +131,7 @@ export async function GET(req: NextRequest) {
               matricula, gestor_atual, diretoria_3, gerencia, cidade_comercial
             FROM po_spi_override
             ORDER BY matricula, id DESC
-          ) spi ON (spi.matricula::text = a.matricula_auditor::text OR (a.matricula_auditor IS NULL AND spi.matricula::text = a.re::text))
-          LEFT JOIN (
-            SELECT DISTINCT ON (user_id_ssff) 
-              user_id_ssff, diretoria_3, gerencia, gestor, cidade_comercial, uf_comercial
-            FROM po
-            WHERE user_id_ssff IS NOT NULL
-            ORDER BY user_id_ssff, id DESC
-          ) p ON (a.diretoria_3 IS NULL AND (p.user_id_ssff::text = a.matricula_auditor::text OR p.user_id_ssff::text = a.re::text))
+          ) spi ON (spi.matricula = a.matricula_auditor OR (a.matricula_auditor IS NULL AND spi.matricula = a.re))
           ORDER BY a.data_inicio DESC
         `);
         rows = res.rows;

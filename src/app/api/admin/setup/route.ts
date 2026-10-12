@@ -55,6 +55,19 @@ export async function GET() {
       DROP MATERIALIZED VIEW IF EXISTS mv_apr_data CASCADE;
     `);
 
+    // Limpa eventuais queries zumbis travadas
+    try {
+      await pool.query(`
+        SELECT pg_terminate_backend(pid) 
+        FROM pg_stat_activity 
+        WHERE pid <> pg_backend_pid() 
+          AND state = 'active' 
+          AND query_start < NOW() - INTERVAL '30 seconds';
+      `);
+    } catch (e) {
+      // Ignora se não for superusuário
+    }
+
     return NextResponse.json({ message: "Setup completed successfully and high performance indexes created" });
   } catch (error) {
     console.error(error);
