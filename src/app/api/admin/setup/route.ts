@@ -45,73 +45,17 @@ export async function GET() {
       );
     `);
 
-    console.log("Criando Materialized View mv_apr_data...");
+    console.log("Criando índices de alta performance...");
     await pool.query(`
-      DROP MATERIALIZED VIEW IF EXISTS mv_apr_data;
-      CREATE MATERIALIZED VIEW mv_apr_data AS
-      WITH po_norm AS (
-        SELECT id,
-          NULLIF(LTRIM(REGEXP_REPLACE(REGEXP_REPLACE(TRIM(user_id_ssff::text), '\\.0+$', ''), '[^0-9]', '', 'g'), '0'), '') AS uid,
-          NULLIF(UPPER(TRIM(REGEXP_REPLACE(TRANSLATE(nome::text, 'ÁÀÂÃÄáàâãäÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÕÖóòôõöÚÙÛÜúùûüÇçÑñ', 'AAAAAaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuCcNn'), '\\s+', ' ', 'g'))), '') AS nome_n,
-          diretoria_3, gerencia, gestor, cidade_comercial, uf_comercial
-        FROM po
-      ),
-      po_by_id AS (
-        SELECT DISTINCT ON (uid) * FROM po_norm WHERE uid IS NOT NULL ORDER BY uid, id DESC
-      ),
-      po_by_nome AS (
-        SELECT DISTINCT ON (nome_n) * FROM po_norm WHERE nome_n IS NOT NULL ORDER BY nome_n, id DESC
-      ),
-      spi_by_mat AS (
-        SELECT DISTINCT ON (matricula) 
-          matricula, gestor_atual, ativo, gerencia, cidade_comercial
-        FROM po_spi_override 
-        ORDER BY matricula, id DESC
-      ),
-      a AS (
-        SELECT aprs.*,
-          NULLIF(LTRIM(REGEXP_REPLACE(REGEXP_REPLACE(TRIM(matricula_auditor::text), '\\.0+$', ''), '[^0-9]', '', 'g'), '0'), '') AS uid_mat,
-          NULLIF(LTRIM(REGEXP_REPLACE(REGEXP_REPLACE(TRIM(re::text), '\\.0+$', ''), '[^0-9]', '', 'g'), '0'), '') AS uid_re,
-          NULLIF(UPPER(TRIM(REGEXP_REPLACE(TRANSLATE(nome_auditor::text, 'ÁÀÂÃÄáàâãäÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÕÖóòôõöÚÙÛÜúùûüÇçÑñ', 'AAAAAaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuCcNn'), '\\s+', ' ', 'g'))), '') AS nome_n
-        FROM aprs
-      )
-      SELECT 
-        a.numero AS "Número",
-        a.data_checklist AS "Data Checklist",
-        a.data_inicio AS "Data Início",
-        a.data_fim AS "Data Fim",
-        a.duracao AS "Duração",
-        a.situacao AS "Situação",
-        a.matricula_auditor AS "Matrícula Auditor",
-        a.nome_auditor AS "Nome Auditor",
-        a.localidade_objeto AS "Localidade Objeto",
-        a.questionario AS "Questionário",
-        a.re AS "RE",
-        COALESCE(spi.cidade_comercial, p1.cidade_comercial, p2.cidade_comercial, p3.cidade_comercial, a.cidade_comercial) AS "CIDADE COMERCIAL",
-        COALESCE(p1.uf_comercial, p2.uf_comercial, p3.uf_comercial, a.uf_comercial) AS "UF COMERCIAL",
-        COALESCE(p1.diretoria_3, p2.diretoria_3, p3.diretoria_3, a.diretoria_3) AS "DIRETORIA 3",
-        COALESCE(spi.gerencia, p1.gerencia, p2.gerencia, p3.gerencia, a.gerencia) AS "GERÊNCIA",
-        CASE 
-          WHEN COALESCE(p1.diretoria_3, p2.diretoria_3, p3.diretoria_3, a.diretoria_3) = 'DIR SERVICOS AO CLIENTE SP INTERIOR' AND spi.gestor_atual IS NOT NULL
-          THEN spi.gestor_atual
-          ELSE COALESCE(p1.gestor, p2.gestor, p3.gestor, a.gestor)
-        END AS "GESTOR",
-        CASE 
-          WHEN COALESCE(p1.diretoria_3, p2.diretoria_3, p3.diretoria_3, a.diretoria_3) = 'DIR SERVICOS AO CLIENTE SP INTERIOR' AND spi.gestor_atual IS NOT NULL
-          THEN spi.gestor_atual
-          ELSE COALESCE(p1.gestor, p2.gestor, p3.gestor, a.gestor)
-        END AS "Supervisor",
-        a.mes AS "Mês",
-        a.ano AS "Ano"
-      FROM a
-      LEFT JOIN po_by_id   p1 ON p1.uid = a.uid_mat
-      LEFT JOIN po_by_id   p2 ON p2.uid = a.uid_re
-      LEFT JOIN po_by_nome p3 ON p3.nome_n = a.nome_n
-      LEFT JOIN spi_by_mat spi ON (spi.matricula = a.uid_mat OR spi.matricula = a.uid_re)
-      ORDER BY a.data_inicio DESC;
+      CREATE INDEX IF NOT EXISTS idx_po_spi_override_mat ON po_spi_override (matricula);
+      CREATE INDEX IF NOT EXISTS idx_po_spi_override_gestor ON po_spi_override (gestor_atual);
+      CREATE INDEX IF NOT EXISTS idx_aprs_mat ON aprs (matricula_auditor);
+      CREATE INDEX IF NOT EXISTS idx_aprs_re ON aprs (re);
+      CREATE INDEX IF NOT EXISTS idx_aprs_data_inicio ON aprs (data_inicio DESC);
+      DROP MATERIALIZED VIEW IF EXISTS mv_apr_data CASCADE;
     `);
 
-    return NextResponse.json({ message: "Setup completed successfully" });
+    return NextResponse.json({ message: "Setup completed successfully and high performance indexes created" });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: String(error) }, { status: 500 });

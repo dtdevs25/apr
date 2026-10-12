@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import * as xlsx from 'xlsx';
+import { clearDataCache } from '@/lib/cache';
 
 const MONTHS = [
   'JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO',
@@ -169,12 +170,8 @@ export async function POST(req: Request) {
 
       await client.query('COMMIT');
 
-      // Tentar atualizar a Materialized View caso exista
-      try {
-        await client.query('REFRESH MATERIALIZED VIEW mv_apr_data;');
-      } catch (e) {
-        // Se a view não for materialized ou não existir, ignorar
-      }
+      // Limpa cache para refletir imediatamente nos dashboards APR e DSS
+      clearDataCache();
 
       return NextResponse.json({
         success: true,

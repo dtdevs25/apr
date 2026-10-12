@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import * as xlsx from 'xlsx';
+import { clearDataCache } from '@/lib/cache';
 
 const MONTHS = [
   'JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO',
@@ -160,6 +161,7 @@ export async function POST(req: Request) {
       }
 
       await client.query('COMMIT');
+      clearDataCache();
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;

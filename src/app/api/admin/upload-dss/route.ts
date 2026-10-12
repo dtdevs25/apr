@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { clearDataCache } from '@/lib/cache';
 
 export async function POST(req: Request) {
   try {
@@ -119,6 +120,7 @@ export async function POST(req: Request) {
       }
 
       await client.query('COMMIT');
+      clearDataCache('DSS');
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;

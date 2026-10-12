@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import * as xlsx from 'xlsx';
+import { clearDataCache } from '@/lib/cache';
 
 export async function POST(req: Request) {
   try {
@@ -314,14 +315,8 @@ export async function POST(req: Request) {
         await client.query(query + placeholders, values);
       }
 
-      // Atualiza a Materialized View se ela existir
-      try {
-        await client.query('REFRESH MATERIALIZED VIEW mv_apr_data');
-      } catch (mvErr: any) {
-        // Se a view não existir ou der erro temporário, ignora pois a query base funciona com fallback
-      }
-
       await client.query('COMMIT');
+      clearDataCache('APR');
       
       const totalProcessed = rowsToProcess.length;
       const imported = totalProcessed - updated;

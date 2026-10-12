@@ -1,44 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { dataCache } from '@/lib/cache';
 
 export const dynamic = 'force-dynamic';
 
-const memCache: Record<string, { data: any, timestamp: number }> = {};
 const CACHE_TTL_MS = 60 * 1000; // 1 minute cache
+
+let schemaEnsured = false;
+async function ensureSchema() {
+  if (schemaEnsured) return;
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS po_spi_override (
+        id SERIAL PRIMARY KEY,
+        ano INT,
+        mes VARCHAR(50),
+        matricula VARCHAR(50) NOT NULL,
+        nome VARCHAR(255),
+        gestor_original VARCHAR(255),
+        gestor_atual VARCHAR(255) NOT NULL,
+        ativo INT DEFAULT 1,
+        diretoria_3 VARCHAR(255) DEFAULT 'DIR SERVICOS AO CLIENTE SP INTERIOR',
+        gerencia VARCHAR(255),
+        cidade_comercial VARCHAR(255),
+        cargo VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT po_spi_override_uniq UNIQUE (ano, mes, matricula)
+      );
+      CREATE INDEX IF NOT EXISTS idx_po_spi_override_mat ON po_spi_override (matricula);
+      CREATE INDEX IF NOT EXISTS idx_po_spi_override_gestor ON po_spi_override (gestor_atual);
+      CREATE INDEX IF NOT EXISTS idx_aprs_mat ON aprs (matricula_auditor);
+      CREATE INDEX IF NOT EXISTS idx_aprs_re ON aprs (re);
+      CREATE INDEX IF NOT EXISTS idx_aprs_data_inicio ON aprs (data_inicio DESC);
+      DROP MATERIALIZED VIEW IF EXISTS mv_apr_data CASCADE;
+    `);
+    schemaEnsured = true;
+  } catch (e) {
+    // Se falhar (ex: falta de permissão ou tabela aprs ainda não criada), prossegue
+  }
+}
 
 export async function GET(req: NextRequest) {
   try {
     const type = req.nextUrl.searchParams.get('type') || 'APR';
     
-    if (memCache[type] && (Date.now() - memCache[type].timestamp < CACHE_TTL_MS)) {
-      return NextResponse.json(memCache[type].data);
+    if (dataCache[type] && (Date.now() - dataCache[type].timestamp < CACHE_TTL_MS)) {
+      return NextResponse.json(dataCache[type].data);
     }
 
+    await ensureSchema();
+
     let rows;
-    
-    // Garante que a tabela de override po_spi_override exista
-    try {
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS po_spi_override (
-          id SERIAL PRIMARY KEY,
-          ano INT,
-          mes VARCHAR(50),
-          matricula VARCHAR(50) NOT NULL,
-          nome VARCHAR(255),
-          gestor_original VARCHAR(255),
-          gestor_atual VARCHAR(255) NOT NULL,
-          ativo INT DEFAULT 1,
-          diretoria_3 VARCHAR(255) DEFAULT 'DIR SERVICOS AO CLIENTE SP INTERIOR',
-          gerencia VARCHAR(255),
-          cidade_comercial VARCHAR(255),
-          cargo VARCHAR(255),
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          CONSTRAINT po_spi_override_uniq UNIQUE (ano, mes, matricula)
-        );
-      `);
-    } catch (e) {
-      // Ignora caso não tenha permissão de DDL
-    }
 
     if (type === 'DSS') {
       try {
@@ -46,8 +58,6 @@ export async function GET(req: NextRequest) {
         const ACC_TO   = 'AAAAAaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuCcNn';
         const normNome = (col: string) =>
           `NULLIF(UPPER(TRIM(REGEXP_REPLACE(TRANSLATE(${col}::text, '${ACC_FROM}', '${ACC_TO}'), '\\s+', ' ', 'g'))), '')`;
-        const normId = (col: string) =>
-          `NULLIF(LTRIM(REGEXP_REPLACE(REGEXP_REPLACE(TRIM(${col}::text), '\\.0+$', ''), '[^0-9]', '', 'g'), '0'), '')`;
 
         const res = await pool.query(`
           WITH po_norm AS (
@@ -113,53 +123,14 @@ export async function GET(req: NextRequest) {
         rows = res.rows;
       } catch (err: any) {
         if (err.code === '42P01') {
-          // Tabela não existe ainda
           return NextResponse.json([]);
         }
         throw err;
       }
     } else {
-      // Para APR:
-    try {
-      const res = await pool.query(`SELECT * FROM mv_apr_data ORDER BY "Data Início" DESC`);
-      rows = res.rows;
-    } catch (err: any) {
-      if (err.code === '42P01') {
-        // Fallback caso a Materialized View não exista
-        const ACC_FROM = 'ÁÀÂÃÄáàâãäÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÕÖóòôõöÚÙÛÜúùûüÇçÑñ';
-        const ACC_TO   = 'AAAAAaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuCcNn';
-        const normNome = (col: string) =>
-          `NULLIF(UPPER(TRIM(REGEXP_REPLACE(TRANSLATE(${col}::text, '${ACC_FROM}', '${ACC_TO}'), '\\s+', ' ', 'g'))), '')`;
-        const normId = (col: string) =>
-          `NULLIF(LTRIM(REGEXP_REPLACE(REGEXP_REPLACE(TRIM(${col}::text), '\\.0+$', ''), '[^0-9]', '', 'g'), '0'), '')`;
-
+      // Para APR: Consulta otimizada diretamente sobre aprs com override indexado
+      try {
         const res = await pool.query(`
-          WITH po_norm AS (
-            SELECT id,
-              ${normId('user_id_ssff')} AS uid,
-              ${normNome('nome')} AS nome_n,
-              diretoria_3, gerencia, gestor, cidade_comercial, uf_comercial, cargo
-            FROM po
-          ),
-          po_by_id AS (
-            SELECT DISTINCT ON (uid) * FROM po_norm WHERE uid IS NOT NULL ORDER BY uid, id DESC
-          ),
-          po_by_nome AS (
-            SELECT DISTINCT ON (nome_n) * FROM po_norm WHERE nome_n IS NOT NULL ORDER BY nome_n, id DESC
-          ),
-          spi_by_mat AS (
-            SELECT DISTINCT ON (matricula) 
-              matricula, gestor_atual, ativo, gerencia, cidade_comercial
-            FROM po_spi_override 
-            ORDER BY matricula, id DESC
-          ),
-          a AS (
-            SELECT aprs.*,
-              ${normId('matricula_auditor')} AS uid_mat,
-              ${normId('re')} AS uid_re,
-              ${normNome('nome_auditor')} AS nome_n
-            FROM aprs
-          )
           SELECT 
             a.numero AS "Número",
             a.data_checklist AS "Data Checklist",
@@ -172,34 +143,48 @@ export async function GET(req: NextRequest) {
             a.localidade_objeto AS "Localidade Objeto",
             a.questionario AS "Questionário",
             a.re AS "RE",
-            COALESCE(spi.cidade_comercial, p1.cidade_comercial, p2.cidade_comercial, p3.cidade_comercial, a.cidade_comercial) AS "CIDADE COMERCIAL",
-            COALESCE(p1.uf_comercial, p2.uf_comercial, p3.uf_comercial, a.uf_comercial) AS "UF COMERCIAL",
-            COALESCE(p1.diretoria_3, p2.diretoria_3, p3.diretoria_3, a.diretoria_3) AS "DIRETORIA 3",
-            COALESCE(spi.gerencia, p1.gerencia, p2.gerencia, p3.gerencia, a.gerencia) AS "GERÊNCIA",
+            COALESCE(spi.cidade_comercial, a.cidade_comercial, p.cidade_comercial) AS "CIDADE COMERCIAL",
+            COALESCE(a.uf_comercial, p.uf_comercial, 'SP') AS "UF COMERCIAL",
+            COALESCE(
+              CASE WHEN spi.matricula IS NOT NULL THEN 'DIR SERVICOS AO CLIENTE SP INTERIOR' ELSE NULL END,
+              a.diretoria_3,
+              p.diretoria_3,
+              'DIR SERVICOS AO CLIENTE CAPITAL'
+            ) AS "DIRETORIA 3",
+            COALESCE(spi.gerencia, a.gerencia, p.gerencia) AS "GERÊNCIA",
             CASE 
-              WHEN COALESCE(p1.diretoria_3, p2.diretoria_3, p3.diretoria_3, a.diretoria_3) = 'DIR SERVICOS AO CLIENTE SP INTERIOR' AND spi.gestor_atual IS NOT NULL
-              THEN spi.gestor_atual
-              ELSE COALESCE(p1.gestor, p2.gestor, p3.gestor, a.gestor)
+              WHEN spi.gestor_atual IS NOT NULL THEN spi.gestor_atual
+              ELSE COALESCE(a.gestor, p.gestor)
             END AS "GESTOR",
             CASE 
-              WHEN COALESCE(p1.diretoria_3, p2.diretoria_3, p3.diretoria_3, a.diretoria_3) = 'DIR SERVICOS AO CLIENTE SP INTERIOR' AND spi.gestor_atual IS NOT NULL
-              THEN spi.gestor_atual
-              ELSE COALESCE(p1.gestor, p2.gestor, p3.gestor, a.gestor)
+              WHEN spi.gestor_atual IS NOT NULL THEN spi.gestor_atual
+              ELSE COALESCE(a.gestor, p.gestor)
             END AS "Supervisor",
             a.mes AS "Mês",
             a.ano AS "Ano"
-          FROM a
-          LEFT JOIN po_by_id   p1 ON p1.uid = a.uid_mat
-          LEFT JOIN po_by_id   p2 ON p2.uid = a.uid_re
-          LEFT JOIN po_by_nome p3 ON p3.nome_n = a.nome_n
-          LEFT JOIN spi_by_mat spi ON (spi.matricula = a.uid_mat OR spi.matricula = a.uid_re)
+          FROM aprs a
+          LEFT JOIN (
+            SELECT DISTINCT ON (matricula) 
+              matricula, gestor_atual, diretoria_3, gerencia, cidade_comercial
+            FROM po_spi_override
+            ORDER BY matricula, id DESC
+          ) spi ON (spi.matricula = a.matricula_auditor OR (a.matricula_auditor IS NULL AND spi.matricula = a.re))
+          LEFT JOIN (
+            SELECT DISTINCT ON (user_id_ssff) 
+              user_id_ssff, diretoria_3, gerencia, gestor, cidade_comercial, uf_comercial
+            FROM po
+            WHERE user_id_ssff IS NOT NULL
+            ORDER BY user_id_ssff, id DESC
+          ) p ON (a.diretoria_3 IS NULL AND (p.user_id_ssff = a.matricula_auditor OR p.user_id_ssff = a.re))
           ORDER BY a.data_inicio DESC
         `);
         rows = res.rows;
-      } else {
+      } catch (err: any) {
+        if (err.code === '42P01') {
+          return NextResponse.json([]);
+        }
         throw err;
       }
-    }
     }
     // Converte datas para string no formato correto
     const formattedData = rows.map(r => {
@@ -237,6 +222,7 @@ export async function GET(req: NextRequest) {
       return ALLOWED_DIRETORIAS.includes(dir);
     });
 
+    dataCache[type] = { data: finalData, timestamp: Date.now() };
     return NextResponse.json(finalData);
   } catch (error) {
     console.error("Erro ao carregar dados do banco:", error);
