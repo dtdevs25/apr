@@ -40,6 +40,14 @@ export async function GET(req: NextRequest) {
               TRIM(REGEXP_REPLACE(${normNome('cidade_comercial')}, '^SP\\s+', '')) AS cidade_norm
             FROM po_norm WHERE cidade_comercial IS NOT NULL ORDER BY cidade_norm, id DESC
           ),
+          spi_gestores AS (
+            SELECT DISTINCT 
+              ${normNome('gestor_atual')} AS gestor_n,
+              MAX(cidade_comercial) AS cidade_comercial,
+              MAX(gerencia) AS gerencia
+            FROM po_spi_override
+            GROUP BY ${normNome('gestor_atual')}
+          ),
           d_norm AS (
             SELECT dss.*,
               ${normNome('lider')} AS lider_n,
@@ -62,15 +70,20 @@ export async function GET(req: NextRequest) {
             d.justificativa AS "Justificativa",
             d.mes AS "Mês",
             d.ano AS "Ano",
-            COALESCE(p3.diretoria_3, pc.diretoria_3, d.base) AS "DIRETORIA 3",
             CASE 
+              WHEN spi_g.gestor_n IS NOT NULL THEN 'DIR SERVICOS AO CLIENTE SP INTERIOR'
+              ELSE COALESCE(p3.diretoria_3, pc.diretoria_3, d.base)
+            END AS "DIRETORIA 3",
+            CASE 
+              WHEN spi_g.gestor_n IS NOT NULL THEN d.lider
               WHEN p3.cargo ILIKE '%SUPERVISOR%' OR p3.cargo ILIKE '%COORDENADOR%' OR p3.cargo ILIKE '%COORD%' THEN d.lider
               ELSE d.lider || ' (Líder)'
             END AS "Supervisor",
-            COALESCE(p3.cidade_comercial, pc.cidade_comercial, d.localidade) AS "CIDADE COMERCIAL"
+            COALESCE(spi_g.cidade_comercial, p3.cidade_comercial, pc.cidade_comercial, d.localidade) AS "CIDADE COMERCIAL"
           FROM d_norm d
           LEFT JOIN po_by_nome p3 ON p3.nome_n = d.lider_n
           LEFT JOIN po_by_cidade pc ON pc.cidade_norm = d.localidade_norm
+          LEFT JOIN spi_gestores spi_g ON spi_g.gestor_n = d.lider_n
           ORDER BY d.data_fechamento DESC
         `);
         rows = res.rows;
@@ -110,6 +123,12 @@ export async function GET(req: NextRequest) {
           po_by_nome AS (
             SELECT DISTINCT ON (nome_n) * FROM po_norm WHERE nome_n IS NOT NULL ORDER BY nome_n, id DESC
           ),
+          spi_by_mat AS (
+            SELECT DISTINCT ON (matricula) 
+              matricula, gestor_atual, ativo, gerencia, cidade_comercial
+            FROM po_spi_override 
+            ORDER BY matricula, id DESC
+          ),
           a AS (
             SELECT aprs.*,
               ${normId('matricula_auditor')} AS uid_mat,
@@ -129,18 +148,27 @@ export async function GET(req: NextRequest) {
             a.localidade_objeto AS "Localidade Objeto",
             a.questionario AS "Questionário",
             a.re AS "RE",
-            COALESCE(p1.cidade_comercial, p2.cidade_comercial, p3.cidade_comercial, a.cidade_comercial) AS "CIDADE COMERCIAL",
+            COALESCE(spi.cidade_comercial, p1.cidade_comercial, p2.cidade_comercial, p3.cidade_comercial, a.cidade_comercial) AS "CIDADE COMERCIAL",
             COALESCE(p1.uf_comercial, p2.uf_comercial, p3.uf_comercial, a.uf_comercial) AS "UF COMERCIAL",
             COALESCE(p1.diretoria_3, p2.diretoria_3, p3.diretoria_3, a.diretoria_3) AS "DIRETORIA 3",
-            COALESCE(p1.gerencia, p2.gerencia, p3.gerencia, a.gerencia) AS "GERÊNCIA",
-            COALESCE(p1.gestor, p2.gestor, p3.gestor, a.gestor) AS "GESTOR",
-            COALESCE(p1.gestor, p2.gestor, p3.gestor, a.gestor) AS "Supervisor",
+            COALESCE(spi.gerencia, p1.gerencia, p2.gerencia, p3.gerencia, a.gerencia) AS "GERÊNCIA",
+            CASE 
+              WHEN COALESCE(p1.diretoria_3, p2.diretoria_3, p3.diretoria_3, a.diretoria_3) = 'DIR SERVICOS AO CLIENTE SP INTERIOR' AND spi.gestor_atual IS NOT NULL
+              THEN spi.gestor_atual
+              ELSE COALESCE(p1.gestor, p2.gestor, p3.gestor, a.gestor)
+            END AS "GESTOR",
+            CASE 
+              WHEN COALESCE(p1.diretoria_3, p2.diretoria_3, p3.diretoria_3, a.diretoria_3) = 'DIR SERVICOS AO CLIENTE SP INTERIOR' AND spi.gestor_atual IS NOT NULL
+              THEN spi.gestor_atual
+              ELSE COALESCE(p1.gestor, p2.gestor, p3.gestor, a.gestor)
+            END AS "Supervisor",
             a.mes AS "Mês",
             a.ano AS "Ano"
           FROM a
           LEFT JOIN po_by_id   p1 ON p1.uid = a.uid_mat
           LEFT JOIN po_by_id   p2 ON p2.uid = a.uid_re
           LEFT JOIN po_by_nome p3 ON p3.nome_n = a.nome_n
+          LEFT JOIN spi_by_mat spi ON (spi.matricula = a.uid_mat OR spi.matricula = a.uid_re)
           ORDER BY a.data_inicio DESC
         `);
         rows = res.rows;

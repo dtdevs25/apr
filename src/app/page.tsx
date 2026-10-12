@@ -178,7 +178,7 @@ export default function Dashboard() {
 
   // Admin Modal
   const [isAdminOpen, setIsAdminOpen] = useState(false);
-  const [adminAction, setAdminAction] = useState<'apr' | 'plano' | 'dss' | null>(null);
+  const [adminAction, setAdminAction] = useState<'apr' | 'plano' | 'spi' | 'dss' | null>(null);
   const [adminPassword, setAdminPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [adminAuthStatus, setAdminAuthStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -211,6 +211,7 @@ export default function Dashboard() {
     try {
       let endpoint = '/api/admin/upload-apr';
       if (adminAction === 'plano') endpoint = '/api/admin/upload-plano';
+      if (adminAction === 'spi') endpoint = '/api/admin/upload-spi';
       if (adminAction === 'dss') endpoint = '/api/admin/upload-dss';
       
       const res = await fetch(endpoint, { method: 'POST', body: formData });
@@ -218,7 +219,7 @@ export default function Dashboard() {
         const dataRes = await res.json();
         setUploadStatus(dataRes.message || 'Upload e importação concluídos com sucesso!');
         // Atualiza os dados do dashboard em seguida
-        fetch('/api/data').then(r => r.json()).then(json => setData(json));
+        fetch(`/api/data?type=${selectedModule}`).then(r => r.json()).then(json => setData(json));
       } else {
         const dataRes = await res.json().catch(() => ({}));
         setUploadStatus(dataRes.message || 'Erro na importação.');
@@ -1119,7 +1120,7 @@ export default function Dashboard() {
                   <div className="flex flex-col gap-3">
                     <button onClick={() => setAdminAction('apr')} className="flex items-center gap-3 p-4 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-[#660099] dark:hover:border-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-all group">
                       <div className="p-2 bg-purple-100 dark:bg-purple-950/60 rounded-lg group-hover:bg-[#660099] text-[#660099] group-hover:text-white dark:text-purple-400 transition-colors"><UploadCloud size={20} /></div>
-                      <div className="text-left"><p className="font-bold text-gray-900 dark:text-white">Importar APRs</p><p className="text-xs text-gray-500 dark:text-gray-400">Subir nova planilha XLSX de APRs</p></div>
+                      <div className="text-left"><p className="font-bold text-gray-900 dark:text-white">Importar APRs</p><p className="text-xs text-gray-500 dark:text-gray-400">Subir nova planilha XLSX ou CSV bruto de APRs</p></div>
                     </button>
                     <button onClick={() => setAdminAction('dss')} className="flex items-center gap-3 p-4 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-blue-600 dark:hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-all group">
                       <div className="p-2 bg-blue-100 dark:bg-blue-950/60 rounded-lg group-hover:bg-blue-600 text-blue-600 group-hover:text-white dark:text-blue-400 transition-colors"><ShieldAlert size={20} /></div>
@@ -1127,18 +1128,24 @@ export default function Dashboard() {
                     </button>
                     <button onClick={() => setAdminAction('plano')} className="flex items-center gap-3 p-4 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-teal-600 dark:hover:border-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/30 transition-all group">
                       <div className="p-2 bg-teal-100 dark:bg-teal-950/60 rounded-lg group-hover:bg-teal-600 text-teal-600 group-hover:text-white dark:text-teal-400 transition-colors"><Users size={20} /></div>
-                      <div className="text-left"><p className="font-bold text-gray-900 dark:text-white">Importar Plano de Ocupações</p><p className="text-xs text-gray-500 dark:text-gray-400">Atualizar lista de colaboradores e diretorias</p></div>
+                      <div className="text-left"><p className="font-bold text-gray-900 dark:text-white">Importar Plano de Ocupações Geral</p><p className="text-xs text-gray-500 dark:text-gray-400">Atualizar lista geral de colaboradores e diretorias</p></div>
+                    </button>
+                    <button onClick={() => setAdminAction('spi')} className="flex items-center gap-3 p-4 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-amber-600 dark:hover:border-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all group">
+                      <div className="p-2 bg-amber-100 dark:bg-amber-950/60 rounded-lg group-hover:bg-amber-600 text-amber-600 group-hover:text-white dark:text-amber-400 transition-colors"><Users size={20} /></div>
+                      <div className="text-left"><p className="font-bold text-gray-900 dark:text-white">Importar Correção SP Interior (PO SPI)</p><p className="text-xs text-gray-500 dark:text-gray-400">Subir planilha de líderes reais da diretoria do Interior</p></div>
                     </button>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center gap-4">
                     <div className="w-12 h-12 bg-green-100 dark:bg-green-950/50 text-green-600 dark:text-green-400 rounded-full flex items-center justify-center mb-2"><UploadCloud size={24} /></div>
                     <h4 className="font-bold text-gray-900 dark:text-white">
-                      {adminAction === 'apr' ? 'Upload de APRs' : adminAction === 'dss' ? 'Upload de DSS' : 'Upload do Plano'}
+                      {adminAction === 'apr' ? 'Upload de APRs' : adminAction === 'dss' ? 'Upload de DSS' : adminAction === 'spi' ? 'Upload de Correção SP Interior' : 'Upload do Plano Geral'}
                     </h4>
                     <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-2">
                       {adminAction === 'apr' 
                         ? 'Selecione o arquivo XLSX ou o arquivo bruto auditoria.CSV para importar para o banco.'
+                        : adminAction === 'spi'
+                        ? 'Selecione a planilha PO_SPI (XLSX) contendo o mapeamento de líderes da Diretoria do Interior.'
                         : `Selecione o arquivo ${adminAction === 'dss' ? 'CSV' : 'XLSX'} para importar os dados para o banco.`}
                     </p>
                     

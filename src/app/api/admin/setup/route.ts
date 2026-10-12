@@ -25,6 +25,26 @@ export async function GET() {
       );
     `);
 
+    console.log("Criando tabela po_spi_override...");
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS po_spi_override (
+        id SERIAL PRIMARY KEY,
+        ano INT,
+        mes VARCHAR(50),
+        matricula VARCHAR(50) NOT NULL,
+        nome VARCHAR(255),
+        gestor_original VARCHAR(255),
+        gestor_atual VARCHAR(255) NOT NULL,
+        ativo INT DEFAULT 1,
+        diretoria_3 VARCHAR(255) DEFAULT 'DIR SERVICOS AO CLIENTE SP INTERIOR',
+        gerencia VARCHAR(255),
+        cidade_comercial VARCHAR(255),
+        cargo VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT po_spi_override_uniq UNIQUE (ano, mes, matricula)
+      );
+    `);
+
     console.log("Criando Materialized View mv_apr_data...");
     await pool.query(`
       DROP MATERIALIZED VIEW IF EXISTS mv_apr_data;
@@ -41,6 +61,12 @@ export async function GET() {
       ),
       po_by_nome AS (
         SELECT DISTINCT ON (nome_n) * FROM po_norm WHERE nome_n IS NOT NULL ORDER BY nome_n, id DESC
+      ),
+      spi_by_mat AS (
+        SELECT DISTINCT ON (matricula) 
+          matricula, gestor_atual, ativo, gerencia, cidade_comercial
+        FROM po_spi_override 
+        ORDER BY matricula, id DESC
       ),
       a AS (
         SELECT aprs.*,
@@ -61,18 +87,27 @@ export async function GET() {
         a.localidade_objeto AS "Localidade Objeto",
         a.questionario AS "Questionário",
         a.re AS "RE",
-        COALESCE(p1.cidade_comercial, p2.cidade_comercial, p3.cidade_comercial, a.cidade_comercial) AS "CIDADE COMERCIAL",
+        COALESCE(spi.cidade_comercial, p1.cidade_comercial, p2.cidade_comercial, p3.cidade_comercial, a.cidade_comercial) AS "CIDADE COMERCIAL",
         COALESCE(p1.uf_comercial, p2.uf_comercial, p3.uf_comercial, a.uf_comercial) AS "UF COMERCIAL",
         COALESCE(p1.diretoria_3, p2.diretoria_3, p3.diretoria_3, a.diretoria_3) AS "DIRETORIA 3",
-        COALESCE(p1.gerencia, p2.gerencia, p3.gerencia, a.gerencia) AS "GERÊNCIA",
-        COALESCE(p1.gestor, p2.gestor, p3.gestor, a.gestor) AS "GESTOR",
-        COALESCE(p1.gestor, p2.gestor, p3.gestor, a.gestor) AS "Supervisor",
+        COALESCE(spi.gerencia, p1.gerencia, p2.gerencia, p3.gerencia, a.gerencia) AS "GERÊNCIA",
+        CASE 
+          WHEN COALESCE(p1.diretoria_3, p2.diretoria_3, p3.diretoria_3, a.diretoria_3) = 'DIR SERVICOS AO CLIENTE SP INTERIOR' AND spi.gestor_atual IS NOT NULL
+          THEN spi.gestor_atual
+          ELSE COALESCE(p1.gestor, p2.gestor, p3.gestor, a.gestor)
+        END AS "GESTOR",
+        CASE 
+          WHEN COALESCE(p1.diretoria_3, p2.diretoria_3, p3.diretoria_3, a.diretoria_3) = 'DIR SERVICOS AO CLIENTE SP INTERIOR' AND spi.gestor_atual IS NOT NULL
+          THEN spi.gestor_atual
+          ELSE COALESCE(p1.gestor, p2.gestor, p3.gestor, a.gestor)
+        END AS "Supervisor",
         a.mes AS "Mês",
         a.ano AS "Ano"
       FROM a
       LEFT JOIN po_by_id   p1 ON p1.uid = a.uid_mat
       LEFT JOIN po_by_id   p2 ON p2.uid = a.uid_re
       LEFT JOIN po_by_nome p3 ON p3.nome_n = a.nome_n
+      LEFT JOIN spi_by_mat spi ON (spi.matricula = a.uid_mat OR spi.matricula = a.uid_re)
       ORDER BY a.data_inicio DESC;
     `);
 
