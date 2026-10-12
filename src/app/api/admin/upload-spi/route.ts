@@ -123,7 +123,7 @@ export async function POST(req: Request) {
           : '';
         if (!mat) continue;
 
-        const gestorAtualVal = (get(row, H.gestorAtual) || get(row, H.gestorOriginal) || '').toString().trim();
+        const gestorAtualVal = (get(row, H.gestorAtual) || get(row, H.gestorOriginal) || '').toString().trim().toUpperCase();
         if (!gestorAtualVal) continue;
 
         const anoVal = parseInt(get(row, H.ano), 10) || new Date().getFullYear();

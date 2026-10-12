@@ -133,9 +133,18 @@ export async function GET(req: NextRequest) {
           const p = (idMat && poById.get(idMat)) || (idRe && poById.get(idRe)) || poByNome.get(normNome(a.nome_auditor) || '') || null;
           const spi = (idMat && spiByMat.get(idMat)) || (idRe && spiByMat.get(idRe)) || null;
 
-          const diretoria = p?.diretoria_3 || a.diretoria_3 || (spi ? INTERIOR : null);
-          const gestorBase = p?.gestor || a.gestor || null;
-          const gestor = spi && spi.gestor_atual && (diretoria === INTERIOR || !diretoria) ? spi.gestor_atual : gestorBase;
+          // Diretoria: se está na planilha de correção do Interior, é estritamente INTERIOR com override.
+          // Se o PO geral indicava Interior mas a pessoa NÃO está na planilha oficial do Interior, não entra em DIR SERVICOS AO CLIENTE SP INTERIOR.
+          let diretoria = p?.diretoria_3 || a.diretoria_3 || null;
+          let gestor = p?.gestor || a.gestor || null;
+
+          if (spi) {
+            diretoria = INTERIOR;
+            gestor = (spi.gestor_atual || '').toString().trim().toUpperCase() || gestor;
+          } else if (diretoria === INTERIOR) {
+            // Colaboradores que não constam na planilha de líderes/técnicos do Interior são desconsiderados da DIR SERVICOS AO CLIENTE SP INTERIOR
+            diretoria = 'OUTROS';
+          }
 
           return {
             "Número": a.numero,
