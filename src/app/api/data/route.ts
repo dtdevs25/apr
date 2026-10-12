@@ -92,49 +92,73 @@ export async function GET(req: NextRequest) {
         throw err;
       }
     } else {
-      // Para APR: Consulta otimizada diretamente sobre aprs com override indexado
+      // Para APR: 3 consultas simples + cruzamento em memória (rápido e imune a diferenças de tipo)
       try {
-        const res = await pool.query(`
-          SELECT 
-            a.numero AS "Número",
-            a.data_checklist AS "Data Checklist",
-            a.data_inicio AS "Data Início",
-            a.data_fim AS "Data Fim",
-            a.duracao AS "Duração",
-            a.situacao AS "Situação",
-            a.matricula_auditor AS "Matrícula Auditor",
-            a.nome_auditor AS "Nome Auditor",
-            a.localidade_objeto AS "Localidade Objeto",
-            a.questionario AS "Questionário",
-            a.re AS "RE",
-            COALESCE(spi.cidade_comercial, a.cidade_comercial) AS "CIDADE COMERCIAL",
-            COALESCE(a.uf_comercial, 'SP') AS "UF COMERCIAL",
-            COALESCE(
-              CASE WHEN spi.matricula IS NOT NULL THEN 'DIR SERVICOS AO CLIENTE SP INTERIOR' ELSE NULL END,
-              a.diretoria_3,
-              'DIR SERVICOS AO CLIENTE CAPITAL'
-            ) AS "DIRETORIA 3",
-            COALESCE(spi.gerencia, a.gerencia) AS "GERÊNCIA",
-            CASE 
-              WHEN spi.gestor_atual IS NOT NULL THEN spi.gestor_atual
-              ELSE a.gestor
-            END AS "GESTOR",
-            CASE 
-              WHEN spi.gestor_atual IS NOT NULL THEN spi.gestor_atual
-              ELSE a.gestor
-            END AS "Supervisor",
-            a.mes AS "Mês",
-            a.ano AS "Ano"
-          FROM aprs a
-          LEFT JOIN (
-            SELECT DISTINCT ON (matricula) 
-              matricula, gestor_atual, diretoria_3, gerencia, cidade_comercial
-            FROM po_spi_override
-            ORDER BY matricula, id DESC
-          ) spi ON (spi.matricula = a.matricula_auditor OR (a.matricula_auditor IS NULL AND spi.matricula = a.re))
-          ORDER BY a.data_inicio DESC
-        `);
-        rows = res.rows;
+        const normId = (v: any): string | null => {
+          if (v === null || v === undefined) return null;
+          const s = String(v).trim().replace(/\.0+$/, '').replace(/[^0-9]/g, '').replace(/^0+/, '');
+          return s || null;
+        };
+        const normNome = (v: any): string | null => {
+          if (!v) return null;
+          const s = String(v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toUpperCase();
+          return s || null;
+        };
+
+        const [aprRes, poRes, spiRes] = await Promise.all([
+          pool.query(`SELECT * FROM aprs ORDER BY data_inicio DESC`),
+          pool.query(`SELECT user_id_ssff, nome, diretoria_3, gerencia, gestor, cidade_comercial, uf_comercial FROM po ORDER BY id ASC`).catch(() => ({ rows: [] as any[] })),
+          pool.query(`SELECT matricula, gestor_atual, gerencia, cidade_comercial FROM po_spi_override ORDER BY id ASC`).catch(() => ({ rows: [] as any[] })),
+        ]);
+
+        // Ordem ASC por id: o último sobrescreve -> fica o registro mais recente
+        const poById = new Map<string, any>();
+        const poByNome = new Map<string, any>();
+        for (const p of poRes.rows) {
+          const id = normId(p.user_id_ssff);
+          if (id) poById.set(id, p);
+          const nm = normNome(p.nome);
+          if (nm) poByNome.set(nm, p);
+        }
+        const spiByMat = new Map<string, any>();
+        for (const s of spiRes.rows) {
+          const m = normId(s.matricula);
+          if (m) spiByMat.set(m, s);
+        }
+
+        const INTERIOR = 'DIR SERVICOS AO CLIENTE SP INTERIOR';
+        rows = aprRes.rows.map((a: any) => {
+          const idMat = normId(a.matricula_auditor);
+          const idRe = normId(a.re);
+          const p = (idMat && poById.get(idMat)) || (idRe && poById.get(idRe)) || poByNome.get(normNome(a.nome_auditor) || '') || null;
+          const spi = (idMat && spiByMat.get(idMat)) || (idRe && spiByMat.get(idRe)) || null;
+
+          const diretoria = p?.diretoria_3 || a.diretoria_3 || (spi ? INTERIOR : null);
+          const gestorBase = p?.gestor || a.gestor || null;
+          const gestor = spi && spi.gestor_atual && (diretoria === INTERIOR || !diretoria) ? spi.gestor_atual : gestorBase;
+
+          return {
+            "Número": a.numero,
+            "Data Checklist": a.data_checklist,
+            "Data Início": a.data_inicio,
+            "Data Fim": a.data_fim,
+            "Duração": a.duracao,
+            "Situação": a.situacao,
+            "Matrícula Auditor": a.matricula_auditor,
+            "Nome Auditor": a.nome_auditor,
+            "Localidade Objeto": a.localidade_objeto,
+            "Questionário": a.questionario,
+            "RE": a.re,
+            "CIDADE COMERCIAL": spi?.cidade_comercial || p?.cidade_comercial || a.cidade_comercial || null,
+            "UF COMERCIAL": p?.uf_comercial || a.uf_comercial || null,
+            "DIRETORIA 3": diretoria,
+            "GERÊNCIA": spi?.gerencia || p?.gerencia || a.gerencia || null,
+            "GESTOR": gestor,
+            "Supervisor": gestor,
+            "Mês": a.mes,
+            "Ano": a.ano,
+          };
+        });
       } catch (err: any) {
         if (err.code === '42P01') {
           return NextResponse.json([]);
