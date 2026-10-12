@@ -16,6 +16,30 @@ export async function GET(req: NextRequest) {
 
     let rows;
     
+    // Garante que a tabela de override po_spi_override exista
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS po_spi_override (
+          id SERIAL PRIMARY KEY,
+          ano INT,
+          mes VARCHAR(50),
+          matricula VARCHAR(50) NOT NULL,
+          nome VARCHAR(255),
+          gestor_original VARCHAR(255),
+          gestor_atual VARCHAR(255) NOT NULL,
+          ativo INT DEFAULT 1,
+          diretoria_3 VARCHAR(255) DEFAULT 'DIR SERVICOS AO CLIENTE SP INTERIOR',
+          gerencia VARCHAR(255),
+          cidade_comercial VARCHAR(255),
+          cargo VARCHAR(255),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT po_spi_override_uniq UNIQUE (ano, mes, matricula)
+        );
+      `);
+    } catch (e) {
+      // Ignora caso não tenha permissão de DDL
+    }
+
     if (type === 'DSS') {
       try {
         const ACC_FROM = 'ÁÀÂÃÄáàâãäÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÕÖóòôõöÚÙÛÜúùûüÇçÑñ';
