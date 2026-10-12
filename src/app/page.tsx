@@ -1137,13 +1137,20 @@ export default function Dashboard() {
                       {adminAction === 'apr' ? 'Upload de APRs' : adminAction === 'dss' ? 'Upload de DSS' : 'Upload do Plano'}
                     </h4>
                     <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-2">
-                      Selecione o arquivo {adminAction === 'dss' ? 'CSV' : 'XLSX'} para importar os dados para o banco.
+                      {adminAction === 'apr' 
+                        ? 'Selecione o arquivo XLSX ou o arquivo bruto auditoria.CSV para importar para o banco.'
+                        : `Selecione o arquivo ${adminAction === 'dss' ? 'CSV' : 'XLSX'} para importar os dados para o banco.`}
                     </p>
                     
                     <label className="w-full border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer hover:border-[#660099] dark:hover:border-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-all">
                       <UploadCloud className="text-gray-400 dark:text-gray-500 mb-2" size={32} />
                       <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">Clique para selecionar o arquivo</span>
-                      <input type="file" accept={adminAction === 'dss' ? ".csv" : ".xlsx, .xls"} className="hidden" onChange={handleFileUpload} />
+                      <input 
+                        type="file" 
+                        accept={adminAction === 'apr' ? ".xlsx, .xls, .csv" : adminAction === 'dss' ? ".csv" : ".xlsx, .xls"} 
+                        className="hidden" 
+                        onChange={handleFileUpload} 
+                      />
                     </label>
 
                     {uploadStatus && (
