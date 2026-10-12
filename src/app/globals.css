@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --vivo-purple: #660099;
   --vivo-purple-light: #9933cc;
@@ -9,6 +11,14 @@
   --text-main: #1d1d1f;
   --text-muted: #86868b;
   --border-color: #e5e5ea;
+}
+
+.dark {
+  --bg-color: #0b0f19; /* Sleek dark background */
+  --card-bg: #151d2f;
+  --text-main: #f3f4f6;
+  --text-muted: #94a3b8;
+  --border-color: #1e293b;
 }
 
 *, *::before, *::after {
@@ -39,6 +49,10 @@ html, body {
   background: #d1d5db;
   border-radius: 9999px;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: var(--vivo-purple);
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
 }
+::-webkit-scrollbar-thumb:hover {
+  background: var(--vivo-purple-light);
+}
+
