@@ -168,14 +168,14 @@ export async function GET(req: NextRequest) {
               matricula, gestor_atual, diretoria_3, gerencia, cidade_comercial
             FROM po_spi_override
             ORDER BY matricula, id DESC
-          ) spi ON (spi.matricula = a.matricula_auditor OR (a.matricula_auditor IS NULL AND spi.matricula = a.re))
+          ) spi ON (spi.matricula::text = a.matricula_auditor::text OR (a.matricula_auditor IS NULL AND spi.matricula::text = a.re::text))
           LEFT JOIN (
             SELECT DISTINCT ON (user_id_ssff) 
               user_id_ssff, diretoria_3, gerencia, gestor, cidade_comercial, uf_comercial
             FROM po
             WHERE user_id_ssff IS NOT NULL
             ORDER BY user_id_ssff, id DESC
-          ) p ON (a.diretoria_3 IS NULL AND (p.user_id_ssff = a.matricula_auditor OR p.user_id_ssff = a.re))
+          ) p ON (a.diretoria_3 IS NULL AND (p.user_id_ssff::text = a.matricula_auditor::text OR p.user_id_ssff::text = a.re::text))
           ORDER BY a.data_inicio DESC
         `);
         rows = res.rows;
