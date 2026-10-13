@@ -183,7 +183,7 @@ export default function Dashboard() {
   const [showPassword, setShowPassword] = useState(false);
   const [adminAuthStatus, setAdminAuthStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [uploadStatus, setUploadStatus] = useState('');
-  const [rankingGroup, setRankingGroup] = useState<'supervisor' | 'cidade'>('supervisor');
+  const [rankingGroup, setRankingGroup] = useState<'colaborador' | 'cidade' | 'lider'>('colaborador');
 
   const handleAdminAuth = async () => {
     setAdminAuthStatus('loading');
@@ -354,6 +354,32 @@ export default function Dashboard() {
     setSelectedSupervisors([]);
     setSelectedCities([]);
     setSelectedAuditores([]);
+    setRankingGroup(selectedModule === 'DSS' ? 'lider' : 'colaborador');
+  };
+
+  const handleSelectModule = (mod: 'APR' | 'DSS') => {
+    setSelectedMonths([]);
+    setSelectedTipos([]);
+    setSelectedDiretorias([]);
+    setSelectedSupervisors([]);
+    setSelectedCities([]);
+    setSelectedAuditores([]);
+    setRankingGroup(mod === 'DSS' ? 'lider' : 'colaborador');
+    setSelectedAuditorDetails(null);
+    setSelectedModule(mod);
+  };
+
+  const handleBackToModules = () => {
+    setSelectedMonths([]);
+    setSelectedTipos([]);
+    setSelectedDiretorias([]);
+    setSelectedSupervisors([]);
+    setSelectedCities([]);
+    setSelectedAuditores([]);
+    setRankingGroup('colaborador');
+    setSelectedAuditorDetails(null);
+    setSelectedModule(null);
+    setData([]);
   };
 
   const filteredData = useMemo(() => {
@@ -417,7 +443,12 @@ export default function Dashboard() {
     
     if (selectedModule === 'DSS') {
       filteredData.forEach(item => {
-        const name = rankingGroup === 'cidade' ? (item['CIDADE COMERCIAL'] || 'Não Identificada') : (item['Supervisor'] || item['Líder'] || 'Não Identificado');
+        let name = item['Supervisor'] || item['Líder'] || 'Não Identificado';
+        if (rankingGroup === 'cidade') {
+          name = item['CIDADE COMERCIAL'] || 'Não Identificada';
+        } else if (rankingGroup === 'colaborador') {
+          name = item['Nome'] || item['Matrícula'] || 'Não Identificado';
+        }
         
         if (selectedAuditores.length > 0 && !selectedAuditores.includes(item['Nome']) && !selectedAuditores.includes(item['Matrícula'])) return;
         
@@ -433,7 +464,9 @@ export default function Dashboard() {
       });
     } else {
       filteredData.forEach(item => {
-        const name = rankingGroup === 'cidade' ? (item['CIDADE COMERCIAL'] || 'Não Identificada') : (item['Supervisor'] || item['SUPERVISOR'] || item['GESTOR'] || 'Não Identificado');
+        const name = rankingGroup === 'cidade' 
+          ? (item['CIDADE COMERCIAL'] || 'Não Identificada') 
+          : (item['Nome Auditor'] || item['Matrícula Auditor'] || 'Não Identificado');
         
         const mat = item['Matrícula Auditor'] || 'N/A';
         const auditorName = item['Nome Auditor'] || mat;
@@ -518,9 +551,13 @@ export default function Dashboard() {
     const rankingData = rankAgg.map((item, idx) => {
       const expected = Math.round(targetAprs * (item.uniquePeople?.size || 1));
       const perc = expected > 0 ? ((item.count / expected) * 100).toFixed(1) + '%' : '0%';
+      const rankColHeader = selectedModule === 'DSS' 
+        ? (rankingGroup === 'cidade' ? 'Cidade' : rankingGroup === 'colaborador' ? 'Colaborador' : 'Líder DSS') 
+        : (rankingGroup === 'cidade' ? 'Cidade' : 'Colaborador');
+
       return {
         "Posição": `${idx + 1}º`,
-        [selectedModule === 'DSS' ? (rankingGroup === 'supervisor' ? 'Líder' : 'Cidade') : (rankingGroup === 'supervisor' ? 'Supervisor' : 'Cidade')]: item.name,
+        [rankColHeader]: item.name,
         "Realizado": item.count,
         "Esperado": expected,
         "Meta (%)": perc,
@@ -552,9 +589,13 @@ export default function Dashboard() {
       { wch: 20 },  // Participantes / Duração
     ];
 
+    const rankTitle = selectedModule === 'DSS' 
+      ? (rankingGroup === 'cidade' ? 'Cidade' : rankingGroup === 'colaborador' ? 'Colaborador' : 'Líder DSS') 
+      : (rankingGroup === 'cidade' ? 'Cidade' : 'Colaborador');
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws_dados, `Dados ${selectedModule}`);
-    XLSX.utils.book_append_sheet(wb, ws_ranking, `Ranking por ${rankingGroup === 'supervisor' ? 'Supervisor' : 'Cidade'}`);
+    XLSX.utils.book_append_sheet(wb, ws_ranking, `Ranking por ${rankTitle}`);
 
     if (selectedModule === 'APR') {
       const atividadeData = rankAtividade.map((item, idx) => ({
@@ -607,7 +648,7 @@ export default function Dashboard() {
         <motion.div 
           initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}
           whileHover={{ scale: 1.03, y: -5 }} whileTap={{ scale: 0.98 }}
-          onClick={() => setSelectedModule('APR')}
+          onClick={() => handleSelectModule('APR')}
           className="bg-white/80 dark:bg-[#151d2f]/80 backdrop-blur-xl p-10 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.3)] hover:shadow-[0_20px_40px_rgba(102,0,153,0.15)] dark:hover:shadow-[0_20px_40px_rgba(102,0,153,0.3)] border border-white/40 dark:border-gray-800 hover:border-purple-300 dark:hover:border-purple-500 cursor-pointer transition-all flex flex-col items-center text-center group"
         >
           <div className="w-20 h-20 bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950/60 dark:to-purple-900/40 text-[#660099] dark:text-purple-400 rounded-2xl flex items-center justify-center mb-5 group-hover:from-[#660099] group-hover:to-[#8000bf] group-hover:text-white transition-all duration-300 shadow-sm">
@@ -620,7 +661,7 @@ export default function Dashboard() {
         <motion.div 
           initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}
           whileHover={{ scale: 1.03, y: -5 }} whileTap={{ scale: 0.98 }}
-          onClick={() => setSelectedModule('DSS')}
+          onClick={() => handleSelectModule('DSS')}
           className="bg-white/80 dark:bg-[#151d2f]/80 backdrop-blur-xl p-10 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.3)] hover:shadow-[0_20px_40px_rgba(59,130,246,0.15)] dark:hover:shadow-[0_20px_40px_rgba(59,130,246,0.3)] border border-white/40 dark:border-gray-800 hover:border-blue-300 dark:hover:border-blue-500 cursor-pointer transition-all flex flex-col items-center text-center group"
         >
           <div className="w-20 h-20 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/60 dark:to-blue-900/40 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center mb-5 group-hover:from-blue-500 group-hover:to-blue-600 group-hover:text-white transition-all duration-300 shadow-sm">
@@ -651,7 +692,7 @@ export default function Dashboard() {
         <div className="max-w-[1600px] mx-auto px-6 py-2.5 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button 
-              onClick={() => { setSelectedModule(null); setData([]); }}
+              onClick={handleBackToModules}
               className="flex items-center justify-center w-8 h-8 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-950/40 hover:text-[#660099] dark:hover:text-purple-400 hover:border-purple-200 dark:hover:border-purple-700 transition-all shadow-sm"
               title="Voltar aos Módulos"
             >
@@ -691,31 +732,43 @@ export default function Dashboard() {
         <div className="bg-gray-50/50 dark:bg-[#0f172a]/70 backdrop-blur-md border-t border-gray-100 dark:border-gray-800/80">
           <div className="max-w-[1600px] mx-auto px-6 py-2 flex flex-wrap items-center gap-4">
             
-            {selectedModule === 'DSS' ? (
-              <div className="relative">
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tipo de Ranking</span>
-                  <div className="relative">
-                    <select
-                      value={rankingGroup}
-                      onChange={(e) => setRankingGroup(e.target.value as any)}
-                      className="appearance-none flex items-center justify-between px-3 py-1.5 w-48 bg-white dark:bg-[#1e293b] border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm text-xs font-medium text-gray-700 dark:text-gray-200 outline-none focus:border-purple-300 dark:focus:border-purple-500 focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-900/50 cursor-pointer transition-all pr-8"
-                    >
-                      <option value="supervisor">Por Supervisor</option>
-                      <option value="cidade">Por Cidade</option>
-                    </select>
-                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                  </div>
+            <div className="relative">
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tipo</span>
+                <div className="relative">
+                  <select
+                    value={rankingGroup}
+                    onChange={(e) => setRankingGroup(e.target.value as any)}
+                    className="appearance-none flex items-center justify-between px-3 py-1.5 w-48 bg-white dark:bg-[#1e293b] border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm text-xs font-medium text-gray-700 dark:text-gray-200 outline-none focus:border-purple-300 dark:focus:border-purple-500 focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-900/50 cursor-pointer transition-all pr-8"
+                  >
+                    {selectedModule === 'APR' ? (
+                      <>
+                        <option value="colaborador">Por Colaborador</option>
+                        <option value="cidade">Por Cidade</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="lider">Por Líder</option>
+                        <option value="cidade">Por Cidade</option>
+                        <option value="colaborador">Por Colaborador</option>
+                      </>
+                    )}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                 </div>
               </div>
-            ) : (
-              <PremiumMultiSelect label="Tipo de APR" options={allTipos} selected={selectedTipos} onChange={handleMultiSelect(setSelectedTipos)} icon={FileText} />
-            )}
+            </div>
 
             <div className="w-px h-12 bg-gray-200 dark:bg-gray-800 hidden md:block"></div>
 
             <PremiumMultiSelect label="Diretoria" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-[340px]" />
-            <PremiumMultiSelect label="Supervisor/Líder" options={allSupervisors} selected={selectedSupervisors} onChange={handleMultiSelect(setSelectedSupervisors)} icon={Users} />
+            <PremiumMultiSelect 
+              label={selectedModule === 'APR' ? 'Supervisor' : 'Líder DSS'} 
+              options={allSupervisors} 
+              selected={selectedSupervisors} 
+              onChange={handleMultiSelect(setSelectedSupervisors)} 
+              icon={Users} 
+            />
             <PremiumMultiSelect label="Cidade" options={allCities} selected={selectedCities} onChange={handleMultiSelect(setSelectedCities)} icon={MapPin} />
 
             {(selectedMonths.length > 0 || selectedTipos.length > 0 || selectedDiretorias.length > 0 || selectedSupervisors.length > 0 || selectedCities.length > 0 || selectedAuditores.length > 0) && (
@@ -811,16 +864,33 @@ export default function Dashboard() {
           {/* Ranking List (Main) */}
           <div className="bg-white dark:bg-[#151d2f] rounded-2xl p-6 border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col h-[600px] transition-colors duration-200">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Ranking por {rankingGroup === 'supervisor' ? 'Supervisor' : 'Cidade'}</h2>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                Ranking por {
+                  selectedModule === 'DSS'
+                    ? (rankingGroup === 'cidade' ? 'Cidade' : rankingGroup === 'colaborador' ? 'Colaborador' : 'Líder DSS')
+                    : (rankingGroup === 'cidade' ? 'Cidade' : 'Colaborador')
+                }
+              </h2>
               <div className="z-20">
-                <PremiumMultiSelect label={selectedModule === 'DSS' ? 'Filtrar Líder' : 'Filtrar Colaborador'} options={allAuditores} selected={selectedAuditores} onChange={handleMultiSelect(setSelectedAuditores)} icon={UserCheck} widthClass="w-[280px]" />
+                <PremiumMultiSelect 
+                  label={selectedModule === 'DSS' ? 'Filtrar Participante' : 'Filtrar Colaborador'} 
+                  options={allAuditores} 
+                  selected={selectedAuditores} 
+                  onChange={handleMultiSelect(setSelectedAuditores)} 
+                  icon={UserCheck} 
+                  widthClass="w-[280px]" 
+                />
               </div>
             </div>
             
             {/* Table Header */}
             <div className="grid grid-cols-[30px_1fr_80px_80px_80px_110px] items-center gap-4 px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-100 dark:border-gray-800 mb-2">
               <div>#</div>
-              <div>{selectedModule === 'DSS' ? (rankingGroup === 'supervisor' ? 'Líder' : 'Cidade') : (rankingGroup === 'supervisor' ? 'Supervisor' : 'Cidade')}</div>
+              <div>
+                {selectedModule === 'DSS'
+                  ? (rankingGroup === 'cidade' ? 'Cidade' : rankingGroup === 'colaborador' ? 'Colaborador' : 'Líder DSS')
+                  : (rankingGroup === 'cidade' ? 'Cidade' : 'Colaborador')}
+              </div>
               <div className="text-center">Realizado</div>
               <div className="flex items-center justify-center gap-1">
                 Esperado
