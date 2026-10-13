@@ -6,6 +6,34 @@ export const dynamic = 'force-dynamic';
 
 const CACHE_TTL_MS = 60 * 1000; // 1 minute cache
 
+const CITY_NORM_MAP: Record<string, string> = {
+  'SAO PAULO': 'SÃO PAULO',
+  'SAO BERNARDO DO CAMPO': 'SÃO BERNARDO DO CAMPO',
+  'SAO JOSE DOS CAMPOS': 'SÃO JOSÉ DOS CAMPOS',
+  'SAO JOSE DO RIO PRETO': 'SÃO JOSÉ DO RIO PRETO',
+  'SAO CARLOS': 'SÃO CARLOS',
+  'SAO VICENTE': 'SÃO VICENTE',
+  'SANTO ANDRE': 'SANTO ANDRÉ',
+  'MAUA': 'MAUÁ',
+  'GUARUJA': 'GUARUJÁ',
+  'CUBATAO': 'CUBATÃO',
+  'RIBEIRAO PRETO': 'RIBEIRÃO PRETO',
+  'ARACATUBA': 'ARAÇATUBA',
+  'JAU': 'JAÚ',
+  'JUNDIAI': 'JUNDIAÍ',
+  'MARILIA': 'MARÍLIA',
+};
+
+function cleanCidade(v: any): string | null {
+  if (!v) return null;
+  const s = String(v).trim();
+  if (!s) return null;
+  const withoutPrefix = s.replace(/^[A-Z]{2}(\s+[-–—]?\s*|\s*[-–—]\s*)/i, '').replace(/\s+/g, ' ').trim();
+  const upper = (withoutPrefix || s).toUpperCase();
+  const unaccented = upper.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return CITY_NORM_MAP[unaccented] || upper;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const type = req.nextUrl.searchParams.get('type') || 'APR';
@@ -77,7 +105,7 @@ export async function GET(req: NextRequest) {
               WHEN p3.cargo ILIKE '%SUPERVISOR%' OR p3.cargo ILIKE '%COORDENADOR%' OR p3.cargo ILIKE '%COORD%' THEN d.lider
               ELSE d.lider || ' (Líder)'
             END AS "Supervisor",
-            COALESCE(spi_g.cidade_comercial, p3.cidade_comercial, pc.cidade_comercial, d.localidade) AS "CIDADE COMERCIAL"
+            COALESCE(d.localidade, spi_g.cidade_comercial, p3.cidade_comercial, pc.cidade_comercial) AS "CIDADE COMERCIAL"
           FROM d_norm d
           LEFT JOIN po_by_nome p3 ON p3.nome_n = d.lider_n
           LEFT JOIN po_by_cidade pc ON pc.cidade_norm = d.localidade_norm
@@ -158,7 +186,7 @@ export async function GET(req: NextRequest) {
             "Localidade Objeto": a.localidade_objeto,
             "Questionário": a.questionario,
             "RE": a.re,
-            "CIDADE COMERCIAL": spi?.cidade_comercial || p?.cidade_comercial || a.cidade_comercial || null,
+            "CIDADE COMERCIAL": cleanCidade(a.localidade_objeto) || cleanCidade(a.cidade_comercial) || cleanCidade(spi?.cidade_comercial) || cleanCidade(p?.cidade_comercial) || null,
             "UF COMERCIAL": p?.uf_comercial || a.uf_comercial || null,
             "DIRETORIA 3": diretoria,
             "GERÊNCIA": spi?.gerencia || p?.gerencia || a.gerencia || null,
@@ -187,12 +215,14 @@ export async function GET(req: NextRequest) {
       if (type === 'DSS') {
         return {
           ...r,
+          "CIDADE COMERCIAL": cleanCidade(r["CIDADE COMERCIAL"]),
           "Data Fechamento": formatData(r["Data Fechamento"])
         };
       }
 
       return {
         ...r,
+        "CIDADE COMERCIAL": cleanCidade(r["CIDADE COMERCIAL"]),
         "Data Checklist": formatData(r["Data Checklist"]),
         "Data Início": formatData(r["Data Início"]),
         "Data Fim": formatData(r["Data Fim"])

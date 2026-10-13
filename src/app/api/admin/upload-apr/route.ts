@@ -23,6 +23,34 @@ export async function POST(req: Request) {
     const normalizeKey = (str: string) => 
       str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
 
+    const CITY_NORM_MAP: Record<string, string> = {
+      'SAO PAULO': 'SÃO PAULO',
+      'SAO BERNARDO DO CAMPO': 'SÃO BERNARDO DO CAMPO',
+      'SAO JOSE DOS CAMPOS': 'SÃO JOSÉ DOS CAMPOS',
+      'SAO JOSE DO RIO PRETO': 'SÃO JOSÉ DO RIO PRETO',
+      'SAO CARLOS': 'SÃO CARLOS',
+      'SAO VICENTE': 'SÃO VICENTE',
+      'SANTO ANDRE': 'SANTO ANDRÉ',
+      'MAUA': 'MAUÁ',
+      'GUARUJA': 'GUARUJÁ',
+      'CUBATAO': 'CUBATÃO',
+      'RIBEIRAO PRETO': 'RIBEIRÃO PRETO',
+      'ARACATUBA': 'ARAÇATUBA',
+      'JAU': 'JAÚ',
+      'JUNDIAI': 'JUNDIAÍ',
+      'MARILIA': 'MARÍLIA',
+    };
+
+    const cleanCidade = (v: any): string | null => {
+      if (!v) return null;
+      const s = String(v).trim();
+      if (!s) return null;
+      const withoutPrefix = s.replace(/^[A-Z]{2}(\s+[-–—]?\s*|\s*[-–—]\s*)/i, '').replace(/\s+/g, ' ').trim();
+      const upper = (withoutPrefix || s).toUpperCase();
+      const unaccented = upper.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      return CITY_NORM_MAP[unaccented] || upper;
+    };
+
     const isCsv = fileName.endsWith('.csv') || file.type === 'text/csv';
 
     if (isCsv) {
@@ -131,7 +159,7 @@ export async function POST(req: Request) {
         if (!mes && dataInicio) mes = dataInicio.getMonth() + 1;
         if (!ano && dataInicio) ano = dataInicio.getFullYear();
 
-        const cidadeComercial = getVal(['CIDADE COMERCIAL']) || null;
+        const cidadeComercial = cleanCidade(getVal(['CIDADE COMERCIAL'])) || cleanCidade(localidadeRaw) || null;
         const ufComercial = getVal(['UF COMERCIAL']) || 'SP';
         const diretoria3 = getVal(['DIRETORIA 3', 'DIRETORIA3']) || null;
         const gerencia = getVal(['GERÊNCIA', 'GERENCIA']) || null;
@@ -247,7 +275,7 @@ export async function POST(req: Request) {
         if (!mes && dataInicio) mes = dataInicio.getMonth() + 1;
         if (!ano && dataInicio) ano = dataInicio.getFullYear();
 
-        const cidadeComercial = getVal(['CIDADE COMERCIAL']) || null;
+        const cidadeComercial = cleanCidade(getVal(['CIDADE COMERCIAL'])) || cleanCidade(localidadeRaw) || null;
         const ufComercial = getVal(['UF COMERCIAL']) || 'SP';
         const diretoria3 = getVal(['DIRETORIA 3', 'DIRETORIA3']) || null;
         const gerencia = getVal(['GERÊNCIA', 'GERENCIA']) || null;
