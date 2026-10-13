@@ -385,19 +385,27 @@ export default function Dashboard() {
   const filteredData = useMemo(() => {
     return baseData.filter(item => {
       if (selectedModule === 'DSS') {
-        return (selectedMonths.length === 0 || selectedMonths.includes(String(item['Mês']))) &&
+        const matchAuditor = selectedAuditores.length === 0 || 
+          selectedAuditores.includes(item['Nome']) || 
+          selectedAuditores.includes(item['Matrícula']);
+        return matchAuditor &&
+               (selectedMonths.length === 0 || selectedMonths.includes(String(item['Mês']))) &&
                (selectedTipos.length === 0 || selectedTipos.includes(item['Assunto'])) &&
                (selectedDiretorias.length === 0 || selectedDiretorias.includes(item['DIRETORIA 3'])) &&
                (selectedSupervisors.length === 0 || selectedSupervisors.includes(item['Supervisor'])) &&
                (selectedCities.length === 0 || selectedCities.includes(item['CIDADE COMERCIAL']));
       }
-      return (selectedMonths.length === 0 || selectedMonths.includes(String(item['Mês']))) &&
+      const matchAuditor = selectedAuditores.length === 0 || 
+        selectedAuditores.includes(item['Nome Auditor']) || 
+        selectedAuditores.includes(item['Matrícula Auditor']);
+      return matchAuditor &&
+             (selectedMonths.length === 0 || selectedMonths.includes(String(item['Mês']))) &&
              (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(item['Questionário']))) &&
              (selectedDiretorias.length === 0 || selectedDiretorias.includes(item['DIRETORIA 3'])) &&
              (selectedSupervisors.length === 0 || selectedSupervisors.includes(item['Supervisor'] || item['SUPERVISOR'] || item['GESTOR'])) &&
              (selectedCities.length === 0 || selectedCities.includes(item['CIDADE COMERCIAL']));
     });
-  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities, selectedModule]);
+  }, [baseData, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities, selectedAuditores, selectedModule]);
 
   // KPIs
   const totalAprs = selectedModule === 'DSS' ? new Set(filteredData.map(i => i['Número do Diálogo'])).size : filteredData.length;
@@ -454,7 +462,11 @@ export default function Dashboard() {
         
         if (!agg[name]) agg[name] = { count: 0, name, data: [], totalSecs: 0, validCount: 0, dssSet: new Set(), uniquePeople: new Set() };
         agg[name].data.push(item);
-        agg[name].uniquePeople.add(item['Supervisor'] || item['Líder'] || 'N/A');
+        if (rankingGroup === 'cidade') {
+          agg[name].uniquePeople.add(item['Supervisor'] || item['Líder'] || item['Nome'] || 'N/A');
+        } else {
+          agg[name].uniquePeople.add(name);
+        }
         
         const dssId = item['Número do Diálogo'];
         if (dssId && !agg[name].dssSet.has(dssId)) {
@@ -549,7 +561,8 @@ export default function Dashboard() {
 
     // Planilha 2: Ranking
     const rankingData = rankAgg.map((item, idx) => {
-      const expected = Math.round(targetAprs * (item.uniquePeople?.size || 1));
+      const multiplier = rankingGroup === 'cidade' ? (item.uniquePeople?.size || 1) : 1;
+      const expected = Math.round(targetAprs * multiplier);
       const perc = expected > 0 ? ((item.count / expected) * 100).toFixed(1) + '%' : '0%';
       const rankColHeader = selectedModule === 'DSS' 
         ? (rankingGroup === 'cidade' ? 'Cidade' : rankingGroup === 'colaborador' ? 'Colaborador' : 'Líder DSS') 
@@ -791,11 +804,14 @@ export default function Dashboard() {
         
         {/* KPIs */}
         {(() => {
-          const totalEsperadoDss = Math.round(targetAprs * supervisoresUnicos);
+          const basePessoasDss = selectedAuditores.length > 0 
+            ? auditoresSet.size 
+            : (rankingGroup === 'colaborador' ? auditoresSet.size : supervisoresUnicos);
+          const totalEsperadoDss = Math.round(targetAprs * basePessoasDss);
           const percAtendimento = totalEsperadoDss > 0 ? ((totalAprs / totalEsperadoDss) * 100).toFixed(1) : '0.0';
           const kpisToRender = selectedModule === 'DSS' ? [
             { v: formatNum(totalAuditores), l: 'Participantes', icon: Users, c: 'border-l-purple-500', t: 'text-purple-500' },
-            { v: formatNum(supervisoresUnicos), l: 'Supervisores', icon: UserCheck, c: 'border-l-teal-500', t: 'text-teal-500' },
+            { v: formatNum(supervisoresUnicos), l: 'Líder DSS', icon: UserCheck, c: 'border-l-teal-500', t: 'text-teal-500' },
             { v: formatNum(totalEsperadoDss), l: 'DSS Esperados', icon: FileCheck, c: 'border-l-blue-500', t: 'text-blue-500' },
             { v: formatNum(totalAprs), l: 'DSS Realizados', icon: FileText, c: 'border-l-pink-500', t: 'text-pink-500' },
             { v: `${percAtendimento}%`, l: 'Atendimento', icon: Activity, c: 'border-l-orange-500', t: 'text-orange-500' }
@@ -907,7 +923,8 @@ export default function Dashboard() {
                 const pct = (item.count / maxRank) * 100;
                 const colors = ['bg-pink-500', 'bg-blue-500', 'bg-green-500', 'bg-orange-500', 'bg-purple-500', 'bg-teal-500', 'bg-yellow-500'];
                 const barColor = colors[idx % colors.length];
-                const expected = Math.round(targetAprs * (item.uniquePeople?.size || 1));
+                const multiplier = rankingGroup === 'cidade' ? (item.uniquePeople?.size || 1) : 1;
+                const expected = Math.round(targetAprs * multiplier);
 
                 return (
                   <div key={`${item.name}-${idx}`}>
