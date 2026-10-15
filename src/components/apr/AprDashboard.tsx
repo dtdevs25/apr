@@ -55,7 +55,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isMetaModalOpen, setIsMetaModalOpen] = useState(false);
   const [rankingGroup, setRankingGroup] = useState<'colaborador' | 'cidade'>('colaborador');
-  const [rankingFilter, setRankingFilter] = useState<'todos' | 'mais' | 'menos' | 'sem_apr'>('todos');
+  const [rankingFilter, setRankingFilter] = useState<'todos' | 'sem_apr'>('todos');
   const [selectedAuditorDetails, setSelectedAuditorDetails] = useState<any | null>(null);
 
   // Filtros
@@ -321,11 +321,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
   const rankAgg = useMemo(() => {
     let list = [...allRankAgg];
     if (rankingGroup === 'colaborador') {
-      if (rankingFilter === 'mais') {
-        list = list.filter(i => i.count > 0).sort((a, b) => b.count - a.count);
-      } else if (rankingFilter === 'menos') {
-        list = list.filter(i => i.count > 0).sort((a, b) => a.count - b.count);
-      } else if (rankingFilter === 'sem_apr') {
+      if (rankingFilter === 'sem_apr') {
         list = list.filter(i => i.count === 0).sort((a, b) => a.name.localeCompare(b.name));
       } else {
         // 'todos': quem mais fez no topo, quem não fez no final
@@ -623,7 +619,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
             <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
               <img src="/icone.png" alt="Vivo" className="h-7 object-contain" />
               <span className="h-5 w-px bg-gray-300 dark:bg-gray-700 ml-1"></span>
-              Painel de APR (Análise Preliminar de Riscos)
+              Painel de APR
             </h1>
           </div>
           <div className="flex items-center gap-3">
@@ -673,7 +669,6 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
 
             <div className="w-px h-12 bg-gray-200 dark:bg-gray-800 hidden md:block"></div>
 
-            <PremiumMultiSelect label="Tipo de Atividade" options={allTipos} selected={selectedTipos} onChange={handleMultiSelect(setSelectedTipos)} icon={FileText} widthClass="w-[220px]" />
             <PremiumMultiSelect label="Diretoria" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-[320px]" />
             <PremiumMultiSelect label="Supervisor" options={allSupervisors} selected={selectedSupervisors} onChange={handleMultiSelect(setSelectedSupervisors)} icon={Users} />
             <PremiumMultiSelect label="Cidade" options={allCities} selected={selectedCities} onChange={handleMultiSelect(setSelectedCities)} icon={MapPin} />
@@ -811,26 +806,6 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
                   Todos ({allRankAgg.length})
                 </button>
                 <button
-                  onClick={() => setRankingFilter('mais')}
-                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
-                    rankingFilter === 'mais'
-                      ? 'bg-purple-100 dark:bg-purple-950/60 text-[#660099] dark:text-purple-300 border border-purple-300 dark:border-purple-800'
-                      : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  Mais APRs
-                </button>
-                <button
-                  onClick={() => setRankingFilter('menos')}
-                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
-                    rankingFilter === 'menos'
-                      ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-800'
-                      : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  Menos APRs
-                </button>
-                <button
                   onClick={() => setRankingFilter('sem_apr')}
                   className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
                     rankingFilter === 'sem_apr'
@@ -940,22 +915,44 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
             </div>
           </div>
 
-          {/* Ranking por Atividade */}
+          {/* Ranking por Atividade (Clicável para filtrar) */}
           <div className="bg-white dark:bg-[#151d2f] rounded-2xl p-6 border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col h-[600px] transition-colors duration-200">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
-              Atividades de APR
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                Atividades de APR
+              </h2>
+              {selectedTipos.length > 0 && (
+                <button 
+                  onClick={() => setSelectedTipos([])}
+                  className="text-xs text-[#660099] dark:text-purple-400 hover:underline font-semibold"
+                >
+                  Limpar ({selectedTipos.length})
+                </button>
+              )}
+            </div>
             <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin">
               {rankAtividade.map((item, idx) => {
                 const pct = Math.min(100, Math.round((item.count / maxAtiv) * 100));
+                const isSelected = selectedTipos.includes(item.name);
                 return (
-                  <div key={item.name} className="p-3 rounded-xl mb-3 border border-gray-100 dark:border-gray-800">
+                  <div 
+                    key={item.name} 
+                    onClick={() => handleMultiSelect(setSelectedTipos)(item.name)}
+                    className={`p-3 rounded-xl mb-3 border cursor-pointer transition-all ${
+                      isSelected 
+                        ? 'bg-purple-50 dark:bg-purple-950/40 border-[#660099] dark:border-purple-500 shadow-sm' 
+                        : 'border-gray-100 dark:border-gray-800 hover:border-purple-300 dark:hover:border-purple-700 hover:bg-gray-50/50 dark:hover:bg-gray-800/40'
+                    }`}
+                    title="Clique para filtrar ou desfiltrar esta atividade"
+                  >
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-semibold text-xs text-gray-700 dark:text-gray-300">{item.name}</span>
-                      <span className="text-xs font-bold text-[#660099] dark:text-purple-400">{item.count}</span>
+                      <span className={`font-semibold text-xs ${isSelected ? 'text-[#660099] dark:text-purple-300 font-bold' : 'text-gray-700 dark:text-gray-300'}`}>
+                        {item.name}
+                      </span>
+                      <span className="text-xs font-bold text-[#660099] dark:text-purple-400">{formatNum(item.count)}</span>
                     </div>
                     <div className="w-full bg-gray-100 dark:bg-gray-800 h-2 rounded-full overflow-hidden">
-                      <div className="h-full bg-purple-600 rounded-full" style={{ width: `${pct}%` }} />
+                      <div className={`h-full ${isSelected ? 'bg-[#660099] dark:bg-purple-500' : 'bg-purple-600'} rounded-full`} style={{ width: `${pct}%` }} />
                     </div>
                   </div>
                 );
