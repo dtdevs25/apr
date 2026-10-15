@@ -23,6 +23,18 @@ export async function POST(req: Request) {
     const normalizeKey = (str: string) => 
       str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
 
+    const toUpper = (v: any): string | null => {
+      if (v === null || v === undefined) return null;
+      const s = String(v).trim().replace(/\s+/g, ' ').toUpperCase();
+      return s || null;
+    };
+
+    const cleanNumero = (v: any): string | null => {
+      if (v === null || v === undefined) return null;
+      const s = String(v).trim().replace(/\.0+$/, '').replace(/[^0-9]/g, '');
+      return s || null;
+    };
+
     const CITY_NORM_MAP: Record<string, string> = {
       'SAO PAULO': 'SÃO PAULO',
       'SAO BERNARDO DO CAMPO': 'SÃO BERNARDO DO CAMPO',
@@ -114,9 +126,8 @@ export async function POST(req: Request) {
           continue;
         }
 
-        const numeroRaw = getVal(['Número', 'Numero']);
-        if (!numeroRaw) continue;
-        const numero = String(numeroRaw).trim();
+        const numero = cleanNumero(getVal(['Número', 'Numero']));
+        if (!numero) continue;
 
         if (seenNumeros.has(numero)) continue;
         seenNumeros.add(numero);
@@ -124,30 +135,34 @@ export async function POST(req: Request) {
         const dataAberturaStr = getVal(['Data Abertura', 'Data Início', 'Data Inicio', 'Data Checklist']);
         const dataFechamentoStr = getVal(['Data Fechamento', 'Data Fim', 'Data_Fim']);
 
-        const dataInicio = parseDateFlexible(dataAberturaStr);
-        const dataFim = parseDateFlexible(dataFechamentoStr);
-        const dataChecklist = dataInicio || dataFim;
+        const dataInicioObj = parseDateFlexible(dataAberturaStr);
+        const dataFimObj = parseDateFlexible(dataFechamentoStr);
+        const dataChecklistObj = dataInicioObj || dataFimObj;
+
+        const dataInicio = dataInicioObj?.sql || null;
+        const dataFim = dataFimObj?.sql || null;
+        const dataChecklist = dataChecklistObj?.sql || null;
 
         // Duração calculada ou extraída
         let duracao = getVal(['Duração', 'Duracao']);
-        if (!duracao && dataInicio && dataFim) {
-          const diffSec = Math.max(0, Math.floor((dataFim.getTime() - dataInicio.getTime()) / 1000));
+        if (!duracao && dataInicioObj && dataFimObj) {
+          const diffSec = Math.max(0, Math.floor((dataFimObj.getTime() - dataInicioObj.getTime()) / 1000));
           const h = Math.floor(diffSec / 3600);
           const m = Math.floor((diffSec % 3600) / 60);
           const s = diffSec % 60;
           duracao = [h, m, s].map(n => String(n).padStart(2, '0')).join(':');
         }
 
-        const situacao = getVal(['Situação', 'Situacao']) || (dataFim ? 'FECHADO' : 'ABERTO');
+        const situacao = toUpper(getVal(['Situação', 'Situacao'])) || (dataFim ? 'FECHADO' : 'ABERTO');
 
         const matriculaAuditorRaw = getVal(['Matrícula Auditor', 'Matricula Auditor', 'Matrícula', 'Matricula', 'RE']) || '';
         let matriculaAuditor: string | null = String(matriculaAuditorRaw).trim().replace(/\.0+$/, '').replace(/[^0-9]/g, '');
         matriculaAuditor = matriculaAuditor.replace(/^0+/, '') || null;
 
-        const nomeAuditor = getVal(['Nome Auditor', 'Identificador Objeto']) || null;
-        const localidadeObjeto = localidadeRaw || null;
-        const questionario = questionarioRaw || null;
-        const re = getVal(['RE']) || matriculaAuditor;
+        const nomeAuditor = toUpper(getVal(['Nome Auditor', 'Identificador Objeto'])) || null;
+        const localidadeObjeto = toUpper(localidadeRaw) || null;
+        const questionario = toUpper(questionarioRaw) || null;
+        const re = getVal(['RE']) ? cleanNumero(getVal(['RE'])) : matriculaAuditor;
 
         let mes: number | null = null;
         let ano: number | null = null;
@@ -156,14 +171,14 @@ export async function POST(req: Request) {
         if (mesRaw) mes = parseInt(mesRaw);
         if (anoRaw) ano = parseInt(anoRaw);
 
-        if (!mes && dataInicio) mes = dataInicio.getMonth() + 1;
-        if (!ano && dataInicio) ano = dataInicio.getFullYear();
+        if (!mes && dataInicioObj) mes = dataInicioObj.mes;
+        if (!ano && dataInicioObj) ano = dataInicioObj.ano;
 
-        const cidadeComercial = cleanCidade(getVal(['CIDADE COMERCIAL'])) || cleanCidade(localidadeRaw) || null;
-        const ufComercial = getVal(['UF COMERCIAL']) || 'SP';
-        const diretoria3 = getVal(['DIRETORIA 3', 'DIRETORIA3']) || null;
-        const gerencia = getVal(['GERÊNCIA', 'GERENCIA']) || null;
-        const gestor = getVal(['GESTOR', 'Supervisor']) || null;
+        const cidadeComercial = toUpper(cleanCidade(getVal(['CIDADE COMERCIAL'])) || cleanCidade(localidadeRaw)) || null;
+        const ufComercial = 'SP';
+        const diretoria3 = toUpper(getVal(['DIRETORIA 3', 'DIRETORIA3'])) || null;
+        const gerencia = toUpper(getVal(['GERÊNCIA', 'GERENCIA'])) || null;
+        const gestor = toUpper(getVal(['GESTOR', 'Supervisor'])) || null;
 
         numerosNaPlanilha.push(numero);
         rowsToProcess.push({
@@ -237,49 +252,61 @@ export async function POST(req: Request) {
           }
         }
 
-        const numeroRaw = getVal(['Número', 'Numero']);
-        if (!numeroRaw) continue;
+        const numero = cleanNumero(getVal(['Número', 'Numero']));
+        if (!numero) continue;
 
-        const numero = String(numeroRaw).trim();
         if (seenNumeros.has(numero)) continue;
         seenNumeros.add(numero);
 
-        const dataChecklist = parseDateFlexible(getVal(['Data Checklist', 'Data_Checklist', 'Data Abertura']));
-        const dataInicio = parseDateFlexible(getVal(['Data Início', 'Data Inicio', 'Data Abertura']));
-        const dataFim = parseDateFlexible(getVal(['Data Fim', 'Data_Fim', 'Data Fechamento']));
+        const dataChecklistObj = parseDateFlexible(
+          getVal(['Data Checklist', 'Data_Checklist', 'Data Abertura']),
+          getVal(['Hora Checklist', 'Hora Início', 'Hora Inicio'])
+        );
+        const dataInicioObj = parseDateFlexible(
+          getVal(['Data Início', 'Data Inicio', 'Data Abertura']),
+          getVal(['Hora Início', 'Hora Inicio', 'Hora Abertura'])
+        );
+        const dataFimObj = parseDateFlexible(
+          getVal(['Data Fim', 'Data_Fim', 'Data Fechamento']),
+          getVal(['Hora Fim', 'Hora Fechamento'])
+        );
+
+        const dataChecklist = dataChecklistObj?.sql || null;
+        const dataInicio = dataInicioObj?.sql || null;
+        const dataFim = dataFimObj?.sql || null;
         
         let duracao = getVal(['Duração', 'Duracao']);
-        if (!duracao && dataInicio && dataFim) {
-          const diffSec = Math.max(0, Math.floor((dataFim.getTime() - dataInicio.getTime()) / 1000));
+        if (!duracao && dataInicioObj && dataFimObj) {
+          const diffSec = Math.max(0, Math.floor((dataFimObj.getTime() - dataInicioObj.getTime()) / 1000));
           const h = Math.floor(diffSec / 3600);
           const m = Math.floor((diffSec % 3600) / 60);
           const s = diffSec % 60;
           duracao = [h, m, s].map(n => String(n).padStart(2, '0')).join(':');
         }
         
-        const situacao = getVal(['Situação', 'Situacao']) || (dataFim ? 'FECHADO' : 'ABERTO');
+        const situacao = toUpper(getVal(['Situação', 'Situacao'])) || (dataFim ? 'FECHADO' : 'ABERTO');
         const matriculaAuditorRaw = getVal(['Matrícula Auditor', 'Matricula Auditor', 'Matrícula', 'Matricula', 'RE']) || '';
         let matriculaAuditor: string | null = String(matriculaAuditorRaw).trim().replace(/\.0+$/, '').replace(/[^0-9]/g, '');
         matriculaAuditor = matriculaAuditor.replace(/^0+/, '') || null;
 
-        const nomeAuditor = getVal(['Nome Auditor', 'Identificador Objeto']) || null;
-        const localidadeObjeto = localidadeRaw || null;
-        const questionario = questionarioRaw || null;
-        const re = getVal(['RE']) || matriculaAuditor;
+        const nomeAuditor = toUpper(getVal(['Nome Auditor', 'Identificador Objeto'])) || null;
+        const localidadeObjeto = toUpper(localidadeRaw) || null;
+        const questionario = toUpper(questionarioRaw) || null;
+        const re = getVal(['RE']) ? cleanNumero(getVal(['RE'])) : matriculaAuditor;
         
         const mesRaw = getVal(['Mês', 'Mes']);
         const anoRaw = getVal(['Ano']);
         let mes = mesRaw ? parseInt(mesRaw) : null;
         let ano = anoRaw ? parseInt(anoRaw) : null;
 
-        if (!mes && dataInicio) mes = dataInicio.getMonth() + 1;
-        if (!ano && dataInicio) ano = dataInicio.getFullYear();
+        if (!mes && dataInicioObj) mes = dataInicioObj.mes;
+        if (!ano && dataInicioObj) ano = dataInicioObj.ano;
 
-        const cidadeComercial = cleanCidade(getVal(['CIDADE COMERCIAL'])) || cleanCidade(localidadeRaw) || null;
-        const ufComercial = getVal(['UF COMERCIAL']) || 'SP';
-        const diretoria3 = getVal(['DIRETORIA 3', 'DIRETORIA3']) || null;
-        const gerencia = getVal(['GERÊNCIA', 'GERENCIA']) || null;
-        const gestor = getVal(['GESTOR', 'Supervisor']) || null;
+        const cidadeComercial = toUpper(cleanCidade(getVal(['CIDADE COMERCIAL'])) || cleanCidade(localidadeRaw)) || null;
+        const ufComercial = 'SP';
+        const diretoria3 = toUpper(getVal(['DIRETORIA 3', 'DIRETORIA3'])) || null;
+        const gerencia = toUpper(getVal(['GERÊNCIA', 'GERENCIA'])) || null;
+        const gestor = toUpper(getVal(['GESTOR', 'Supervisor'])) || null;
 
         numerosNaPlanilha.push(numero);
         rowsToProcess.push({
@@ -302,23 +329,50 @@ export async function POST(req: Request) {
     const client = await pool.connect();
 
     try {
+      // 1. Garantir que a tabela aprs exista, expurgar duplicatas legadas e cravar constraint UNIQUE em numero
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS aprs (
+          id SERIAL PRIMARY KEY,
+          numero BIGINT,
+          data_checklist TIMESTAMP,
+          data_inicio TIMESTAMP,
+          data_fim TIMESTAMP,
+          duracao VARCHAR(50),
+          situacao VARCHAR(50),
+          matricula_auditor BIGINT,
+          nome_auditor VARCHAR(255),
+          localidade_objeto VARCHAR(255),
+          questionario VARCHAR(255),
+          re VARCHAR(50),
+          cidade_comercial VARCHAR(100),
+          uf_comercial VARCHAR(10),
+          diretoria_3 VARCHAR(100),
+          gerencia VARCHAR(100),
+          gestor VARCHAR(255),
+          mes INT,
+          ano INT
+        );
+
+        -- Remove eventuais duplicados legados mantendo o de maior id
+        DELETE FROM aprs a
+        USING aprs b
+        WHERE a.numero = b.numero AND a.id < b.id;
+
+        -- Garante índice único para blindar duplicidade fisicamente
+        CREATE UNIQUE INDEX IF NOT EXISTS aprs_numero_uniq_idx ON aprs (numero);
+      `);
+
       await client.query('BEGIN');
 
-      let updated = 0;
+      let novasInseridas = 0;
+      let atualizadas = 0;
 
-      // Apagar registros existentes da lista para atualizar sem sobrepor/duplicar
-      for (let i = 0; i < numerosNaPlanilha.length; i += 5000) {
-        const chunk = numerosNaPlanilha.slice(i, i + 5000);
-        const delRes = await client.query('DELETE FROM aprs WHERE numero::text = ANY($1::text[])', [chunk]);
-        if (delRes.rowCount) updated += delRes.rowCount;
-      }
-
-      // Bulk insert dos dados tratados
+      // Bulk upsert dos dados tratados com ON CONFLICT (numero)
       const BATCH_SIZE = 500;
       for (let i = 0; i < rowsToProcess.length; i += BATCH_SIZE) {
         const batch = rowsToProcess.slice(i, i + BATCH_SIZE);
         
-        const query = `
+        const baseQuery = `
           INSERT INTO aprs (
             numero, data_checklist, data_inicio, data_fim, duracao, situacao,
             matricula_auditor, nome_auditor, localidade_objeto, questionario,
@@ -340,18 +394,46 @@ export async function POST(req: Request) {
           return `(${rowStr})`;
         }).join(', ');
 
-        await client.query(query + placeholders, values);
+        const conflictClause = `
+          ON CONFLICT (numero) DO UPDATE SET
+            data_checklist = EXCLUDED.data_checklist,
+            data_inicio = EXCLUDED.data_inicio,
+            data_fim = EXCLUDED.data_fim,
+            duracao = EXCLUDED.duracao,
+            situacao = EXCLUDED.situacao,
+            matricula_auditor = EXCLUDED.matricula_auditor,
+            nome_auditor = EXCLUDED.nome_auditor,
+            localidade_objeto = EXCLUDED.localidade_objeto,
+            questionario = EXCLUDED.questionario,
+            re = EXCLUDED.re,
+            cidade_comercial = EXCLUDED.cidade_comercial,
+            uf_comercial = EXCLUDED.uf_comercial,
+            diretoria_3 = EXCLUDED.diretoria_3,
+            gerencia = EXCLUDED.gerencia,
+            gestor = EXCLUDED.gestor,
+            mes = EXCLUDED.mes,
+            ano = EXCLUDED.ano
+          RETURNING (xmax = 0) AS is_insert;
+        `;
+
+        const res = await client.query(baseQuery + placeholders + conflictClause, values);
+        for (const row of res.rows) {
+          if (row.is_insert) {
+            novasInseridas++;
+          } else {
+            atualizadas++;
+          }
+        }
       }
 
       await client.query('COMMIT');
       clearDataCache('APR');
       
-      const totalProcessed = rowsToProcess.length;
-      const imported = totalProcessed - updated;
+      const totalProcessado = rowsToProcess.length;
 
       return NextResponse.json({ 
         success: true, 
-        message: `Importação concluída com sucesso! ${imported} novas APRs inseridas e ${updated} atualizadas (Total processado: ${totalProcessed}).` 
+        message: `Importação de APR concluída com sucesso! ${novasInseridas} novas APRs inseridas, ${atualizadas} atualizadas (0 duplicadas de um total de ${totalProcessado} processadas).` 
       });
     } catch (e) {
       await client.query('ROLLBACK');
@@ -365,31 +447,97 @@ export async function POST(req: Request) {
   }
 }
 
-// Função flexível para conversão de datas (formato brasileiro DD/MM/AAAA, ISO ou Excel serial)
-function parseDateFlexible(val: any): Date | null {
+interface ParsedDateResult {
+  sql: string;
+  ano: number;
+  mes: number;
+  dia: number;
+  getTime: () => number;
+}
+
+// Função flexível e robusta para conversão de datas (imune a distorções de timezone)
+function parseDateFlexible(val: any, horaVal?: any): ParsedDateResult | null {
   if (!val) return null;
-  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+  const pad = (n: number | string) => String(n).padStart(2, '0');
+
+  let y = 0, m = 0, d = 0, h = 0, min = 0, s = 0;
+  let found = false;
+
+  // 1. Número serial do Excel
   if (typeof val === 'number') {
-    return new Date((val - (25567 + 2)) * 86400 * 1000);
+    try {
+      const p = (xlsx.SSF as any).parse_date_code(val);
+      if (p && p.y && p.m && p.d) {
+        y = p.y; m = p.m; d = p.d;
+        h = p.H || 0; min = p.M || 0; s = Math.floor(p.S || 0);
+        found = true;
+      }
+    } catch {}
   }
-  if (typeof val === 'string') {
-    const s = val.trim();
+
+  // 2. String
+  if (!found && typeof val === 'string') {
+    const str = val.trim();
     // Formato brasileiro: DD/MM/AAAA [HH:mm[:ss]]
-    const br = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+    const br = str.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
     if (br) {
-      const [, dd, mm, yyyy, hh = '0', mi = '0', ss = '0'] = br;
-      const d = new Date(+yyyy, +mm - 1, +dd, +hh, +mi, +ss);
-      return isNaN(d.getTime()) ? null : d;
+      d = parseInt(br[1], 10);
+      m = parseInt(br[2], 10);
+      y = parseInt(br[3], 10);
+      h = br[4] ? parseInt(br[4], 10) : 0;
+      min = br[5] ? parseInt(br[5], 10) : 0;
+      s = br[6] ? parseInt(br[6], 10) : 0;
+      found = true;
+    } else {
+      // Formato ISO: AAAA-MM-DD [HH:mm[:ss]]
+      const iso = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+      if (iso) {
+        y = parseInt(iso[1], 10);
+        m = parseInt(iso[2], 10);
+        d = parseInt(iso[3], 10);
+        h = iso[4] ? parseInt(iso[4], 10) : 0;
+        min = iso[5] ? parseInt(iso[5], 10) : 0;
+        s = iso[6] ? parseInt(iso[6], 10) : 0;
+        found = true;
+      }
     }
-    // Formato ISO: AAAA-MM-DD [HH:mm:ss]
-    const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
-    if (iso) {
-      const [, yyyy, mm, dd, hh = '0', mi = '0', ss = '0'] = iso;
-      const d = new Date(+yyyy, +mm - 1, +dd, +hh, +mi, +ss);
-      return isNaN(d.getTime()) ? null : d;
-    }
-    const standard = new Date(s);
-    if (!isNaN(standard.getTime())) return standard;
   }
-  return null;
+
+  if (!found && val instanceof Date && !isNaN(val.getTime())) {
+    y = val.getFullYear();
+    m = val.getMonth() + 1;
+    d = val.getDate();
+    h = val.getHours();
+    min = val.getMinutes();
+    s = val.getSeconds();
+    found = true;
+  }
+
+  if (!found) return null;
+
+  // Se a hora for zero e houver horaVal específica (ex: coluna 'Hora Início')
+  if (h === 0 && min === 0 && s === 0 && horaVal !== null && horaVal !== undefined) {
+    if (typeof horaVal === 'string') {
+      const hMatch = horaVal.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+      if (hMatch) {
+        h = parseInt(hMatch[1], 10);
+        min = parseInt(hMatch[2], 10);
+        s = hMatch[3] ? parseInt(hMatch[3], 10) : 0;
+      }
+    } else if (typeof horaVal === 'number') {
+      const totalSecs = Math.round(horaVal * 86400);
+      h = Math.floor(totalSecs / 3600) % 24;
+      min = Math.floor((totalSecs % 3600) / 60);
+      s = totalSecs % 60;
+    }
+  }
+
+  const sql = `${y}-${pad(m)}-${pad(d)} ${pad(h)}:${pad(min)}:${pad(s)}`;
+  return {
+    sql,
+    ano: y,
+    mes: m,
+    dia: d,
+    getTime: () => Date.UTC(y, m - 1, d, h, min, s)
+  };
 }

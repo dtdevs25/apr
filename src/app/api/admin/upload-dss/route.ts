@@ -2,6 +2,47 @@ import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { clearDataCache } from '@/lib/cache';
 
+const toUpper = (v: any): string | null => {
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim().replace(/\s+/g, ' ').toUpperCase();
+  return s || null;
+};
+
+const cleanNumero = (v: any): string => {
+  if (v === null || v === undefined) return '';
+  return String(v).trim().replace(/\.0+$/, '').replace(/[^0-9]/g, '');
+};
+
+const cleanMatricula = (v: any): string => {
+  if (v === null || v === undefined) return '';
+  return String(v).trim().replace(/\.0+$/, '').replace(/[^0-9]/g, '').replace(/^0+/, '');
+};
+
+// Parser robusto de datas brasileiras para SQL ISO sem desvio de timezone
+function parseBrDateTime(dtStr: string | null): { sql: string | null, mes: string, ano: string } {
+  if (!dtStr) return { sql: null, mes: '', ano: '' };
+  const s = dtStr.trim();
+  const pad = (n: number | string) => String(n).padStart(2, '0');
+
+  // Formato brasileiro: DD/MM/AAAA [HH:mm[:ss]]
+  const br = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (br) {
+    const [, dd, mm, yyyy, hh = '00', mi = '00', ss = '00'] = br;
+    const sql = `${yyyy}-${pad(mm)}-${pad(dd)} ${pad(hh)}:${pad(mi)}:${pad(ss)}`;
+    return { sql, mes: String(parseInt(mm, 10)), ano: yyyy };
+  }
+
+  // Formato ISO: AAAA-MM-DD [HH:mm[:ss]]
+  const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (iso) {
+    const [, yyyy, mm, dd, hh = '00', mi = '00', ss = '00'] = iso;
+    const sql = `${yyyy}-${pad(mm)}-${pad(dd)} ${pad(hh)}:${pad(mi)}:${pad(ss)}`;
+    return { sql, mes: String(parseInt(mm, 10)), ano: yyyy };
+  }
+
+  return { sql: null, mes: '', ano: '' };
+}
+
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
@@ -12,16 +53,21 @@ export async function POST(req: Request) {
     }
 
     const arrayBuffer = await file.arrayBuffer();
-    const decoder = new TextDecoder('windows-1252');
-    const text = decoder.decode(arrayBuffer);
+    let text = '';
+    try {
+      const decUtf8 = new TextDecoder('utf-8', { fatal: true });
+      text = decUtf8.decode(arrayBuffer);
+    } catch {
+      const dec1252 = new TextDecoder('windows-1252');
+      text = dec1252.decode(arrayBuffer);
+    }
+
     const lines = text.split('\n').filter(line => line.trim());
-    
     if (lines.length < 2) {
       return NextResponse.json({ message: 'Arquivo vazio ou formato inválido.' }, { status: 400 });
     }
 
-    // Assunto;Número do Diálogo;Líder;Base;UF;Localidade;Data Fechamento;Matrícula;Nome;Tipo;Status;Assinado;Justificativa;
-
+    // 1. Garantir que a tabela dss exista e expurgar eventuais duplicados legados
     await pool.query(`
       CREATE TABLE IF NOT EXISTS dss (
         id SERIAL PRIMARY KEY,
@@ -41,10 +87,13 @@ export async function POST(req: Request) {
         mes VARCHAR(20),
         ano VARCHAR(20)
       );
-    `);
 
-    // Ensure the unique constraint exists for UPSERT
-    await pool.query(`
+      -- Remove eventuais duplicatas legadas mantendo a mais recente
+      DELETE FROM dss a
+      USING dss b
+      WHERE a.numero_dialogo = b.numero_dialogo AND a.matricula = b.matricula AND a.id < b.id;
+
+      -- Assegura a constraint única física para evitar duplicidades
       ALTER TABLE dss DROP CONSTRAINT IF EXISTS unique_dss_record;
       ALTER TABLE dss ADD CONSTRAINT unique_dss_record UNIQUE (numero_dialogo, matricula);
     `);
@@ -71,66 +120,71 @@ export async function POST(req: Request) {
           justificativa = EXCLUDED.justificativa,
           mes = EXCLUDED.mes,
           ano = EXCLUDED.ano
+        RETURNING (xmax = 0) AS is_insert;
       `;
+
+      let novasInseridas = 0;
+      let atualizadas = 0;
+      const seenRecords = new Set<string>();
 
       for (let i = 1; i < lines.length; i++) {
         const parts = lines[i].split(';');
         if (parts.length < 10) continue;
 
-        const assunto = parts[0]?.trim();
-        const num = parts[1]?.trim();
-        const lider = parts[2]?.trim();
-        const base = parts[3]?.trim();
-        const uf = parts[4]?.trim();
-        const local = parts[5]?.trim();
-        
-        // Filtrar apenas o que for de SP
-        if (!uf || uf.toUpperCase() !== 'SP') continue;
+        const rawUf = toUpper(parts[4]);
+        // Filtrar apenas o que for do estado de São Paulo (SP)
+        if (!rawUf || rawUf !== 'SP') continue;
 
-        const dtStr = parts[6]?.trim(); // ex: 30/09/2026 06:13:07 or 01/10/2026
-        const mat = parts[7]?.trim();
-        const nome = parts[8]?.trim();
-        const tipo = parts[9]?.trim();
-        const status = parts[10]?.trim();
-        const assinado = parts[11]?.trim();
-        const just = parts[12]?.trim();
+        const num = cleanNumero(parts[1]);
+        const mat = cleanMatricula(parts[7]);
+        if (!num || !mat) continue;
 
-        // Parse date
-        let dt = null;
-        let mes = '';
-        let ano = '';
-        if (dtStr) {
-          const [d, t] = dtStr.split(' ');
-          if (d) {
-            let [p1, p2, yyyy] = d.split('/');
-            if (p1 && p2 && yyyy) {
-              let dd = p1;
-              let mm = p2;
-              // A planilha SEMPRE manda no formato DD/MM/YYYY. 
-              // Se invertermos quando ambos são <= 12, Janeiro (10/01) vira Outubro (01/10).
-              // Então apenas assumimos p1 = DD, p2 = MM, yyyy = YYYY.
-              dt = `${yyyy}-${mm}-${dd} ${t || '00:00:00'}`;
-              mes = mm.replace(/^0+/, '');
-              ano = yyyy;
-            }
-          }
+        // Evitar duplicidade de mesmo participante no mesmo diálogo dentro do próprio arquivo
+        const dedupeKey = `${num}-${mat}`;
+        if (seenRecords.has(dedupeKey)) continue;
+        seenRecords.add(dedupeKey);
+
+        // Padronização rigorosa para MAIÚSCULAS
+        const assunto = toUpper(parts[0]);
+        const lider = toUpper(parts[2]);
+        const base = toUpper(parts[3]);
+        const uf = 'SP';
+        const local = toUpper(parts[5]);
+        const nome = toUpper(parts[8]);
+        const tipo = toUpper(parts[9]);
+        const status = toUpper(parts[10]);
+        const assinado = toUpper(parts[11]);
+        const just = toUpper(parts[12]);
+
+        // Datas e horas sem desvio de fuso
+        const dtStr = parts[6]?.trim() || null;
+        const { sql: dt, mes, ano } = parseBrDateTime(dtStr);
+
+        const res = await client.query(insertQuery, [
+          assunto, num, lider, base, uf, local, dt, mat, nome, tipo, status, assinado, just, mes, ano
+        ]);
+
+        if (res.rows[0]?.is_insert) {
+          novasInseridas++;
+        } else {
+          atualizadas++;
         }
-
-        await client.query(insertQuery, [assunto, num, lider, base, uf, local, dt, mat, nome, tipo, status, assinado, just, mes, ano]);
       }
 
       await client.query('COMMIT');
       clearDataCache('DSS');
+
+      return NextResponse.json({ 
+        message: `Upload de DSS concluído com sucesso! ${novasInseridas} novos participantes inseridos, ${atualizadas} atualizados (0 duplicados).` 
+      });
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
     } finally {
       client.release();
     }
-
-    return NextResponse.json({ message: 'Upload de DSS concluído com sucesso!' });
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json({ message: 'Erro na importação: ' + String(error) }, { status: 500 });
+  } catch (error: any) {
+    console.error("Erro no upload de DSS:", error);
+    return NextResponse.json({ message: 'Erro na importação: ' + (error?.message || String(error)) }, { status: 500 });
   }
 }

@@ -22,6 +22,12 @@ function getPreviousMonthAndYear(mesStr: string, ano: number) {
 const normalizeKey = (str: string) =>
   str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
 
+const toUpper = (v: any): string | null => {
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim().replace(/\s+/g, ' ').toUpperCase();
+  return s || null;
+};
+
 // Normaliza o mês para o nome em maiúsculas (aceita "Junho", "JUNHO", "6", "Marco"...)
 function normalizeMes(raw: any): string | null {
   if (raw === null || raw === undefined) return null;
@@ -45,10 +51,19 @@ export async function POST(req: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Ler a planilha
+    // Ler a planilha buscando estritamente a aba/guia 'TBRA'
     const workbook = xlsx.read(buffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
+    const tbraSheetName = workbook.SheetNames.find(s => s.trim().toUpperCase() === 'TBRA')
+      || workbook.SheetNames.find(s => s.trim().toUpperCase().includes('TBRA'));
+
+    if (!tbraSheetName) {
+      return NextResponse.json({
+        success: false,
+        message: `Aba obrigatória 'TBRA' não foi encontrada no arquivo enviado. Abas encontradas: ${workbook.SheetNames.join(', ')}`
+      }, { status: 400 });
+    }
+
+    const sheet = workbook.Sheets[tbraSheetName];
     
     // Obter dados
     const data = xlsx.utils.sheet_to_json(sheet, { defval: null });
@@ -104,6 +119,11 @@ export async function POST(req: Request) {
       const rowMes = normalizeMes(get(row, H.mes));
       if (!rowAno || !rowMes) continue;
 
+      // 1. Filtrar estritamente apenas UF = SP para economizar espaço e processamento
+      const rawUf = get(row, H.uf);
+      const uf = rawUf ? String(rawUf).trim().toUpperCase() : '';
+      if (uf !== 'SP') continue;
+
       const userIdRaw = get(row, H.re);
       let userId = userIdRaw !== null && userIdRaw !== undefined
         ? String(userIdRaw).trim().replace(/\.0+$/, '').replace(/[^0-9]/g, '').replace(/^0+/, '')
@@ -117,30 +137,96 @@ export async function POST(req: Request) {
       periods.add(`${rowAno}|${rowMes}`);
 
       rowsToInsert.push([
-        rowAno, rowMes, get(row, H.status) || 'ATIVO', userId,
-        get(row, H.nome) || null, get(row, H.cargo) || null, get(row, H.diretoria3) || null,
-        get(row, H.gerencia) || null, get(row, H.gestor) || null,
-        get(row, H.cidade) || null, get(row, H.uf) || null,
+        rowAno, rowMes, toUpper(get(row, H.status)) || 'ATIVO', userId,
+        toUpper(get(row, H.nome)), toUpper(get(row, H.cargo)), toUpper(get(row, H.diretoria3)),
+        toUpper(get(row, H.gerencia)), toUpper(get(row, H.gestor)),
+        toUpper(get(row, H.cidade)), 'SP',
         parseExcelDate(get(row, H.admissao)), parseExcelDate(get(row, H.desligamento))
       ]);
     }
 
     if (periods.size === 0) {
-      return NextResponse.json({ success: false, message: "A planilha não possui as colunas ANO e MÊS ou elas estão vazias." }, { status: 400 });
+      return NextResponse.json({ 
+        success: false, 
+        message: "Nenhum colaborador com UF='SP' e colunas ANO/MÊS/RE válidas foi encontrado na planilha." 
+      }, { status: 400 });
     }
 
     const client = await pool.connect();
+    let totalDesligadosDetectados = 0;
 
     try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS po (
+          id SERIAL PRIMARY KEY,
+          ano INT,
+          mes VARCHAR(50),
+          status VARCHAR(50),
+          user_id_ssff VARCHAR(50),
+          nome VARCHAR(255),
+          cargo VARCHAR(255),
+          diretoria_3 VARCHAR(255),
+          gerencia VARCHAR(255),
+          gestor VARCHAR(255),
+          cidade_comercial VARCHAR(255),
+          uf_comercial VARCHAR(50),
+          data_admissao TIMESTAMP,
+          data_desligamento TIMESTAMP
+        );
+      `);
+
       await client.query('BEGIN');
 
-      // 1. Limpar dados existentes apenas para os meses/anos que estão sendo enviados agora
+      // 2. Identificar quem estava no mês anterior (em SP) e sumiu da nova planilha -> marcar como DESLIGADO
+      for (const period of Array.from(periods)) {
+        const [anoStr, mes] = period.split('|');
+        const anoAtual = parseInt(anoStr, 10);
+        const { prevMes, prevAno } = getPreviousMonthAndYear(mes, anoAtual);
+
+        if (prevMes && prevAno) {
+          const prevRes = await client.query(
+            `SELECT user_id_ssff, nome, cargo, diretoria_3, gerencia, gestor, cidade_comercial, data_admissao 
+             FROM po 
+             WHERE ano = $1 AND UPPER(TRIM(mes)) = $2 AND UPPER(TRIM(status)) = 'ATIVO' AND UPPER(TRIM(uf_comercial)) = 'SP'`,
+            [prevAno, prevMes]
+          );
+
+          for (const prevRow of prevRes.rows) {
+            const prevId = String(prevRow.user_id_ssff || '').trim().replace(/\.0+$/, '').replace(/[^0-9]/g, '').replace(/^0+/, '');
+            if (!prevId) continue;
+
+            const checkKey = `${anoAtual}-${mes}-${prevId}`;
+            // Se o colaborador estava ATIVO no mês anterior e NÃO está presente na nova lista deste mês
+            if (!processedIdsPerPeriod.has(checkKey)) {
+              processedIdsPerPeriod.add(checkKey);
+              rowsToInsert.push([
+                anoAtual,
+                mes,
+                'DESLIGADO', // Marca automaticamente como desligado
+                prevId,
+                toUpper(prevRow.nome),
+                toUpper(prevRow.cargo),
+                toUpper(prevRow.diretoria_3),
+                toUpper(prevRow.gerencia),
+                toUpper(prevRow.gestor),
+                toUpper(prevRow.cidade_comercial),
+                'SP',
+                prevRow.data_admissao || null,
+                new Date() // Data estimada de desligamento na transição
+              ]);
+              totalDesligadosDetectados++;
+            }
+          }
+        }
+      }
+
+      // 3. Limpar dados existentes apenas para os meses/anos que estão sendo enviados agora
       for (const period of Array.from(periods)) {
         const [anoStr, mes] = period.split('|');
         await client.query('DELETE FROM po WHERE ano = $1 AND UPPER(TRIM(mes)) = $2', [parseInt(anoStr, 10), mes]);
       }
 
-      // 2. Inserção em lote
+      // 4. Inserção em lote (colaboradores ativos + desligados identificados)
       const COLS = 13;
       const BATCH_SIZE = 1000;
       for (let i = 0; i < rowsToInsert.length; i += BATCH_SIZE) {
@@ -169,9 +255,14 @@ export async function POST(req: Request) {
       client.release();
     }
 
+    let successMsg = `Upload do Plano concluído! ${rowsToInsert.length} colaboradores de SP registrados nos períodos identificados.`;
+    if (totalDesligadosDetectados > 0) {
+      successMsg += ` (${totalDesligadosDetectados} identificados como desligados por ausência em relação ao mês anterior).`;
+    }
+
     return NextResponse.json({ 
       success: true, 
-      message: `Upload do Plano concluído! ${rowsToInsert.length} registros importados (chave: coluna "${H.re}") nos ${periods.size} meses identificados.` 
+      message: successMsg 
     });
   } catch (error: any) {
     console.error("Erro no upload do PO:", error);

@@ -21,6 +21,12 @@ function normalizeMes(raw: any): string | null {
   return s;
 }
 
+const toUpper = (v: any): string | null => {
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim().replace(/\s+/g, ' ').toUpperCase();
+  return s || null;
+};
+
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
@@ -34,18 +40,23 @@ export async function POST(req: Request) {
     const buffer = Buffer.from(arrayBuffer);
 
     const workbook = xlsx.read(buffer, { type: 'buffer' });
-    // Localizar aba que contenha os dados do interior (ex: Planilha1 ou a primeira que tenha GESTOR_ATUAL)
+    // Localizar com precisão a aba que contenha os dados operacionais (GESTOR_ATUAL e MATRÍCULA)
     let targetSheetName = workbook.SheetNames[0];
+    let foundMatchingSheet = false;
     for (const name of workbook.SheetNames) {
       const sheet = workbook.Sheets[name];
       const rows = xlsx.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
-      if (rows && rows.length > 0) {
-        const headerRow = rows[0].map(c => normalizeKey(String(c || '')));
-        if (headerRow.includes('gestoratual') || headerRow.includes('gestor')) {
-          targetSheetName = name;
-          break;
+      for (const row of (rows || []).slice(0, 10)) {
+        if (Array.isArray(row)) {
+          const normalized = row.map(c => normalizeKey(String(c || '')));
+          if (normalized.some(k => k.includes('gestoratual')) && normalized.some(k => k.includes('matricula') || k.includes('re'))) {
+            targetSheetName = name;
+            foundMatchingSheet = true;
+            break;
+          }
         }
       }
+      if (foundMatchingSheet) break;
     }
 
     const sheet = workbook.Sheets[targetSheetName];
@@ -72,7 +83,7 @@ export async function POST(req: Request) {
       nome: findHeader(['NOME']),
       gestorOriginal: findHeader(['GESTOR']),
       gestorAtual: findHeader(['GESTOR_ATUAL', 'GESTOR ATUAL', 'SUPERVISOR_ATUAL', 'LIDER_ATUAL']),
-      ativoSet: findHeader(['ATIVO_SET_26', 'ATIVO_SET', 'ATIVO', 'STATUS_ATIVO']),
+      ativoSet: findHeader(['ATIVO_SET_26', 'ATIVO_SET', 'ATIVO', 'STATUS_ATIVO', 'ATIVO SET 26', 'ATIVO_SET_']),
       diretoria3: findHeader(['DIRETORIA 3', 'DIRETORIA3']),
       gerencia: findHeader(['GERÊNCIA', 'GERENCIA']),
       cidade: findHeader(['CIDADE COMERCIAL']),
@@ -82,7 +93,7 @@ export async function POST(req: Request) {
     if (!H.matricula || (!H.gestorAtual && !H.gestorOriginal)) {
       return NextResponse.json({
         success: false,
-        message: `Colunas obrigatórias não encontradas (MATRÍCULA e GESTOR_ATUAL/GESTOR). Cabeçalhos lidos: ${headers.join(', ')}`
+        message: `Colunas obrigatórias não encontradas (MATRÍCULA e GESTOR_ATUAL/GESTOR) na aba "${targetSheetName}". Cabeçalhos lidos: ${headers.join(', ')}`
       }, { status: 400 });
     }
 
@@ -115,6 +126,8 @@ export async function POST(req: Request) {
 
       let insertedCount = 0;
       let updatedCount = 0;
+      let ativosEmCampoCount = 0;
+      let emTreinamentoCount = 0;
 
       for (const row of data) {
         const rawMat = get(row, H.matricula);
@@ -123,26 +136,33 @@ export async function POST(req: Request) {
           : '';
         if (!mat) continue;
 
-        const gestorAtualVal = (get(row, H.gestorAtual) || get(row, H.gestorOriginal) || '').toString().trim().toUpperCase();
+        const gestorAtualVal = toUpper(get(row, H.gestorAtual) || get(row, H.gestorOriginal));
         if (!gestorAtualVal) continue;
 
         const anoVal = parseInt(get(row, H.ano), 10) || new Date().getFullYear();
         const mesVal = normalizeMes(get(row, H.mes)) || 'OUTUBRO';
-        const nomeVal = (get(row, H.nome) || '').toString().trim() || null;
-        const gestorOrigVal = (get(row, H.gestorOriginal) || '').toString().trim() || null;
+        const nomeVal = toUpper(get(row, H.nome));
+        const gestorOrigVal = toUpper(get(row, H.gestorOriginal));
         
         let ativoVal = 1;
         const rawAtivo = get(row, H.ativoSet);
         if (rawAtivo !== null && rawAtivo !== undefined) {
-          if (String(rawAtivo).trim() === '0' || String(rawAtivo).toLowerCase() === 'inativo') {
+          const sAtivo = String(rawAtivo).trim().toLowerCase();
+          if (sAtivo === '0' || sAtivo === 'inativo' || sAtivo === 'nao' || sAtivo === 'não' || sAtivo === 'treinamento') {
             ativoVal = 0;
+            emTreinamentoCount++;
+          } else {
+            ativoVal = 1;
+            ativosEmCampoCount++;
           }
+        } else {
+          ativosEmCampoCount++;
         }
 
-        const dirVal = (get(row, H.diretoria3) || 'DIR SERVICOS AO CLIENTE SP INTERIOR').toString().trim();
-        const gerVal = (get(row, H.gerencia) || '').toString().trim() || null;
-        const cidVal = (get(row, H.cidade) || '').toString().trim() || null;
-        const cargoVal = (get(row, H.cargo) || '').toString().trim() || null;
+        const dirVal = toUpper(get(row, H.diretoria3)) || 'DIR SERVICOS AO CLIENTE SP INTERIOR';
+        const gerVal = toUpper(get(row, H.gerencia));
+        const cidVal = toUpper(get(row, H.cidade));
+        const cargoVal = toUpper(get(row, H.cargo));
 
         const res = await client.query(`
           INSERT INTO po_spi_override (
@@ -175,7 +195,7 @@ export async function POST(req: Request) {
 
       return NextResponse.json({
         success: true,
-        message: `Ajuste SP Interior importado com sucesso! ${insertedCount} novos líderes/colaboradores inseridos e ${updatedCount} atualizados.`
+        message: `Ajuste SP Interior importado com sucesso da aba "${targetSheetName}"! ${insertedCount + updatedCount} colaboradores processados (${ativosEmCampoCount} ativos em campo, ${emTreinamentoCount} em treinamento/administrativo).`
       });
     } catch (err: any) {
       await client.query('ROLLBACK');
