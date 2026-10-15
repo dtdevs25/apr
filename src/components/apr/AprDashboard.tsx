@@ -419,6 +419,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       matricula: string;
       diretoria: string;
       filial: string;
+      cnpj: string;
       cidade: string;
       supervisor: string;
       count: number;
@@ -432,13 +433,16 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       const key = mat || nome;
 
       const pInfo = (mat && poMapByMat.get(mat)) || poMapByNome.get(nome) || null;
+      const filialVal = item['FILIAL'] || pInfo?.filial || pInfo?.cnpj || item['CNPJ'] || item['GERÊNCIA'] || 'São Paulo';
+      const cnpjVal = item['CNPJ'] || pInfo?.cnpj || '-';
 
       if (!tecnicosAgg[key]) {
         tecnicosAgg[key] = {
           name: nome,
           matricula: mat || pInfo?.matricula || '-',
           diretoria: item['DIRETORIA 3'] || pInfo?.diretoria || 'N/A',
-          filial: item['GERÊNCIA'] || pInfo?.gerencia || (item['REGIONAL'] ? `Filial ${item['REGIONAL']}` : 'São Paulo'),
+          filial: filialVal,
+          cnpj: cnpjVal,
           cidade: item['CIDADE COMERCIAL'] || pInfo?.cidade || 'São Paulo',
           supervisor: item['Supervisor'] || item['GESTOR'] || pInfo?.supervisor || 'N/A',
           count: 0,
@@ -482,7 +486,8 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
           name: pNome,
           matricula: pMat,
           diretoria: p.diretoria,
-          filial: p.gerencia || (p.regional ? `Filial ${p.regional}` : 'São Paulo'),
+          filial: p.filial || p.cnpj || p.gerencia || 'São Paulo',
+          cnpj: p.cnpj || '-',
           cidade: p.cidade || 'São Paulo',
           supervisor: p.supervisor || 'N/A',
           count: 0,
@@ -505,6 +510,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
         "Matrícula": item.matricula,
         "Diretoria": item.diretoria,
         "Filial": item.filial,
+        "CNPJ": item.cnpj,
         "Cidade": item.cidade,
         "Supervisor": item.supervisor,
         "Realizado (APRs)": item.count,
@@ -532,7 +538,8 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       { wch: 38 }, // Técnico
       { wch: 15 }, // Matrícula
       { wch: 38 }, // Diretoria
-      { wch: 32 }, // Filial
+      { wch: 28 }, // Filial
+      { wch: 20 }, // CNPJ
       { wch: 25 }, // Cidade
       { wch: 32 }, // Supervisor
       { wch: 18 }, // Realizado

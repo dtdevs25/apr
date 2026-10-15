@@ -98,6 +98,54 @@ const CITY_TO_REGIONAL: Record<string, 'SPC' | 'SPI'> = {
   'BOTUCATU': 'SPI',
 };
 
+const CITY_TO_FILIAL_CNPJ: Record<string, { filial: string, cnpj: string }> = {
+  'SAO PAULO': { filial: 'SP MTZ ECOBERRI', cnpj: '02558157000162' },
+  'CAMPINAS': { filial: 'SP CAMBUI', cnpj: '02558157082703' },
+  'SAO JOSE DO RIO PRETO': { filial: 'SP CCC SJRPRETO', cnpj: '02558157011954' },
+  'BAURU': { filial: 'SP CCC BAURU', cnpj: '02558157009623' },
+  'ARARAQUARA': { filial: 'SP ARARAQUARA C', cnpj: '02558157059485' },
+  'RIBEIRAO PRETO': { filial: 'SP', cnpj: '02558157087772' },
+  'PIRACICABA': { filial: 'SP PIRACICABA A', cnpj: '02558157059302' },
+  'MAUA': { filial: 'SP CD MAUA', cnpj: '02558157053878' },
+  'PRAIA GRANDE': { filial: 'SP LJ LITOR P S', cnpj: '02558157005121' },
+  'MARILIA': { filial: 'SP LJ MARILIA S', cnpj: '02558157080093' },
+  'SAO JOSE DOS CAMPOS': { filial: 'SP CC SJ CAMPOS', cnpj: '02558157049846' },
+  'JUNDIAI': { filial: 'SP LJ JUND MA S', cnpj: '02558157009119' },
+  'VOTORANTIM': { filial: 'SP LJ ESPLANADA', cnpj: '02558157005202' },
+  'SOROCABA': { filial: 'SP SOROCABA BOA', cnpj: '02558157058322' },
+  'OURINHOS': { filial: 'SP LJ OURINHOS', cnpj: '02558157010206' },
+  'ARACATUBA': { filial: 'SP LJ MULTISHOP', cnpj: '02558157012411' },
+  'SANTOS': { filial: 'SP SANTOS', cnpj: '02558157076657' },
+  'MOGI DAS CRUZES': { filial: 'SP LJ MOGI S CE', cnpj: '02558157008732' },
+  'BARUERI': { filial: 'SP LJ IGUA ALPH', cnpj: '02558157009542' },
+  'SAO PEDRO': { filial: 'SP_LJ BERRINI', cnpj: '02558157052391' },
+  'GUARULHOS': { filial: 'SP LJ S INTERNA', cnpj: '02558157015003' },
+  'OSASCO': { filial: 'SP LJ OSASCO', cnpj: '02558157007680' },
+  'SANTO ANDRE': { filial: 'SP LJ ABC PLA S', cnpj: '02558157007256' },
+  'SAO VICENTE': { filial: 'SP LJ S BRISAM', cnpj: '02558157011016' },
+  'SAO CAETANO DO SUL': { filial: 'SP LJ PSCAETANO', cnpj: '02558157051239' },
+  'SAO BERNARDO DO CAMPO': { filial: 'SP LJ S METROPO', cnpj: '02558157007094' },
+  'ATIBAIA': { filial: 'LJ VIVO ATIBAIA', cnpj: '02558157092423' },
+  'GUARUJA': { filial: 'SP LJ S GUAR LP', cnpj: '02558157010710' },
+  'PRESIDENTE PRUDENTE': { filial: 'SP LJ PQ S PRUD', cnpj: '02558157076223' },
+  'JAU': { filial: 'SP LOJA JAU', cnpj: '02558157009895' },
+  'TABOAO DA SERRA': { filial: 'SP LJ SH TABOAO', cnpj: '02558157013817' },
+  'CAJAMAR': { filial: 'SP_CD_CAJAMAR_GALPAO100-PARTE', cnpj: '02558157091613' },
+  'INDAIATUBA': { filial: 'SP INDAIATUBA C', cnpj: '02558157058837' },
+  'SAO CARLOS': { filial: 'SP LJ SS CARLOS', cnpj: '02558157013736' },
+  'FRANCA': { filial: 'SP LJ FRANCA', cnpj: '02558157010397' },
+  'CARAGUATATUBA': { filial: 'SP ALTINO ARANTES', cnpj: '02558157081146' },
+  'TAUBATE': { filial: 'SP CCC TAUBATE', cnpj: '02558157009038' },
+  'SAO ROQUE': { filial: 'SP_LOJA OUTLET CATARINA SP', cnpj: '2558157088744' },
+  'BOTUCATU': { filial: 'SP JOAO PASSOS', cnpj: '02558157075332' }
+};
+
+function getFilialCnpj(cidade: string | null): { filial: string, cnpj: string } | null {
+  if (!cidade) return null;
+  const unaccented = String(cidade).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  return CITY_TO_FILIAL_CNPJ[unaccented] || null;
+}
+
 function cleanCidade(v: any): string | null {
   if (!v) return null;
   const s = String(v).trim();
@@ -233,7 +281,12 @@ export async function GET(req: NextRequest) {
 
         const [aprRes, poRes, spiRes] = await Promise.all([
           pool.query(`SELECT * FROM aprs ORDER BY data_inicio DESC`),
-          pool.query(`SELECT user_id_ssff, nome, diretoria_3, gerencia, gestor, cidade_comercial, uf_comercial FROM po ORDER BY id ASC`).catch(() => ({ rows: [] as any[] })),
+          pool.query(`
+            SELECT user_id_ssff, nome, diretoria_3, gerencia, gestor, cidade_comercial, uf_comercial,
+                   COALESCE(to_jsonb(po)->>'cnpj', '') AS cnpj,
+                   COALESCE(to_jsonb(po)->>'filial', '') AS filial
+            FROM po ORDER BY id ASC
+          `).catch(() => ({ rows: [] as any[] })),
           pool.query(`SELECT matricula, gestor_atual, gerencia, cidade_comercial, ativo FROM po_spi_override ORDER BY id ASC`).catch(() => ({ rows: [] as any[] })),
         ]);
 
@@ -270,6 +323,7 @@ export async function GET(req: NextRequest) {
 
           const cidade = cleanCidade(a.localidade_objeto) || cleanCidade(a.cidade_comercial) || cleanCidade(spi?.cidade_comercial) || cleanCidade(p?.cidade_comercial) || null;
           const regional = getRegional(cidade);
+          const fc = getFilialCnpj(cidade);
 
           let diretoria = p?.diretoria_3 || a.diretoria_3 || null;
           let gestor = p?.gestor || a.gestor || null;
@@ -289,6 +343,9 @@ export async function GET(req: NextRequest) {
             }
           }
 
+          const filial = (p?.filial && p.filial.trim()) || fc?.filial || spi?.gerencia || p?.gerencia || a.gerencia || (regional ? `FILIAL ${regional}` : 'SÃO PAULO');
+          const cnpj = (p?.cnpj && p.cnpj.trim()) || fc?.cnpj || '-';
+
           return {
             "Número": a.numero,
             "Data Checklist": a.data_checklist,
@@ -306,6 +363,8 @@ export async function GET(req: NextRequest) {
             "UF COMERCIAL": p?.uf_comercial || a.uf_comercial || null,
             "DIRETORIA 3": diretoria,
             "GERÊNCIA": spi?.gerencia || p?.gerencia || a.gerencia || null,
+            "FILIAL": filial,
+            "CNPJ": cnpj,
             "GESTOR": gestor,
             "Supervisor": gestor,
             "Mês": a.mes,
@@ -327,6 +386,7 @@ export async function GET(req: NextRequest) {
           const spi = spiByMat.get(mat);
           const cidade = cleanCidade(spi?.cidade_comercial) || cleanCidade(p.cidade_comercial) || null;
           const regional = getRegional(cidade);
+          const fc = getFilialCnpj(cidade);
 
           let diretoria = p.diretoria_3 || null;
           let gestor = p.gestor || null;
@@ -350,6 +410,9 @@ export async function GET(req: NextRequest) {
           }
 
           const dirUpper = (diretoria || '').toString().trim().toUpperCase();
+          const filial = (p.filial && p.filial.trim()) || fc?.filial || (spi?.gerencia || p.gerencia || (regional ? `FILIAL ${regional}` : 'SÃO PAULO'));
+          const cnpj = (p.cnpj && p.cnpj.trim()) || fc?.cnpj || '-';
+
           if (ALLOWED_DIRETORIAS.includes(dirUpper)) {
             colaboradoresPO.push({
               matricula: mat,
@@ -357,6 +420,8 @@ export async function GET(req: NextRequest) {
               cargo: (p.cargo || 'COLABORADOR').toString().trim().toUpperCase(),
               diretoria: dirUpper,
               gerencia: (spi?.gerencia || p.gerencia || '').toString().trim().toUpperCase(),
+              filial: filial,
+              cnpj: cnpj,
               supervisor: (gestor || '').toString().trim().toUpperCase(),
               cidade: cidade,
               regional: regional || (dirUpper === INTERIOR ? 'SPI' : dirUpper === CAPITAL ? 'SPC' : null),
