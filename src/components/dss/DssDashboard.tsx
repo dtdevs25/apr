@@ -290,10 +290,10 @@ export const DssDashboard: React.FC<DssDashboardProps> = ({ onBack, isDark, togg
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#f8f9fa] dark:bg-[#0b0f19] transition-colors duration-200">
         <div className="relative flex items-center justify-center w-20 h-20 mb-4">
-          <div className="absolute inset-0 border-4 border-blue-200 dark:border-blue-950 border-t-blue-600 dark:border-t-blue-400 rounded-full animate-spin"></div>
+          <div className="absolute inset-0 border-4 border-purple-200 dark:border-purple-950 border-t-[#660099] dark:border-t-purple-400 rounded-full animate-spin"></div>
           <img src="/icone.png" alt="Logo Vivo" className="w-10 h-10 object-contain animate-pulse z-10" />
         </div>
-        <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 animate-pulse">Carregando Painel de DSS...</p>
+        <p className="text-sm font-semibold text-[#660099] dark:text-purple-400 animate-pulse">Carregando Painel de DSS...</p>
       </div>
     );
   }
@@ -307,7 +307,7 @@ export const DssDashboard: React.FC<DssDashboardProps> = ({ onBack, isDark, togg
           <div className="flex items-center gap-4">
             <button 
               onClick={onBack}
-              className="flex items-center justify-center w-8 h-8 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-200 dark:hover:border-blue-700 transition-all shadow-sm"
+              className="flex items-center justify-center w-8 h-8 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-950/40 hover:text-[#660099] dark:hover:text-purple-400 hover:border-purple-200 dark:hover:border-purple-700 transition-all shadow-sm"
               title="Voltar aos Módulos"
             >
               <ArrowLeft size={16} />
@@ -328,7 +328,7 @@ export const DssDashboard: React.FC<DssDashboardProps> = ({ onBack, isDark, togg
             </button>
             <button 
               onClick={exportToExcel}
-              className="flex items-center gap-2 px-4 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-blue-500 dark:hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 hover:shadow-md transition-all font-medium text-xs text-gray-700 dark:text-gray-200"
+              className="flex items-center gap-2 px-4 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-[#660099] dark:hover:border-purple-400 hover:text-[#660099] dark:hover:text-purple-400 hover:shadow-md transition-all font-medium text-xs text-gray-700 dark:text-gray-200"
             >
               <Download size={14} /> Exportar XLSX
             </button>
@@ -353,7 +353,7 @@ export const DssDashboard: React.FC<DssDashboardProps> = ({ onBack, isDark, togg
                   <select
                     value={rankingGroup}
                     onChange={(e) => setRankingGroup(e.target.value as any)}
-                    className="appearance-none flex items-center justify-between px-3 py-1.5 w-44 bg-white dark:bg-[#1e293b] border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm text-xs font-medium text-gray-700 dark:text-gray-200 outline-none focus:border-blue-300 dark:focus:border-blue-500 cursor-pointer pr-8"
+                    className="appearance-none flex items-center justify-between px-3 py-1.5 w-44 bg-white dark:bg-[#1e293b] border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm text-xs font-medium text-gray-700 dark:text-gray-200 outline-none focus:border-purple-300 dark:focus:border-purple-500 cursor-pointer pr-8"
                   >
                     <option value="lider">Por Líder DSS</option>
                     <option value="cidade">Por Cidade</option>
@@ -376,7 +376,7 @@ export const DssDashboard: React.FC<DssDashboardProps> = ({ onBack, isDark, togg
               <label 
                 className={`flex items-center gap-2 px-3 py-1.5 h-[34px] rounded-xl border text-xs font-semibold cursor-pointer transition-all shadow-sm select-none ${
                   onlySpiActive 
-                    ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-300' 
+                    ? 'bg-purple-50 dark:bg-purple-950/40 border-purple-300 dark:border-purple-700 text-[#660099] dark:text-purple-300' 
                     : 'bg-white dark:bg-[#1e293b] border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300'
                 }`}
                 title="Quando ativo, considera apenas colaboradores ativos em campo da DIR Interior (desconsidera treinamento e administrativo)"
@@ -385,12 +385,12 @@ export const DssDashboard: React.FC<DssDashboardProps> = ({ onBack, isDark, togg
                   type="checkbox" 
                   checked={onlySpiActive} 
                   onChange={e => setOnlySpiActive(e.target.checked)} 
-                  className="w-4 h-4 text-blue-600 rounded border-gray-300 dark:border-gray-600 focus:ring-blue-600 cursor-pointer"
+                  className="w-4 h-4 text-[#660099] rounded border-gray-300 dark:border-gray-600 focus:ring-[#660099] cursor-pointer"
                 />
                 <span className="whitespace-nowrap">Ativos em Campo</span>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
                   onlySpiActive 
-                    ? 'bg-blue-600 text-white dark:bg-blue-500' 
+                    ? 'bg-[#660099] text-white dark:bg-purple-600' 
                     : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
                 }`}>
                   {onlySpiActive ? 'SPI' : 'Todos'}
@@ -458,10 +458,10 @@ export const DssDashboard: React.FC<DssDashboardProps> = ({ onBack, isDark, togg
                   onClick={() => toggleMonth(m.month)}
                   className={`flex-1 flex flex-col justify-end items-center h-full cursor-pointer group ${isSelected ? 'opacity-100' : 'opacity-40 hover:opacity-70'}`}
                 >
-                  <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{m.count}</span>
+                  <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 mb-2 group-hover:text-[#660099] dark:group-hover:text-purple-400 transition-colors">{m.count}</span>
                   <motion.div 
                     initial={{ height: 0 }} animate={{ height: `${pct}%` }} transition={{ delay: i * 0.1, type: 'spring' }}
-                    className="w-full bg-blue-600 rounded-t-lg transition-all shadow-sm group-hover:bg-blue-700"
+                    className="w-full bg-[#660099] rounded-t-lg transition-all shadow-sm group-hover:bg-[#8000bf]"
                   />
                   <span className="mt-3 text-sm font-semibold text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white">{monthMap[m.month] || m.month}</span>
                 </div>
@@ -504,11 +504,11 @@ export const DssDashboard: React.FC<DssDashboardProps> = ({ onBack, isDark, togg
                   <motion.div 
                     key={item.name}
                     initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: Math.min(idx * 0.02, 0.4) }}
-                    className="group p-3.5 rounded-xl mb-2.5 border border-gray-100 dark:border-gray-800 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/30 dark:hover:bg-blue-950/20 transition-all"
+                    className="group p-3.5 rounded-xl mb-2.5 border border-gray-100 dark:border-gray-800 hover:border-purple-200 dark:hover:border-purple-800 hover:bg-purple-50/30 dark:hover:bg-purple-950/20 transition-all"
                   >
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-3">
-                        <span className={`w-6 text-center text-xs font-bold ${idx < 3 ? 'text-blue-600 dark:text-blue-400 font-extrabold text-sm' : 'text-gray-400 dark:text-gray-500'}`}>
+                        <span className={`w-6 text-center text-xs font-bold ${idx < 3 ? 'text-[#660099] dark:text-purple-400 font-extrabold text-sm' : 'text-gray-400 dark:text-gray-500'}`}>
                           {idx + 1}º
                         </span>
                         <span className="font-semibold text-sm text-gray-800 dark:text-gray-200 truncate max-w-[340px]">
@@ -526,7 +526,7 @@ export const DssDashboard: React.FC<DssDashboardProps> = ({ onBack, isDark, togg
                     </div>
                     <div className="w-full bg-gray-100 dark:bg-gray-800 h-2 rounded-full overflow-hidden">
                       <div 
-                        className={`h-full rounded-full transition-all duration-500 ${isMetaAtingida ? 'bg-green-500' : 'bg-blue-600 dark:bg-blue-500'}`}
+                        className={`h-full rounded-full transition-all duration-500 ${isMetaAtingida ? 'bg-green-500' : 'bg-[#660099] dark:bg-purple-500'}`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
