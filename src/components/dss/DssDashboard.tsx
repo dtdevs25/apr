@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx-js-style';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Download, ChevronDown, Building, Users, MapPin, 
-  FileText, UserCheck, X, Settings, ArrowLeft, Sun, Moon, ShieldAlert, FileCheck, Activity
+  FileText, UserCheck, X, Settings, ArrowLeft, Sun, Moon, ShieldAlert, FileCheck, Activity, HelpCircle
 } from 'lucide-react';
 import { PremiumMultiSelect } from '@/components/common/PremiumMultiSelect';
 import { AdminModal } from '@/components/common/AdminModal';
@@ -28,6 +28,7 @@ export const DssDashboard: React.FC<DssDashboardProps> = ({ onBack, isDark, togg
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [isMetaModalOpen, setIsMetaModalOpen] = useState(false);
   const [rankingGroup, setRankingGroup] = useState<'lider' | 'cidade' | 'colaborador'>('lider');
 
   // Filtros
@@ -490,57 +491,140 @@ export const DssDashboard: React.FC<DssDashboardProps> = ({ onBack, isDark, togg
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin">
-            {rankAgg.length === 0 ? (
-              <div className="text-center py-20 text-gray-400 dark:text-gray-500">Nenhum registro de DSS encontrado no filtro selecionado.</div>
-            ) : (
-              rankAgg.map((item, idx) => {
-                const pct = Math.min(100, Math.round((item.count / maxRank) * 100));
-                const multiplier = rankingGroup === 'cidade' ? (item.uniquePeople?.size || 1) : 1;
-                const expected = Math.round(targetAprs * multiplier);
-                const isMetaAtingida = expected > 0 && item.count >= expected;
+            {/* Table Header */}
+            <div className="grid grid-cols-[30px_1fr_80px_80px_80px_110px] items-center gap-4 px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-100 dark:border-gray-800 mb-2">
+              <div>#</div>
+              <div>
+                {rankingGroup === 'cidade' ? 'Cidade' : rankingGroup === 'colaborador' ? 'Colaborador' : 'Líder DSS'}
+              </div>
+              <div className="text-center">Realizado</div>
+              <div className="flex items-center justify-center gap-1">
+                Esperado
+                <button 
+                  onClick={() => setIsMetaModalOpen(true)} 
+                  className="focus:outline-none rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 p-0.5 transition-colors"
+                  title="Ver como a meta é calculada"
+                >
+                  <HelpCircle size={14} className="text-gray-400 cursor-pointer hover:text-[#660099] dark:hover:text-purple-400" />
+                </button>
+              </div>
+              <div className="text-center">Meta (%)</div>
+              <div className="text-center">Participantes</div>
+            </div>
 
-                return (
-                  <motion.div 
-                    key={item.name}
-                    initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: Math.min(idx * 0.02, 0.4) }}
-                    className="group p-3.5 rounded-xl mb-2.5 border border-gray-100 dark:border-gray-800 hover:border-purple-200 dark:hover:border-purple-800 hover:bg-purple-50/30 dark:hover:bg-purple-950/20 transition-all"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-3">
-                        <span className={`w-6 text-center text-xs font-bold ${idx < 3 ? 'text-[#660099] dark:text-purple-400 font-extrabold text-sm' : 'text-gray-400 dark:text-gray-500'}`}>
-                          {idx + 1}º
-                        </span>
-                        <span className="font-semibold text-sm text-gray-800 dark:text-gray-200 truncate max-w-[340px]">
-                          {item.name}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 font-medium">
-                          <Users size={12} /> {item.data.length} participantes
-                        </span>
-                        <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${isMetaAtingida ? 'bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}`}>
-                          {item.count} / {expected} DSS
-                        </span>
-                      </div>
-                    </div>
-                    <div className="w-full bg-gray-100 dark:bg-gray-800 h-2 rounded-full overflow-hidden">
+            <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin">
+              {rankAgg.length === 0 ? (
+                <div className="text-center py-20 text-gray-400 dark:text-gray-500">Nenhum registro de DSS encontrado no filtro selecionado.</div>
+              ) : (
+                rankAgg.map((item, idx) => {
+                  const pct = (item.count / maxRank) * 100;
+                  const colors = ['bg-pink-500', 'bg-blue-500', 'bg-green-500', 'bg-orange-500', 'bg-purple-500', 'bg-teal-500', 'bg-yellow-500'];
+                  const barColor = colors[idx % colors.length];
+                  const multiplier = rankingGroup === 'cidade' ? (item.uniquePeople?.size || 1) : 1;
+                  const expected = Math.round(targetAprs * multiplier);
+                  const perc = expected > 0 ? Math.round((item.count / expected) * 100) : 0;
+
+                  return (
+                    <div key={`${item.name}-${idx}`}>
                       <div 
-                        className={`h-full rounded-full transition-all duration-500 ${isMetaAtingida ? 'bg-green-500' : 'bg-[#660099] dark:bg-purple-500'}`}
-                        style={{ width: `${pct}%` }}
-                      />
+                        className="grid grid-cols-[30px_1fr_80px_80px_80px_110px] items-center gap-4 py-2 px-3 rounded-xl mb-1.5 border border-transparent bg-white dark:bg-[#151d2f] hover:bg-purple-50/50 dark:hover:bg-purple-950/20 hover:border-purple-200 dark:hover:border-purple-800/40 transition-all"
+                      >
+                        <div className={`text-xs font-bold ${idx < 3 ? 'text-[#660099] dark:text-purple-400 font-extrabold text-sm' : 'text-gray-400 dark:text-gray-500'}`}>
+                          {idx + 1}º
+                        </div>
+                        
+                        <div className="overflow-hidden pr-2">
+                          <div className="text-sm font-semibold truncate text-gray-800 dark:text-gray-200" title={item.name}>
+                            {item.name}
+                          </div>
+                          <div className="h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full mt-1.5 overflow-hidden">
+                            <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} className={`h-full ${barColor} rounded-full opacity-80`} />
+                          </div>
+                        </div>
+                        
+                        <div className="flex justify-center items-center">
+                          <div className="text-sm font-bold text-gray-900 dark:text-white">
+                            {formatNum(item.count)}
+                          </div>
+                        </div>
+
+                        <div className="flex justify-center items-center">
+                          <div className="text-xs font-semibold text-gray-500 dark:text-gray-400">{formatNum(expected)}</div>
+                        </div>
+
+                        <div className="flex justify-center items-center">
+                          <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
+                            perc >= 100 ? 'bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-400' :
+                            perc >= 70 ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400' :
+                            perc > 0 ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-400' :
+                            'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400'
+                          }`}>
+                            {perc}%
+                          </span>
+                        </div>
+
+                        <div className="flex justify-center items-center text-xs text-gray-500 dark:text-gray-400 font-medium">
+                          <span className="flex items-center gap-1">
+                            <Users size={12} className="text-blue-500" /> {item.data.length}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                  </motion.div>
-                );
-              })
-            )}
+                  );
+                })
+              )}
+            </div>
           </div>
-        </div>
 
-      </main>
+        </main>
 
-      <AdminModal isOpen={isAdminOpen} onClose={() => setIsAdminOpen(false)} onSuccessUpload={loadData} />
+        {/* Modal Entendendo a Meta DSS */}
+        <AnimatePresence>
+          {isMetaModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-white dark:bg-[#151d2f] rounded-2xl shadow-xl max-w-md w-full overflow-hidden border border-gray-100 dark:border-gray-800 transition-colors"
+              >
+                <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-[#0f172a]/50">
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <HelpCircle className="text-[#660099] dark:text-purple-400" size={20} />
+                    Entendendo a Meta de DSS
+                  </h3>
+                  <button onClick={() => setIsMetaModalOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
+                    <X size={20} />
+                  </button>
+                </div>
+                <div className="p-6">
+                  <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">
+                    A meta de Diálogos Semanais de Segurança (DSS) é calculada com base na seguinte regra:
+                  </p>
+                  <div className="mt-4 p-4 bg-purple-50 dark:bg-purple-950/40 rounded-xl border border-purple-100 dark:border-purple-800/60">
+                    <p className="font-bold text-purple-900 dark:text-purple-300 text-center">
+                      1 DSS por semana × Semanas úteis do mês selecionado
+                    </p>
+                  </div>
+                  <p className="mt-4 text-gray-600 dark:text-gray-300 text-sm leading-relaxed">
+                    Isso significa que cada Líder tem como objetivo aplicar ao menos 1 Diálogo Semanal de Segurança por semana nas bases filtradas. Para o agrupamento por cidade, a meta é multiplicada pela quantidade de líderes únicos daquela localidade.
+                  </p>
+                  <div className="mt-6 flex justify-end">
+                    <button 
+                      onClick={() => setIsMetaModalOpen(false)}
+                      className="px-6 py-2 bg-[#660099] dark:bg-purple-600 text-white text-sm font-semibold rounded-xl hover:bg-[#8000bf] dark:hover:bg-purple-500 transition-colors shadow-sm"
+                    >
+                      Entendi
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
-    </div>
+        <AdminModal isOpen={isAdminOpen} onClose={() => setIsAdminOpen(false)} onSuccessUpload={loadData} />
+
+      </div>
   );
 };
