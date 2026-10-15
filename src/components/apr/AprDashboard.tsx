@@ -870,10 +870,16 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
                           <div className="text-sm font-semibold truncate text-gray-800 dark:text-gray-200" title={item.name}>
                             {item.name}
                           </div>
-                          {(item.supervisor || item.cidade) && (
+                          {rankingGroup === 'cidade' ? (
                             <div className="text-[11px] text-gray-400 dark:text-gray-500 truncate mt-0.5">
-                              {item.supervisor ? `Sup: ${item.supervisor}` : ''} {item.cidade ? `• ${item.cidade}` : ''}
+                              {item.uniquePeople?.size || 0} {(item.uniquePeople?.size || 0) === 1 ? 'colaborador atuante' : 'colaboradores atuantes'}
                             </div>
+                          ) : (
+                            (item.supervisor || item.cidade) && (
+                              <div className="text-[11px] text-gray-400 dark:text-gray-500 truncate mt-0.5">
+                                {item.supervisor ? `Sup: ${item.supervisor}` : ''} {item.cidade ? `• ${item.cidade}` : ''}
+                              </div>
+                            )
                           )}
                           <div className="h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full mt-1.5 overflow-hidden">
                             <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} className={`h-full ${item.count === 0 ? 'bg-transparent' : barColor} rounded-full opacity-80`} />
