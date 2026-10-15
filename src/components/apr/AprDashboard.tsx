@@ -93,7 +93,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
   const matchSpiFilter = (i: any) => {
     if (!onlySpiActive) return true;
     if (i['DIRETORIA 3'] === 'DIR SERVICOS AO CLIENTE SP INTERIOR') {
-      return i['ATIVO_SPI'] !== 0;
+      return i['ATIVO_SPI'] === 1;
     }
     return true;
   };
@@ -131,7 +131,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
     ).map(i => i['Supervisor'] || i['GESTOR']);
 
     const fromPO = colaboradoresPO.filter(p => 
-      (!onlySpiActive || p.diretoria !== 'DIR SERVICOS AO CLIENTE SP INTERIOR' || p.ativo_spi !== 0) &&
+      (!onlySpiActive || p.diretoria !== 'DIR SERVICOS AO CLIENTE SP INTERIOR' || p.ativo_spi === 1) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(p.diretoria)) &&
       (selectedCities.length === 0 || selectedCities.includes(p.cidade))
     ).map(p => p.supervisor);
@@ -161,7 +161,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
     ).map(i => i['Nome Auditor'] || i['Matrícula Auditor']);
 
     const fromPO = colaboradoresPO.filter(p => 
-      (!onlySpiActive || p.diretoria !== 'DIR SERVICOS AO CLIENTE SP INTERIOR' || p.ativo_spi !== 0) &&
+      (!onlySpiActive || p.diretoria !== 'DIR SERVICOS AO CLIENTE SP INTERIOR' || p.ativo_spi === 1) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(p.diretoria)) &&
       (selectedSupervisors.length === 0 || selectedSupervisors.includes(p.supervisor)) &&
       (selectedCities.length === 0 || selectedCities.includes(p.cidade))
@@ -289,7 +289,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       });
 
       colaboradoresPO.forEach(p => {
-        if (onlySpiActive && p.diretoria === 'DIR SERVICOS AO CLIENTE SP INTERIOR' && p.ativo_spi === 0) return;
+        if (onlySpiActive && p.diretoria === 'DIR SERVICOS AO CLIENTE SP INTERIOR' && p.ativo_spi !== 1) return;
         if (selectedDiretorias.length > 0 && !selectedDiretorias.includes(p.diretoria)) return;
         if (selectedSupervisors.length > 0 && !selectedSupervisors.includes(p.supervisor)) return;
         if (selectedCities.length > 0 && !selectedCities.includes(p.cidade)) return;
@@ -467,7 +467,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
 
     // Cruzar colaboradores ativos do PO para identificar quem não fez APR no escopo filtrado
     colaboradoresPO.forEach(p => {
-      if (onlySpiActive && p.diretoria === 'DIR SERVICOS AO CLIENTE SP INTERIOR' && p.ativo_spi === 0) return;
+      if (onlySpiActive && p.diretoria === 'DIR SERVICOS AO CLIENTE SP INTERIOR' && p.ativo_spi !== 1) return;
       if (selectedDiretorias.length > 0 && !selectedDiretorias.includes(p.diretoria)) return;
       if (selectedSupervisors.length > 0 && !selectedSupervisors.includes(p.supervisor)) return;
       if (selectedCities.length > 0 && !selectedCities.includes(p.cidade)) return;

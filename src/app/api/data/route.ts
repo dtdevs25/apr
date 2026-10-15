@@ -249,7 +249,10 @@ export async function GET(req: NextRequest) {
               ELSE d.lider || ' (Líder)'
             END AS "Supervisor",
             COALESCE(d.localidade, spi_g.cidade_comercial, p3.cidade_comercial, pc.cidade_comercial) AS "CIDADE COMERCIAL",
-            COALESCE(spi_p.ativo, 1) AS "ATIVO_SPI",
+            CASE 
+              WHEN spi_g.gestor_n IS NOT NULL OR d.base = 'DIR SERVICOS AO CLIENTE SP INTERIOR' THEN spi_p.ativo
+              ELSE 1
+            END AS "ATIVO_SPI",
             CASE WHEN spi_g.gestor_n IS NOT NULL OR spi_p.mat_n IS NOT NULL THEN true ELSE false END AS "IS_SPI"
           FROM d_norm d
           LEFT JOIN po_by_nome p3 ON p3.nome_n = d.lider_n
@@ -287,7 +290,7 @@ export async function GET(req: NextRequest) {
                    COALESCE(to_jsonb(po)->>'filial', '') AS filial
             FROM po ORDER BY id ASC
           `).catch(() => ({ rows: [] as any[] })),
-          pool.query(`SELECT matricula, gestor_atual, gerencia, cidade_comercial, ativo FROM po_spi_override ORDER BY id ASC`).catch(() => ({ rows: [] as any[] })),
+          pool.query(`SELECT matricula, nome, gestor_atual, gerencia, cidade_comercial, ativo, cargo FROM po_spi_override ORDER BY id ASC`).catch(() => ({ rows: [] as any[] })),
         ]);
 
         // Ordem ASC por id: o último sobrescreve -> fica o registro mais recente
@@ -300,9 +303,12 @@ export async function GET(req: NextRequest) {
           if (nm) poByNome.set(nm, p);
         }
         const spiByMat = new Map<string, any>();
+        const spiByNome = new Map<string, any>();
         for (const s of spiRes.rows) {
           const m = normId(s.matricula);
           if (m) spiByMat.set(m, s);
+          const nm = normNome(s.nome);
+          if (nm) spiByNome.set(nm, s);
         }
 
         const INTERIOR = 'DIR SERVICOS AO CLIENTE SP INTERIOR';
@@ -319,7 +325,7 @@ export async function GET(req: NextRequest) {
           const idMat = normId(a.matricula_auditor);
           const idRe = normId(a.re);
           const p = (idMat && poById.get(idMat)) || (idRe && poById.get(idRe)) || poByNome.get(normNome(a.nome_auditor) || '') || null;
-          const spi = (idMat && spiByMat.get(idMat)) || (idRe && spiByMat.get(idRe)) || null;
+          const spi = (idMat && spiByMat.get(idMat)) || (idRe && spiByMat.get(idRe)) || (normNome(a.nome_auditor) && spiByNome.get(normNome(a.nome_auditor)!)) || null;
 
           const cidade = cleanCidade(a.localidade_objeto) || cleanCidade(a.cidade_comercial) || cleanCidade(spi?.cidade_comercial) || cleanCidade(p?.cidade_comercial) || null;
           const regional = getRegional(cidade);
@@ -369,8 +375,8 @@ export async function GET(req: NextRequest) {
             "Supervisor": gestor,
             "Mês": a.mes,
             "Ano": a.ano,
-            "ATIVO_SPI": spi ? spi.ativo : null,
-            "IS_SPI": !!spi || regional === 'SPI',
+            "ATIVO_SPI": spi ? spi.ativo : (regional === 'SPI' || diretoria === INTERIOR ? 0 : null),
+            "IS_SPI": !!spi,
           };
         });
 
@@ -378,12 +384,41 @@ export async function GET(req: NextRequest) {
         const colaboradoresPO: any[] = [];
         const seenMatriculas = new Set<string>();
 
+        // 1. Prioridade máxima: Colaboradores cadastrados na planilha oficial do Interior (po_spi_override)
+        for (const s of spiRes.rows) {
+          const mat = normId(s.matricula);
+          if (!mat || seenMatriculas.has(mat)) continue;
+          seenMatriculas.add(mat);
+
+          const cidade = cleanCidade(s.cidade_comercial) || null;
+          const fc = getFilialCnpj(cidade);
+          const gestor = (s.gestor_atual || '').toString().trim().toUpperCase() || 'SUPERVISÃO SPI';
+          const filial = fc?.filial || s.gerencia || 'FILIAL SPI';
+          const cnpj = fc?.cnpj || '-';
+
+          colaboradoresPO.push({
+            matricula: mat,
+            nome: (s.nome || mat).toString().trim().toUpperCase(),
+            cargo: (s.cargo || 'TECNICO SERVICO AO CLIENTE').toString().trim().toUpperCase(),
+            diretoria: INTERIOR,
+            gerencia: (s.gerencia || '').toString().trim().toUpperCase(),
+            filial: filial,
+            cnpj: cnpj,
+            supervisor: gestor,
+            cidade: cidade,
+            regional: 'SPI',
+            ativo_spi: s.ativo, // 1 = Ativo em campo, 0 = Treinamento / afastado
+            is_spi: true
+          });
+        }
+
+        // 2. Colaboradores do PO Geral
         for (const p of poRes.rows) {
           const mat = normId(p.user_id_ssff);
           if (!mat || seenMatriculas.has(mat)) continue;
           seenMatriculas.add(mat);
 
-          const spi = spiByMat.get(mat);
+          const spi = spiByMat.get(mat) || (normNome(p.nome) && spiByNome.get(normNome(p.nome)!));
           const cidade = cleanCidade(spi?.cidade_comercial) || cleanCidade(p.cidade_comercial) || null;
           const regional = getRegional(cidade);
           const fc = getFilialCnpj(cidade);
@@ -425,8 +460,8 @@ export async function GET(req: NextRequest) {
               supervisor: (gestor || '').toString().trim().toUpperCase(),
               cidade: cidade,
               regional: regional || (dirUpper === INTERIOR ? 'SPI' : dirUpper === CAPITAL ? 'SPC' : null),
-              ativo_spi: spi ? spi.ativo : 1,
-              is_spi: !!spi || regional === 'SPI'
+              ativo_spi: spi ? spi.ativo : (dirUpper === INTERIOR ? 0 : 1),
+              is_spi: !!spi
             });
           }
         }

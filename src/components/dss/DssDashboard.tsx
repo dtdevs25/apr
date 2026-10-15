@@ -114,7 +114,7 @@ export const DssDashboard: React.FC<DssDashboardProps> = ({ onBack, isDark, togg
   const matchSpiFilter = (i: any) => {
     if (!onlySpiActive) return true;
     if (i['DIRETORIA 3'] === 'DIR SERVICOS AO CLIENTE SP INTERIOR') {
-      return i['ATIVO_SPI'] !== 0;
+      return i['ATIVO_SPI'] === 1;
     }
     return true;
   };
