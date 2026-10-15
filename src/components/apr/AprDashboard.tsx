@@ -380,7 +380,17 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
 
   const maxMonth = Math.max(1, ...monthAgg.map(m => m.count));
 
+  const formatSecondsToHMS = (totalSeconds: number): string => {
+    if (!totalSeconds || isNaN(totalSeconds) || totalSeconds <= 0) return '00:00:00';
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = Math.floor(totalSeconds % 60);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+  };
+
   const exportToExcel = () => {
+    // 1. Aba Dados Filtrados
     const ws_dados = XLSX.utils.json_to_sheet(filteredData);
     const rangeDados = XLSX.utils.decode_range(ws_dados['!ref'] || 'A1:A1');
     for (let C = rangeDados.s.c; C <= rangeDados.e.c; ++C) {
@@ -393,40 +403,187 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       };
     }
 
-    const rankingData = rankAgg.map((item, idx) => {
-      const multiplier = rankingGroup === 'cidade' ? (item.uniquePeople?.size || 1) : 1;
-      const expected = Math.round(targetAprs * multiplier);
-      const perc = expected > 0 ? ((item.count / expected) * 100).toFixed(1) + '%' : '0%';
-      const rankColHeader = rankingGroup === 'cidade' ? 'Cidade' : 'Colaborador';
+    // 2. Mapeamento auxiliar do PO para garantir preenchimento de diretoria, filial (gerência), cidade e supervisor
+    const poMapByMat = new Map<string, any>();
+    const poMapByNome = new Map<string, any>();
+    colaboradoresPO.forEach(p => {
+      const mat = String(p.matricula || '').trim();
+      const nome = String(p.nome || '').trim().toUpperCase();
+      if (mat) poMapByMat.set(mat, p);
+      if (nome) poMapByNome.set(nome, p);
+    });
+
+    // 3. Aba Dedicada: Ranking por Técnicos
+    const tecnicosAgg: Record<string, {
+      name: string;
+      matricula: string;
+      diretoria: string;
+      filial: string;
+      cidade: string;
+      supervisor: string;
+      count: number;
+      totalSecs: number;
+      validCount: number;
+    }> = {};
+
+    filteredData.forEach(item => {
+      const mat = String(item['Matrícula Auditor'] || item['RE'] || '').trim();
+      const nome = String(item['Nome Auditor'] || mat || 'Não Identificado').trim().toUpperCase();
+      const key = mat || nome;
+
+      const pInfo = (mat && poMapByMat.get(mat)) || poMapByNome.get(nome) || null;
+
+      if (!tecnicosAgg[key]) {
+        tecnicosAgg[key] = {
+          name: nome,
+          matricula: mat || pInfo?.matricula || '-',
+          diretoria: item['DIRETORIA 3'] || pInfo?.diretoria || 'N/A',
+          filial: item['GERÊNCIA'] || pInfo?.gerencia || (item['REGIONAL'] ? `Filial ${item['REGIONAL']}` : 'São Paulo'),
+          cidade: item['CIDADE COMERCIAL'] || pInfo?.cidade || 'São Paulo',
+          supervisor: item['Supervisor'] || item['GESTOR'] || pInfo?.supervisor || 'N/A',
+          count: 0,
+          totalSecs: 0,
+          validCount: 0
+        };
+      }
+
+      tecnicosAgg[key].count += 1;
+
+      const durKey = Object.keys(item).find(k => k.toLowerCase().includes('dura') && k.toLowerCase().includes('o'));
+      if (durKey && typeof item[durKey] === 'string') {
+        const parts = item[durKey].split(':');
+        if (parts.length === 3) {
+          const h = parseInt(parts[0], 10); const m = parseInt(parts[1], 10); const s = parseInt(parts[2], 10);
+          if (!isNaN(h) && !isNaN(m) && !isNaN(s)) {
+            const secs = h * 3600 + m * 60 + s;
+            if (secs > 0 && secs <= 600) {
+              tecnicosAgg[key].totalSecs += secs;
+              tecnicosAgg[key].validCount++;
+            }
+          }
+        }
+      }
+    });
+
+    // Cruzar colaboradores ativos do PO para identificar quem não fez APR no escopo filtrado
+    colaboradoresPO.forEach(p => {
+      if (onlySpiActive && p.diretoria === 'DIR SERVICOS AO CLIENTE SP INTERIOR' && p.ativo_spi === 0) return;
+      if (selectedDiretorias.length > 0 && !selectedDiretorias.includes(p.diretoria)) return;
+      if (selectedSupervisors.length > 0 && !selectedSupervisors.includes(p.supervisor)) return;
+      if (selectedCities.length > 0 && !selectedCities.includes(p.cidade)) return;
+      if (selectedAuditores.length > 0 && !selectedAuditores.includes(p.nome) && !selectedAuditores.includes(p.matricula)) return;
+
+      const pMat = String(p.matricula || '').trim();
+      const pNome = String(p.nome || pMat).trim().toUpperCase();
+      const key = pMat || pNome;
+
+      if (!tecnicosAgg[key]) {
+        tecnicosAgg[key] = {
+          name: pNome,
+          matricula: pMat,
+          diretoria: p.diretoria,
+          filial: p.gerencia || (p.regional ? `Filial ${p.regional}` : 'São Paulo'),
+          cidade: p.cidade || 'São Paulo',
+          supervisor: p.supervisor || 'N/A',
+          count: 0,
+          totalSecs: 0,
+          validCount: 0
+        };
+      }
+    });
+
+    const tecnicosList = Object.values(tecnicosAgg).sort((a, b) => b.count - a.count);
+
+    const rankingTecnicosData = tecnicosList.map((item, idx) => {
+      const expected = targetAprs;
+      const perc = expected > 0 ? ((item.count / expected) * 100).toFixed(1) + '%' : '0.0%';
+      const avgSecs = item.validCount > 0 ? Math.round(item.totalSecs / item.validCount) : 0;
 
       return {
         "Posição": `${idx + 1}º`,
-        [rankColHeader]: item.name,
-        "Realizado": item.count,
+        "Técnico": item.name,
+        "Matrícula": item.matricula,
+        "Diretoria": item.diretoria,
+        "Filial": item.filial,
+        "Cidade": item.cidade,
+        "Supervisor": item.supervisor,
+        "Realizado (APRs)": item.count,
         "Esperado": expected,
         "Meta (%)": perc,
-        "Duração Total (Segundos)": item.totalSecs,
-        "Tempo Médio": getAvgTimeStr(item.totalSecs, item.validCount)
+        "Tempo Médio (HH:MM:SS)": formatSecondsToHMS(avgSecs),
+        "Tempo Total Gasto no Mês (HH:MM:SS)": formatSecondsToHMS(item.totalSecs),
+        "Situação": item.count === 0 ? "Sem APR" : item.count >= expected ? "Meta Atingida" : "Abaixo da Meta"
       };
     });
-    
-    const ws_ranking = XLSX.utils.json_to_sheet(rankingData);
-    const rangeRanking = XLSX.utils.decode_range(ws_ranking['!ref'] || 'A1:A1');
-    for (let C = rangeRanking.s.c; C <= rangeRanking.e.c; ++C) {
+
+    const ws_tecnicos = XLSX.utils.json_to_sheet(rankingTecnicosData);
+    const rangeTecnicos = XLSX.utils.decode_range(ws_tecnicos['!ref'] || 'A1:A1');
+    for (let C = rangeTecnicos.s.c; C <= rangeTecnicos.e.c; ++C) {
       const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
-      if (!ws_ranking[cellAddress]) continue;
-      ws_ranking[cellAddress].s = {
+      if (!ws_tecnicos[cellAddress]) continue;
+      ws_tecnicos[cellAddress].s = {
         fill: { fgColor: { rgb: "660099" } },
         font: { color: { rgb: "FFFFFF" }, bold: true },
         alignment: { horizontal: "center", vertical: "center" }
       };
     }
-
-    ws_ranking['!cols'] = [{ wch: 10 }, { wch: 40 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 15 }];
+    ws_tecnicos['!cols'] = [
+      { wch: 10 }, // Posição
+      { wch: 38 }, // Técnico
+      { wch: 15 }, // Matrícula
+      { wch: 38 }, // Diretoria
+      { wch: 32 }, // Filial
+      { wch: 25 }, // Cidade
+      { wch: 32 }, // Supervisor
+      { wch: 18 }, // Realizado
+      { wch: 15 }, // Esperado
+      { wch: 15 }, // Meta %
+      { wch: 24 }, // Tempo Médio
+      { wch: 34 }, // Tempo Total Gasto
+      { wch: 18 }  // Situação
+    ];
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws_dados, "Dados Filtrados APR");
-    XLSX.utils.book_append_sheet(wb, ws_ranking, "Ranking APR");
+    XLSX.utils.book_append_sheet(wb, ws_tecnicos, "Ranking Técnicos APR");
+
+    // Se o usuário selecionou agrupamento por cidade no painel, adicionamos também a aba de Cidades
+    if (rankingGroup === 'cidade') {
+      const rankingCidadesData = rankAgg.map((item, idx) => {
+        const multiplier = item.uniquePeople?.size || 1;
+        const expected = Math.round(targetAprs * multiplier);
+        const perc = expected > 0 ? ((item.count / expected) * 100).toFixed(1) + '%' : '0.0%';
+        const avgSecs = item.validCount > 0 ? Math.round(item.totalSecs / item.validCount) : 0;
+
+        return {
+          "Posição": `${idx + 1}º`,
+          "Cidade": item.name,
+          "Técnicos Ativos": multiplier,
+          "Realizado (APRs)": item.count,
+          "Esperado": expected,
+          "Meta (%)": perc,
+          "Tempo Médio (HH:MM:SS)": formatSecondsToHMS(avgSecs),
+          "Tempo Total Gasto no Mês (HH:MM:SS)": formatSecondsToHMS(item.totalSecs)
+        };
+      });
+
+      const ws_cidades = XLSX.utils.json_to_sheet(rankingCidadesData);
+      const rangeCidades = XLSX.utils.decode_range(ws_cidades['!ref'] || 'A1:A1');
+      for (let C = rangeCidades.s.c; C <= rangeCidades.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
+        if (!ws_cidades[cellAddress]) continue;
+        ws_cidades[cellAddress].s = {
+          fill: { fgColor: { rgb: "660099" } },
+          font: { color: { rgb: "FFFFFF" }, bold: true },
+          alignment: { horizontal: "center", vertical: "center" }
+        };
+      }
+      ws_cidades['!cols'] = [
+        { wch: 10 }, { wch: 30 }, { wch: 18 }, { wch: 18 }, { wch: 15 }, { wch: 15 }, { wch: 24 }, { wch: 34 }
+      ];
+      XLSX.utils.book_append_sheet(wb, ws_cidades, "Ranking Cidades APR");
+    }
+
     XLSX.writeFile(wb, `vivo_painel_apr.xlsx`);
   };
 

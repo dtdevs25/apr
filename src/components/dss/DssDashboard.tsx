@@ -233,51 +233,192 @@ export const DssDashboard: React.FC<DssDashboardProps> = ({ onBack, isDark, togg
   const maxMonth = Math.max(1, ...monthAgg.map(m => m.count));
 
   const exportToExcel = () => {
+    // 1. Aba Dados Filtrados DSS
     const ws_dados = XLSX.utils.json_to_sheet(filteredData);
     const rangeDados = XLSX.utils.decode_range(ws_dados['!ref'] || 'A1:A1');
     for (let C = rangeDados.s.c; C <= rangeDados.e.c; ++C) {
       const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
       if (!ws_dados[cellAddress]) continue;
       ws_dados[cellAddress].s = {
-        fill: { fgColor: { rgb: "0284c7" } }, // Azul para DSS
+        fill: { fgColor: { rgb: "660099" } },
         font: { color: { rgb: "FFFFFF" }, bold: true },
         alignment: { horizontal: "center", vertical: "center" }
       };
     }
 
-    const rankingData = rankAgg.map((item, idx) => {
-      const multiplier = rankingGroup === 'cidade' ? (item.uniquePeople?.size || 1) : 1;
-      const expected = Math.round(targetAprs * multiplier);
-      const perc = expected > 0 ? ((item.count / expected) * 100).toFixed(1) + '%' : '0%';
-      const rankColHeader = rankingGroup === 'cidade' ? 'Cidade' : rankingGroup === 'colaborador' ? 'Colaborador' : 'Líder DSS';
+    // 2. Aba Dedicada: Ranking por Técnicos / Colaboradores em DSS
+    const tecnicosAgg: Record<string, {
+      name: string;
+      matricula: string;
+      diretoria: string;
+      filial: string;
+      cidade: string;
+      supervisor: string;
+      count: number;
+    }> = {};
+
+    filteredData.forEach(item => {
+      const mat = String(item['Matrícula'] || '').trim();
+      const nome = String(item['Nome'] || mat || 'Não Identificado').trim().toUpperCase();
+      const key = mat || nome;
+
+      if (!tecnicosAgg[key]) {
+        tecnicosAgg[key] = {
+          name: nome,
+          matricula: mat || '-',
+          diretoria: item['DIRETORIA 3'] || 'N/A',
+          filial: item['Base'] || 'São Paulo',
+          cidade: item['CIDADE COMERCIAL'] || item['Localidade'] || 'São Paulo',
+          supervisor: item['Supervisor'] || item['Líder'] || 'N/A',
+          count: 0
+        };
+      }
+      tecnicosAgg[key].count += 1;
+    });
+
+    const tecnicosList = Object.values(tecnicosAgg).sort((a, b) => b.count - a.count);
+
+    const rankingTecnicosData = tecnicosList.map((item, idx) => {
+      const expected = targetAprs;
+      const perc = expected > 0 ? ((item.count / expected) * 100).toFixed(1) + '%' : '0.0%';
 
       return {
         "Posição": `${idx + 1}º`,
-        [rankColHeader]: item.name,
-        "Realizado (DSS)": item.count,
+        "Técnico / Colaborador": item.name,
+        "Matrícula": item.matricula,
+        "Diretoria": item.diretoria,
+        "Filial": item.filial,
+        "Cidade": item.cidade,
+        "Supervisor / Líder": item.supervisor,
+        "Presenças em DSS": item.count,
         "Esperado": expected,
         "Meta (%)": perc,
-        "Participantes Presentes": item.data.length
+        "Situação": item.count >= expected ? "Meta Atingida" : "Abaixo da Meta"
       };
     });
-    
-    const ws_ranking = XLSX.utils.json_to_sheet(rankingData);
-    const rangeRanking = XLSX.utils.decode_range(ws_ranking['!ref'] || 'A1:A1');
-    for (let C = rangeRanking.s.c; C <= rangeRanking.e.c; ++C) {
+
+    const ws_tecnicos = XLSX.utils.json_to_sheet(rankingTecnicosData);
+    const rangeTecnicos = XLSX.utils.decode_range(ws_tecnicos['!ref'] || 'A1:A1');
+    for (let C = rangeTecnicos.s.c; C <= rangeTecnicos.e.c; ++C) {
       const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
-      if (!ws_ranking[cellAddress]) continue;
-      ws_ranking[cellAddress].s = {
-        fill: { fgColor: { rgb: "0284c7" } },
+      if (!ws_tecnicos[cellAddress]) continue;
+      ws_tecnicos[cellAddress].s = {
+        fill: { fgColor: { rgb: "660099" } },
         font: { color: { rgb: "FFFFFF" }, bold: true },
         alignment: { horizontal: "center", vertical: "center" }
       };
     }
+    ws_tecnicos['!cols'] = [
+      { wch: 10 }, { wch: 38 }, { wch: 15 }, { wch: 38 }, { wch: 25 }, { wch: 25 }, { wch: 32 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 18 }
+    ];
 
-    ws_ranking['!cols'] = [{ wch: 10 }, { wch: 40 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 25 }];
+    // 3. Aba Dedicada: Ranking por Líderes DSS
+    const lideresAgg: Record<string, {
+      name: string;
+      diretoria: string;
+      filial: string;
+      cidade: string;
+      dssSet: Set<string>;
+      participantesCount: number;
+    }> = {};
+
+    filteredData.forEach(item => {
+      const lider = String(item['Líder'] || 'Não Identificado').trim();
+      const dssId = item['Número do Diálogo'];
+
+      if (!lideresAgg[lider]) {
+        lideresAgg[lider] = {
+          name: lider,
+          diretoria: item['DIRETORIA 3'] || 'N/A',
+          filial: item['Base'] || 'São Paulo',
+          cidade: item['CIDADE COMERCIAL'] || item['Localidade'] || 'São Paulo',
+          dssSet: new Set(),
+          participantesCount: 0
+        };
+      }
+
+      if (dssId && !lideresAgg[lider].dssSet.has(dssId)) {
+        lideresAgg[lider].dssSet.add(dssId);
+      }
+      lideresAgg[lider].participantesCount += 1;
+    });
+
+    const lideresList = Object.values(lideresAgg)
+      .map(i => ({ ...i, count: i.dssSet.size || i.participantesCount }))
+      .sort((a, b) => b.count - a.count);
+
+    const rankingLideresData = lideresList.map((item, idx) => {
+      const expected = targetAprs;
+      const perc = expected > 0 ? ((item.count / expected) * 100).toFixed(1) + '%' : '0.0%';
+
+      return {
+        "Posição": `${idx + 1}º`,
+        "Líder DSS": item.name,
+        "Diretoria": item.diretoria,
+        "Filial": item.filial,
+        "Cidade": item.cidade,
+        "Diálogos Realizados": item.count,
+        "Esperado": expected,
+        "Meta (%)": perc,
+        "Participantes Presentes": item.participantesCount,
+        "Situação": item.count >= expected ? "Meta Atingida" : "Abaixo da Meta"
+      };
+    });
+
+    const ws_lideres = XLSX.utils.json_to_sheet(rankingLideresData);
+    const rangeLideres = XLSX.utils.decode_range(ws_lideres['!ref'] || 'A1:A1');
+    for (let C = rangeLideres.s.c; C <= rangeLideres.e.c; ++C) {
+      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
+      if (!ws_lideres[cellAddress]) continue;
+      ws_lideres[cellAddress].s = {
+        fill: { fgColor: { rgb: "660099" } },
+        font: { color: { rgb: "FFFFFF" }, bold: true },
+        alignment: { horizontal: "center", vertical: "center" }
+      };
+    }
+    ws_lideres['!cols'] = [
+      { wch: 10 }, { wch: 38 }, { wch: 38 }, { wch: 25 }, { wch: 25 }, { wch: 22 }, { wch: 15 }, { wch: 15 }, { wch: 25 }, { wch: 18 }
+    ];
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws_dados, "Dados Filtrados DSS");
-    XLSX.utils.book_append_sheet(wb, ws_ranking, "Ranking DSS");
+    XLSX.utils.book_append_sheet(wb, ws_tecnicos, "Ranking Técnicos DSS");
+    XLSX.utils.book_append_sheet(wb, ws_lideres, "Ranking Líderes DSS");
+
+    if (rankingGroup === 'cidade') {
+      const rankingCidadesData = rankAgg.map((item, idx) => {
+        const multiplier = item.uniquePeople?.size || 1;
+        const expected = Math.round(targetAprs * multiplier);
+        const perc = expected > 0 ? ((item.count / expected) * 100).toFixed(1) + '%' : '0.0%';
+
+        return {
+          "Posição": `${idx + 1}º`,
+          "Cidade": item.name,
+          "Líderes Ativos": multiplier,
+          "Diálogos Realizados": item.count,
+          "Esperado": expected,
+          "Meta (%)": perc,
+          "Participantes Presentes": item.data.length
+        };
+      });
+
+      const ws_cidades = XLSX.utils.json_to_sheet(rankingCidadesData);
+      const rangeCidades = XLSX.utils.decode_range(ws_cidades['!ref'] || 'A1:A1');
+      for (let C = rangeCidades.s.c; C <= rangeCidades.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
+        if (!ws_cidades[cellAddress]) continue;
+        ws_cidades[cellAddress].s = {
+          fill: { fgColor: { rgb: "660099" } },
+          font: { color: { rgb: "FFFFFF" }, bold: true },
+          alignment: { horizontal: "center", vertical: "center" }
+        };
+      }
+      ws_cidades['!cols'] = [
+        { wch: 10 }, { wch: 30 }, { wch: 18 }, { wch: 22 }, { wch: 15 }, { wch: 15 }, { wch: 25 }
+      ];
+      XLSX.utils.book_append_sheet(wb, ws_cidades, "Ranking Cidades DSS");
+    }
+
     XLSX.writeFile(wb, `vivo_painel_dss.xlsx`);
   };
 
