@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { PremiumMultiSelect } from '@/components/common/PremiumMultiSelect';
 import { AdminModal } from '@/components/common/AdminModal';
+import { HierarchyModal } from './HierarchyModal';
 import { KpiGrid } from '@/components/common/KpiGrid';
 import { exportAprToExcel } from '@/lib/excel/exportApr';
 
@@ -83,6 +84,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
   const [colaboradoresPO, setColaboradoresPO] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [isHierarchyModalOpen, setIsHierarchyModalOpen] = useState(false);
   const [isMetaModalOpen, setIsMetaModalOpen] = useState(false);
   const [rankingGroup, setRankingGroup] = useState<'colaborador' | 'cidade'>('colaborador');
   const [rankingFilter, setRankingFilter] = useState<'todos' | 'mais' | 'menos' | 'sem_apr'>('todos');
@@ -284,21 +286,10 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
     });
   }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities, selectedAuditores, onlySpiActive, getItemCity, matchLeader]);
 
-  // KPIs
+  // KPIs base
   const totalAprs = filteredData.length;
-  const auditoresSet = new Set(filteredData.map(i => i['Matrícula Auditor'] || i['Nome Auditor']));
-  const totalAuditores = auditoresSet.size;
   const diretoriasUnicas = new Set(filteredData.map(i => i['DIRETORIA 3']).filter(Boolean)).size;
   const cidadesUnicas = new Set(filteredData.map(i => getItemCity(i)).filter(Boolean)).size;
-  const supervisoresUnicos = new Set(filteredData.map(i => i['Supervisor'] || i['GESTOR']).filter(Boolean)).size;
-
-  const kpiItems = useMemo(() => [
-    { v: formatNum(totalAprs), l: 'APRs no Filtro', icon: FileText, c: 'border-l-pink-500', t: 'text-pink-500' },
-    { v: formatNum(diretoriasUnicas), l: 'Diretorias', icon: Building, c: 'border-l-blue-500', t: 'text-blue-500' },
-    { v: formatNum(supervisoresUnicos), l: 'Supervisores', icon: Users, c: 'border-l-orange-500', t: 'text-orange-500' },
-    { v: formatNum(cidadesUnicas), l: 'Cidades', icon: MapPin, c: 'border-l-teal-500', t: 'text-teal-500' },
-    { v: formatNum(totalAuditores), l: 'Auditores Ativos', icon: UserCheck, c: 'border-l-purple-500', t: 'text-purple-500' }
-  ], [totalAprs, diretoriasUnicas, supervisoresUnicos, cidadesUnicas, totalAuditores]);
 
   const getAvgTimeStr = (totalSecs: number, validCount: number) => {
     const avgSecs = validCount > 0 ? Math.round(totalSecs / validCount) : 0;
@@ -449,6 +440,44 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
   const semAprCount = useMemo(() => allRankAgg.filter(i => i.count === 0).length, [allRankAgg]);
   const maxRank = Math.max(1, ...rankAgg.map(i => i.count));
 
+  // Lideranças diretas no filtro (supervisores que possuem colaboradores/APRs neste escopo)
+  const supervisoresNoFiltro = useMemo(() => {
+    const sups = new Set<string>();
+    allRankAgg.forEach(item => {
+      const s = (item.supervisor || '').trim().toUpperCase();
+      if (s && isPersonName(s)) sups.add(s);
+    });
+    return Array.from(sups).sort();
+  }, [allRankAgg]);
+
+  const totalColaboradores = allRankAgg.length;
+  const comAprCount = useMemo(() => allRankAgg.filter(i => i.count > 0).length, [allRankAgg]);
+
+  const kpiItems = useMemo(() => [
+    { v: formatNum(totalAprs), l: 'APRs no Filtro', icon: FileText, c: 'border-l-pink-500', t: 'text-pink-500' },
+    { v: formatNum(diretoriasUnicas), l: 'Diretorias', icon: Building, c: 'border-l-blue-500', t: 'text-blue-500' },
+    {
+      v: formatNum(supervisoresNoFiltro.length),
+      l: 'Hierarquia',
+      icon: Users,
+      c: 'border-l-orange-500',
+      t: 'text-orange-500',
+      sub: selectedSupervisors.length > 0
+        ? `${selectedSupervisors[0]} (${supervisoresNoFiltro.length} supervisores)`
+        : `${supervisoresNoFiltro.length} supervisores`,
+      onClick: () => setIsHierarchyModalOpen(true)
+    },
+    { v: formatNum(cidadesUnicas), l: 'Cidades', icon: MapPin, c: 'border-l-teal-500', t: 'text-teal-500' },
+    {
+      v: formatNum(totalColaboradores),
+      l: 'Colaboradores',
+      icon: UserCheck,
+      c: 'border-l-purple-500',
+      t: 'text-purple-500',
+      sub: `${comAprCount} com APR • ${semAprCount} sem APR`
+    }
+  ], [totalAprs, diretoriasUnicas, supervisoresNoFiltro, selectedSupervisors, cidadesUnicas, totalColaboradores, comAprCount, semAprCount]);
+
   // Rank Atividade
   const rankAtividade = useMemo(() => {
     const agg: Record<string, { count: number, name: string, data: any[] }> = {};
@@ -475,8 +504,8 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
         matchAuditor &&
         (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(item['Questionário']))) &&
         (selectedDiretorias.length === 0 || selectedDiretorias.includes(item['DIRETORIA 3'])) &&
-        (selectedSupervisors.length === 0 || selectedSupervisors.includes(item['Supervisor'] || item['GESTOR'])) &&
-        (selectedCities.length === 0 || selectedCities.includes(item['CIDADE COMERCIAL']));
+        matchLeader(item, selectedSupervisors) &&
+        (selectedCities.length === 0 || selectedCities.includes(getItemCity(item)));
     });
 
     const agg: Record<string, number> = {};
@@ -485,7 +514,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       agg[m] = (agg[m] || 0) + 1;
     });
     return allMonths.map(m => ({ month: m, count: agg[m] || 0 }));
-  }, [data, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities, selectedAuditores, allMonths, onlySpiActive]);
+  }, [data, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities, selectedAuditores, allMonths, onlySpiActive, getItemCity, matchLeader]);
 
   const maxMonth = Math.max(1, ...monthAgg.map(m => m.count));
 
@@ -988,6 +1017,15 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       </AnimatePresence>
 
       <AdminModal isOpen={isAdminOpen} onClose={() => setIsAdminOpen(false)} onSuccessUpload={loadData} />
+
+      <HierarchyModal
+        isOpen={isHierarchyModalOpen}
+        onClose={() => setIsHierarchyModalOpen(false)}
+        selectedLeaders={selectedSupervisors}
+        selectedDiretorias={selectedDiretorias}
+        selectedCities={selectedCities}
+        rankAgg={allRankAgg}
+      />
 
     </div>
   );
