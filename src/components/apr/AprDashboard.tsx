@@ -70,6 +70,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
   const [onlySpiActive, setOnlySpiActive] = useState<boolean>(true);
   // Flag de Origem da Cidade: 'base' (Lotação oficial PO) ou 'execucao' (Local da APR)
   const [cityMode, setCityMode] = useState<'base' | 'execucao'>('base');
+  const [liderancas, setLiderancas] = useState<any[]>([]);
 
   const getItemCity = useCallback((item: any) => {
     if (!item) return '';
@@ -79,6 +80,20 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
     return item['CIDADE_BASE'] || item['CIDADE COMERCIAL'] || '';
   }, [cityMode]);
 
+  // Helper para verificar se um item ou colaborador pertence a uma liderança selecionada
+  const matchLeader = useCallback((item: any, selectedLeaders: string[]) => {
+    if (!selectedLeaders || selectedLeaders.length === 0) return true;
+    const sup = item['Supervisor'] || item['GESTOR'] || item.supervisor;
+    if (sup && selectedLeaders.includes(sup)) return true;
+    const ger = item['GERÊNCIA'] || item.gerencia;
+    if (ger && selectedLeaders.includes(ger)) return true;
+    const lideres = item['LIDERES'] || item.lideres;
+    if (Array.isArray(lideres)) {
+      return lideres.some((l: string) => selectedLeaders.includes(l));
+    }
+    return false;
+  }, []);
+
   const loadData = () => {
     setLoading(true);
     fetch('/api/data?type=APR')
@@ -86,8 +101,10 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       .then(json => {
         const rows = Array.isArray(json) ? json : (json.data || []);
         const poList = Array.isArray(json) ? [] : (json.colaboradoresPO || []);
+        const lidList = Array.isArray(json) ? [] : (json.liderancas || []);
         setData(rows);
         setColaboradoresPO(poList);
+        setLiderancas(lidList);
         setLoading(false);
       })
       .catch(err => {
@@ -116,40 +133,49 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       matchSpiFilter(i) &&
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
-      (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor'] || i['GESTOR'])) &&
+      matchLeader(i, selectedSupervisors) &&
       (selectedCities.length === 0 || selectedCities.includes(getItemCity(i)))
     );
     return Array.from(new Set(base.map(i => cleanTipo(i['Questionário'])))).filter(Boolean).sort();
-  }, [data, selectedMonths, selectedDiretorias, selectedSupervisors, selectedCities, onlySpiActive, getItemCity]);
+  }, [data, selectedMonths, selectedDiretorias, selectedSupervisors, selectedCities, onlySpiActive, getItemCity, matchLeader]);
 
   const allDiretorias = useMemo(() => {
     const base = data.filter(i =>
       matchSpiFilter(i) &&
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
-      (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor'] || i['GESTOR'])) &&
+      matchLeader(i, selectedSupervisors) &&
       (selectedCities.length === 0 || selectedCities.includes(getItemCity(i)))
     );
     return Array.from(new Set(base.map(i => i['DIRETORIA 3']))).filter(Boolean).sort();
-  }, [data, selectedMonths, selectedTipos, selectedSupervisors, selectedCities, onlySpiActive, getItemCity]);
+  }, [data, selectedMonths, selectedTipos, selectedSupervisors, selectedCities, onlySpiActive, getItemCity, matchLeader]);
 
   const allSupervisors = useMemo(() => {
+    // 1. Da lista oficial de lideranças do PO (Gerentes, Coordenadores, Supervisores)
+    const fromLid = liderancas.filter(l => {
+      const matchDir = selectedDiretorias.length === 0 || selectedDiretorias.includes(l.diretoria);
+      const matchCity = selectedCities.length === 0 || selectedCities.includes(l.cidade);
+      return matchDir && matchCity;
+    }).map(l => l.nome);
+
+    // 2. Do histórico de APRs filtradas
     const fromData = data.filter(i =>
       matchSpiFilter(i) &&
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
       (selectedCities.length === 0 || selectedCities.includes(getItemCity(i)))
-    ).map(i => i['Supervisor'] || i['GESTOR']);
+    ).flatMap(i => [i['Supervisor'], i['GESTOR'], ...(i['LIDERES'] || [])]);
 
+    // 3. Do PO de campo
     const fromPO = colaboradoresPO.filter(p =>
       (!onlySpiActive || p.diretoria !== 'DIR SERVICOS AO CLIENTE SP INTERIOR' || p.ativo_spi !== 0) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(p.diretoria)) &&
       (selectedCities.length === 0 || selectedCities.includes(p.cidade))
-    ).map(p => p.supervisor);
+    ).flatMap(p => [p.supervisor, ...(p.lideres || [])]);
 
-    return Array.from(new Set([...fromData, ...fromPO])).filter(Boolean).sort();
-  }, [data, colaboradoresPO, selectedMonths, selectedTipos, selectedDiretorias, selectedCities, onlySpiActive, getItemCity]);
+    return Array.from(new Set([...fromLid, ...fromData, ...fromPO])).filter(Boolean).sort();
+  }, [liderancas, data, colaboradoresPO, selectedMonths, selectedTipos, selectedDiretorias, selectedCities, onlySpiActive, getItemCity]);
 
   const allCities = useMemo(() => {
     const base = data.filter(i =>
@@ -157,18 +183,18 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
-      (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor'] || i['GESTOR']))
+      matchLeader(i, selectedSupervisors)
     );
     const dataCities = base.map(i => getItemCity(i)).filter(Boolean);
     const poCities = (cityMode === 'base')
       ? colaboradoresPO.filter(p =>
           (!onlySpiActive || p.diretoria !== 'DIR SERVICOS AO CLIENTE SP INTERIOR' || p.ativo_spi !== 0) &&
           (selectedDiretorias.length === 0 || selectedDiretorias.includes(p.diretoria)) &&
-          (selectedSupervisors.length === 0 || selectedSupervisors.includes(p.supervisor))
+          matchLeader(p, selectedSupervisors)
         ).map(p => p.cidade).filter(Boolean)
       : [];
     return Array.from(new Set([...dataCities, ...poCities])).sort();
-  }, [data, colaboradoresPO, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, onlySpiActive, getItemCity, cityMode]);
+  }, [data, colaboradoresPO, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, onlySpiActive, getItemCity, cityMode, matchLeader]);
 
   const allAuditores = useMemo(() => {
     const fromData = data.filter(i =>
@@ -176,19 +202,24 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
-      (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor'] || i['GESTOR'])) &&
+      matchLeader(i, selectedSupervisors) &&
       (selectedCities.length === 0 || selectedCities.includes(getItemCity(i)))
     ).map(i => i['Nome Auditor'] || i['Matrícula Auditor']);
 
     const fromPO = colaboradoresPO.filter(p =>
       (!onlySpiActive || p.diretoria !== 'DIR SERVICOS AO CLIENTE SP INTERIOR' || p.ativo_spi !== 0) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(p.diretoria)) &&
-      (selectedSupervisors.length === 0 || selectedSupervisors.includes(p.supervisor)) &&
+      matchLeader(p, selectedSupervisors) &&
       (selectedCities.length === 0 || selectedCities.includes(p.cidade))
     ).map(p => p.nome || p.matricula);
 
-    return Array.from(new Set([...fromData, ...fromPO])).filter(Boolean).sort();
-  }, [data, colaboradoresPO, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities, onlySpiActive, getItemCity]);
+    const fromLid = liderancas.filter(l =>
+      (selectedDiretorias.length === 0 || selectedDiretorias.includes(l.diretoria)) &&
+      (selectedCities.length === 0 || selectedCities.includes(l.cidade))
+    ).map(l => l.nome);
+
+    return Array.from(new Set([...fromData, ...fromPO, ...fromLid])).filter(Boolean).sort();
+  }, [data, colaboradoresPO, liderancas, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities, onlySpiActive, getItemCity, matchLeader]);
 
   const toggleMonth = (m: string) => setSelectedMonths(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]);
 
@@ -218,10 +249,10 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
         (selectedMonths.length === 0 || selectedMonths.includes(String(item['Mês']))) &&
         (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(item['Questionário']))) &&
         (selectedDiretorias.length === 0 || selectedDiretorias.includes(item['DIRETORIA 3'])) &&
-        (selectedSupervisors.length === 0 || selectedSupervisors.includes(item['Supervisor'] || item['GESTOR'])) &&
+        matchLeader(item, selectedSupervisors) &&
         (selectedCities.length === 0 || selectedCities.includes(getItemCity(item)));
     });
-  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities, selectedAuditores, onlySpiActive, getItemCity]);
+  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities, selectedAuditores, onlySpiActive, getItemCity, matchLeader]);
 
   // KPIs
   const totalAprs = filteredData.length;
@@ -337,7 +368,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       colaboradoresPO.forEach(p => {
         if (onlySpiActive && p.diretoria === 'DIR SERVICOS AO CLIENTE SP INTERIOR' && p.ativo_spi === 0) return;
         if (selectedDiretorias.length > 0 && !selectedDiretorias.includes(p.diretoria)) return;
-        if (selectedSupervisors.length > 0 && !selectedSupervisors.includes(p.supervisor)) return;
+        if (!matchLeader(p, selectedSupervisors)) return;
         if (selectedCities.length > 0 && !selectedCities.includes(p.cidade)) return;
         if (selectedAuditores.length > 0 && !selectedAuditores.includes(p.nome) && !selectedAuditores.includes(p.matricula)) return;
 
@@ -363,7 +394,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
     }
 
     return Object.values(agg);
-  }, [filteredData, colaboradoresPO, selectedAuditores, selectedDiretorias, selectedSupervisors, selectedCities, onlySpiActive, rankingGroup, getItemCity]);
+  }, [filteredData, colaboradoresPO, selectedAuditores, selectedDiretorias, selectedSupervisors, selectedCities, onlySpiActive, rankingGroup, getItemCity, matchLeader]);
 
   // Ranking ordenado e filtrado
   const rankAgg = useMemo(() => {

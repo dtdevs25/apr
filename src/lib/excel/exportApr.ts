@@ -121,7 +121,11 @@ export function exportAprToExcel({
   colaboradoresPO.forEach(p => {
     if (onlySpiActive && p.diretoria === 'DIR SERVICOS AO CLIENTE SP INTERIOR' && p.ativo_spi === 0) return;
     if (selectedDiretorias.length > 0 && !selectedDiretorias.includes(p.diretoria)) return;
-    if (selectedSupervisors.length > 0 && !selectedSupervisors.includes(p.supervisor)) return;
+    const matchSup = selectedSupervisors.length === 0 ||
+      selectedSupervisors.includes(p.supervisor) ||
+      selectedSupervisors.includes(p.gerencia) ||
+      (Array.isArray(p.lideres) && p.lideres.some((l: string) => selectedSupervisors.includes(l)));
+    if (!matchSup) return;
     if (selectedCities.length > 0 && !selectedCities.includes(p.cidade)) return;
     if (selectedAuditores.length > 0 && !selectedAuditores.includes(p.nome) && !selectedAuditores.includes(p.matricula)) return;
     if (selectedCargos && selectedCargos.length > 0 && !selectedCargos.includes(p.cargo)) return;

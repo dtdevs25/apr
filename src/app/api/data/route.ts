@@ -162,28 +162,46 @@ function getRegional(cidade: string | null): 'SPC' | 'SPI' | null {
   return CITY_TO_REGIONAL[unaccented] || null;
 }
 
+function cleanStr(s: any): string {
+  if (!s) return '';
+  return String(s)
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
 const ALLOWED_DIRETORIAS = [
   'DIR SERVICOS AO CLIENTE SP CAPITAL',
   'DIR SERVICOS AO CLIENTE SP INTERIOR',
   'DIR ENGENHARIA TRANSPORTE E INFRA - CAPITAL',
-  'DIR ENGENHARIA TRANSPORTE E INFRA - INTERIOR',
-  'DIR ENGENHARIA TRANSPORTE E INFRA'
+  'DIR ENGENHARIA TRANSPORTE E INFRA - INTERIOR'
 ];
 
 function normalizeDiretoria(dir: string | null, regional: 'SPC' | 'SPI' | null): string | null {
   if (!dir) return null;
-  const d = dir.trim().toUpperCase();
-  if (d.includes('ENGENHARIA')) {
+  const d = cleanStr(dir);
+
+  // Engenharia, Transporte e Infraestrutura
+  if (d.includes('ENGENHARIA') || d.includes('TRANSPORTE') || d.includes('INFRA') || (d.includes('ENG') && !d.includes('ENGENHEIRO'))) {
     return regional === 'SPI'
       ? 'DIR ENGENHARIA TRANSPORTE E INFRA - INTERIOR'
       : 'DIR ENGENHARIA TRANSPORTE E INFRA - CAPITAL';
   }
-  if (regional === 'SPI' && (d === 'DIR SERVICOS AO CLIENTE SP CAPITAL' || d === 'DIR SERVICOS AO CLIENTE SP INTERIOR')) {
-    return 'DIR SERVICOS AO CLIENTE SP INTERIOR';
+
+  // Serviços ao Cliente
+  if (d.includes('CLIENTE') || d.includes('SERVICO') || d.includes('SERVICOS')) {
+    if (d.includes('INTERIOR') || regional === 'SPI') {
+      return 'DIR SERVICOS AO CLIENTE SP INTERIOR';
+    }
+    if (d.includes('CAPITAL') || regional === 'SPC') {
+      return 'DIR SERVICOS AO CLIENTE SP CAPITAL';
+    }
+    return regional === 'SPI'
+      ? 'DIR SERVICOS AO CLIENTE SP INTERIOR'
+      : 'DIR SERVICOS AO CLIENTE SP CAPITAL';
   }
-  if (regional === 'SPC' && (d === 'DIR SERVICOS AO CLIENTE SP CAPITAL' || d === 'DIR SERVICOS AO CLIENTE SP INTERIOR')) {
-    return 'DIR SERVICOS AO CLIENTE SP CAPITAL';
-  }
+
   return d;
 }
 
@@ -332,6 +350,130 @@ export async function GET(req: NextRequest) {
           if (nm) spiByNome.set(nm, s);
         }
 
+        // Mapeamento de hierarquia e lideranças
+        const allPoByName = new Map<string, any>();
+        const allPoById = new Map<string, any>();
+        for (const p of poRes.rows) {
+          const id = normId(p.user_id_ssff);
+          if (id) allPoById.set(id, p);
+          const nm = normNome(p.nome);
+          if (nm) allPoByName.set(nm, p);
+        }
+
+        // Função auxiliar para rastrear a cadeia hierárquica (Técnico -> Supervisor -> Coordenador -> Gerente)
+        const getLeadershipChain = (p: any, spi: any, aGestor?: string | null): string[] => {
+          const chain = new Set<string>();
+          if (spi?.gestor_atual) chain.add(spi.gestor_atual.toString().trim().toUpperCase());
+          if (aGestor) chain.add(aGestor.toString().trim().toUpperCase());
+          if (p?.gestor) chain.add(p.gestor.toString().trim().toUpperCase());
+          if (p?.gerencia) chain.add(p.gerencia.toString().trim().toUpperCase());
+
+          const gKey = p?.gestor ? normNome(p.gestor) : null;
+          let current = gKey ? allPoByName.get(gKey) : null;
+          let depth = 0;
+          while (current && depth < 4) {
+            if (current.nome) chain.add(current.nome.toString().trim().toUpperCase());
+            if (current.gestor) chain.add(current.gestor.toString().trim().toUpperCase());
+            if (current.gerencia) chain.add(current.gerencia.toString().trim().toUpperCase());
+            const nextKey = current.gestor ? normNome(current.gestor) : null;
+            current = nextKey ? allPoByName.get(nextKey) : null;
+            depth++;
+          }
+          return Array.from(chain).filter(Boolean);
+        };
+
+        const liderancasMap = new Map<string, {
+          nome: string;
+          cargo: string;
+          tipo: 'GERENTE' | 'COORDENADOR' | 'SUPERVISOR' | 'GESTOR';
+          diretoria: string;
+          cidade: string;
+          regional: string;
+        }>();
+
+        // Catalogar todos os líderes presentes no PO geral
+        for (const p of poRes.rows) {
+          const nm = (p.nome || '').toString().trim().toUpperCase();
+          if (!nm) continue;
+
+          const cargoUpper = (p.cargo || '').toString().trim().toUpperCase();
+          const isLider = cargoUpper.includes('GERENTE') || cargoUpper.includes('GER ') ||
+                          cargoUpper.includes('COORD') || cargoUpper.includes('SUPERV') ||
+                          cargoUpper.includes('GESTOR') || cargoUpper.includes('DIRETOR');
+
+          const cidade = cleanCidade(p.cidade_comercial);
+          const regional = getRegional(cidade);
+          const dir = normalizeDiretoria(p.diretoria_3, regional);
+
+          if (!dir || !ALLOWED_DIRETORIAS.includes(dir)) continue;
+
+          let tipo: 'GERENTE' | 'COORDENADOR' | 'SUPERVISOR' | 'GESTOR' = 'GESTOR';
+          if (cargoUpper.includes('GERENTE') || cargoUpper.includes('GER ')) tipo = 'GERENTE';
+          else if (cargoUpper.includes('COORD')) tipo = 'COORDENADOR';
+          else if (cargoUpper.includes('SUPERV')) tipo = 'SUPERVISOR';
+
+          if (isLider) {
+            liderancasMap.set(nm, {
+              nome: nm,
+              cargo: cargoUpper,
+              tipo,
+              diretoria: dir,
+              cidade: cidade || 'SÃO PAULO',
+              regional: regional || (dir.includes('INTERIOR') ? 'SPI' : 'SPC')
+            });
+          }
+
+          const gestorName = (p.gestor || '').toString().trim().toUpperCase();
+          if (gestorName && !liderancasMap.has(gestorName)) {
+            liderancasMap.set(gestorName, {
+              nome: gestorName,
+              cargo: 'GESTOR / COORDENADOR',
+              tipo: 'GESTOR',
+              diretoria: dir,
+              cidade: cidade || 'SÃO PAULO',
+              regional: regional || (dir.includes('INTERIOR') ? 'SPI' : 'SPC')
+            });
+          }
+        }
+
+        // Líderes do SPI Override
+        for (const s of spiRes.rows) {
+          const g = (s.gestor_atual || '').toString().trim().toUpperCase();
+          if (g && !liderancasMap.has(g)) {
+            const cidade = cleanCidade(s.cidade_comercial);
+            liderancasMap.set(g, {
+              nome: g,
+              cargo: 'SUPERVISOR SPI',
+              tipo: 'SUPERVISOR',
+              diretoria: 'DIR SERVICOS AO CLIENTE SP INTERIOR',
+              cidade: cidade || 'CAMPINAS',
+              regional: 'SPI'
+            });
+          }
+        }
+
+        // Líderes das APRs
+        for (const a of aprRes.rows) {
+          const g = (a.gestor || a.supervisor || '').toString().trim().toUpperCase();
+          if (g && !liderancasMap.has(g)) {
+            const cidade = cleanCidade(a.cidade_comercial) || cleanCidade(a.localidade_objeto);
+            const regional = getRegional(cidade);
+            const dir = normalizeDiretoria(a.diretoria_3, regional);
+            if (dir && ALLOWED_DIRETORIAS.includes(dir)) {
+              liderancasMap.set(g, {
+                nome: g,
+                cargo: 'SUPERVISOR APR',
+                tipo: 'SUPERVISOR',
+                diretoria: dir,
+                cidade: cidade || 'SÃO PAULO',
+                regional: regional || (dir.includes('INTERIOR') ? 'SPI' : 'SPC')
+              });
+            }
+          }
+        }
+
+        const liderancas = Array.from(liderancasMap.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+
         const INTERIOR = 'DIR SERVICOS AO CLIENTE SP INTERIOR';
         const CAPITAL = 'DIR SERVICOS AO CLIENTE SP CAPITAL';
         const seenNumbers = new Set<string>();
@@ -369,6 +511,7 @@ export async function GET(req: NextRequest) {
 
           const filial = (p?.filial && p.filial.trim()) || fc?.filial || spi?.gerencia || p?.gerencia || a.gerencia || (regional ? `FILIAL ${regional}` : 'SÃO PAULO');
           const cnpj = (p?.cnpj && p.cnpj.trim()) || fc?.cnpj || '-';
+          const lideres = getLeadershipChain(p, spi, gestor);
 
           return {
             "Número": a.numero,
@@ -394,6 +537,7 @@ export async function GET(req: NextRequest) {
             "CNPJ": cnpj,
             "GESTOR": gestor,
             "Supervisor": gestor,
+            "LIDERES": lideres,
             "Mês": a.mes,
             "Ano": a.ano,
             "ATIVO_SPI": spi ? spi.ativo : (regional === 'SPI' || diretoria?.includes('INTERIOR') ? 0 : null),
@@ -418,6 +562,7 @@ export async function GET(req: NextRequest) {
           const filial = fc?.filial || s.gerencia || 'FILIAL SPI';
           const cnpj = fc?.cnpj || '-';
           const dir = normalizeDiretoria(s.diretoria_3 || INTERIOR, regional);
+          const lideres = getLeadershipChain(null, s, gestor);
 
           colaboradoresPO.push({
             matricula: mat,
@@ -428,6 +573,7 @@ export async function GET(req: NextRequest) {
             filial: filial,
             cnpj: cnpj,
             supervisor: gestor,
+            lideres: lideres,
             cidade: cidade,
             regional: 'SPI',
             ativo_spi: s.ativo, // 1 = Ativo em campo, 0 = Treinamento / afastado
@@ -469,6 +615,7 @@ export async function GET(req: NextRequest) {
           const dirUpper = (diretoria || '').toString().trim().toUpperCase();
           const filial = (p.filial && p.filial.trim()) || fc?.filial || (spi?.gerencia || p.gerencia || (regional ? `FILIAL ${regional}` : 'SÃO PAULO'));
           const cnpj = (p.cnpj && p.cnpj.trim()) || fc?.cnpj || '-';
+          const lideres = getLeadershipChain(p, spi, gestor);
 
           if (ALLOWED_DIRETORIAS.includes(dirUpper)) {
             colaboradoresPO.push({
@@ -480,15 +627,17 @@ export async function GET(req: NextRequest) {
               filial: filial,
               cnpj: cnpj,
               supervisor: gestor,
+              lideres: lideres,
               cidade: cidade,
               regional: regional || (dirUpper.includes('INTERIOR') ? 'SPI' : 'SPC'),
-              ativo_spi: spi ? spi.ativo : (dirUpper.includes('INTERIOR') ? 0 : 1),
+              ativo_spi: spi ? spi.ativo : 1,
               is_spi: !!spi
             });
           }
         }
 
         (rows as any)._colaboradoresPO = colaboradoresPO;
+        (rows as any)._liderancas = liderancas;
       } catch (err: any) {
         if (err.code === '42P01') {
           return NextResponse.json([]);
@@ -559,7 +708,8 @@ export async function GET(req: NextRequest) {
     if (type === 'APR') {
       const payload = {
         data: finalData,
-        colaboradoresPO: (rows as any)._colaboradoresPO || []
+        colaboradoresPO: (rows as any)._colaboradoresPO || [],
+        liderancas: (rows as any)._liderancas || []
       };
       dataCache[type] = { data: payload, timestamp: Date.now() };
       return NextResponse.json(payload);
