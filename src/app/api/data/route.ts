@@ -388,33 +388,6 @@ export async function GET(req: NextRequest) {
           if (nm) allPoByName.set(nm, p);
         }
 
-        // Função auxiliar para rastrear a cadeia hierárquica (Técnico -> Supervisor -> Coordenador -> Gerente)
-        const getLeadershipChain = (p: any, spi: any, aGestor?: string | null): string[] => {
-          const chain = new Set<string>();
-          const addIfPerson = (val: any) => {
-            if (!val) return;
-            const str = val.toString().trim().toUpperCase();
-            if (isPersonName(str)) chain.add(str);
-          };
-
-          addIfPerson(spi?.gestor_atual);
-          addIfPerson(aGestor);
-          addIfPerson(p?.gestor);
-          // Nota: p?.gerencia não é adicionado porque representa a área/departamento funcional, não pessoa
-
-          const gKey = p?.gestor ? normNome(p.gestor) : null;
-          let current = gKey ? allPoByName.get(gKey) : null;
-          let depth = 0;
-          while (current && depth < 4) {
-            addIfPerson(current.nome);
-            addIfPerson(current.gestor);
-            const nextKey = current.gestor ? normNome(current.gestor) : null;
-            current = nextKey ? allPoByName.get(nextKey) : null;
-            depth++;
-          }
-          return Array.from(chain);
-        };
-
         const liderancasMap = new Map<string, {
           nome: string;
           cargo: string;
@@ -424,88 +397,54 @@ export async function GET(req: NextRequest) {
           regional: string;
         }>();
 
-        // Catalogar todos os líderes presentes no PO geral
-        for (const p of poRes.rows) {
-          const nm = (p.nome || '').toString().trim().toUpperCase();
-          if (!nm || !isPersonName(nm)) continue;
+        // Rastreamento em subida hierárquica a partir do colaborador/técnico de campo:
+        // Colaborador -> Gestor (Supervisor) -> Gestor do Gestor (Coordenador) -> Gestor do Coordenador (Gerente) -> Diretor
+        // O gestor e os níveis superiores são trazidos mesmo NÃO sendo campo, navegando pelo PO completo.
+        const crawlLeadership = (
+          initialGestor: string | null | undefined,
+          colabDir: string | null | undefined,
+          colabCidade: string | null | undefined,
+          colabRegional: 'SPC' | 'SPI' | null | undefined
+        ): string[] => {
+          const chain: string[] = [];
+          const visited = new Set<string>();
 
-          const cargoUpper = (p.cargo || '').toString().trim().toUpperCase();
-          const isLider = cargoUpper.includes('GERENTE') || cargoUpper.includes('GER ') ||
-                          cargoUpper.includes('COORD') || cargoUpper.includes('SUPERV') ||
-                          cargoUpper.includes('GESTOR') || cargoUpper.includes('DIRETOR');
+          let currentName = initialGestor ? initialGestor.toString().trim().toUpperCase() : null;
 
-          const cidade = cleanCidade(p.cidade_comercial);
-          const regional = getRegional(cidade);
-          const dir = normalizeDiretoria(p.diretoria_3, regional);
+          while (currentName && isPersonName(currentName) && !visited.has(currentName) && visited.size < 6) {
+            visited.add(currentName);
+            chain.push(currentName);
 
-          if (!dir || !ALLOWED_DIRETORIAS.includes(dir)) continue;
+            // Buscar este gestor na base completa do PO (onde ele existe, mesmo NÃO sendo campo)
+            const leaderKey = normNome(currentName);
+            const leaderPO = leaderKey ? allPoByName.get(leaderKey) : null;
 
-          let tipo: 'GERENTE' | 'COORDENADOR' | 'SUPERVISOR' | 'GESTOR' = 'GESTOR';
-          if (cargoUpper.includes('GERENTE') || cargoUpper.includes('GER ')) tipo = 'GERENTE';
-          else if (cargoUpper.includes('COORD')) tipo = 'COORDENADOR';
-          else if (cargoUpper.includes('SUPERV')) tipo = 'SUPERVISOR';
+            const cargoUpper = (leaderPO?.cargo || '').toString().trim().toUpperCase();
+            let tipo: 'GERENTE' | 'COORDENADOR' | 'SUPERVISOR' | 'GESTOR' = 'GESTOR';
+            if (cargoUpper.includes('GERENTE') || cargoUpper.includes('GER ')) tipo = 'GERENTE';
+            else if (cargoUpper.includes('COORD')) tipo = 'COORDENADOR';
+            else if (cargoUpper.includes('SUPERV')) tipo = 'SUPERVISOR';
 
-          if (isLider) {
-            liderancasMap.set(nm, {
-              nome: nm,
-              cargo: cargoUpper,
-              tipo,
-              diretoria: dir,
-              cidade: cidade || 'SÃO PAULO',
-              regional: regional || (dir.includes('INTERIOR') ? 'SPI' : 'SPC')
-            });
-          }
-
-          const gestorName = (p.gestor || '').toString().trim().toUpperCase();
-          if (gestorName && isPersonName(gestorName) && !liderancasMap.has(gestorName)) {
-            liderancasMap.set(gestorName, {
-              nome: gestorName,
-              cargo: 'GESTOR / COORDENADOR',
-              tipo: 'GESTOR',
-              diretoria: dir,
-              cidade: cidade || 'SÃO PAULO',
-              regional: regional || (dir.includes('INTERIOR') ? 'SPI' : 'SPC')
-            });
-          }
-        }
-
-        // Líderes do SPI Override
-        for (const s of spiRes.rows) {
-          const g = (s.gestor_atual || '').toString().trim().toUpperCase();
-          if (g && isPersonName(g) && !liderancasMap.has(g)) {
-            const cidade = cleanCidade(s.cidade_comercial);
-            liderancasMap.set(g, {
-              nome: g,
-              cargo: 'SUPERVISOR SPI',
-              tipo: 'SUPERVISOR',
-              diretoria: 'DIR SERVICOS AO CLIENTE SP INTERIOR',
-              cidade: cidade || 'CAMPINAS',
-              regional: 'SPI'
-            });
-          }
-        }
-
-        // Líderes das APRs
-        for (const a of aprRes.rows) {
-          const g = (a.gestor || a.supervisor || '').toString().trim().toUpperCase();
-          if (g && isPersonName(g) && !liderancasMap.has(g)) {
-            const cidade = cleanCidade(a.cidade_comercial) || cleanCidade(a.localidade_objeto);
-            const regional = getRegional(cidade);
-            const dir = normalizeDiretoria(a.diretoria_3, regional);
-            if (dir && ALLOWED_DIRETORIAS.includes(dir)) {
-              liderancasMap.set(g, {
-                nome: g,
-                cargo: 'SUPERVISOR APR',
-                tipo: 'SUPERVISOR',
-                diretoria: dir,
-                cidade: cidade || 'SÃO PAULO',
-                regional: regional || (dir.includes('INTERIOR') ? 'SPI' : 'SPC')
-              });
+            if (colabDir && ALLOWED_DIRETORIAS.includes(colabDir)) {
+              const mapKey = `${currentName}__${colabDir}__${colabCidade || ''}`;
+              if (!liderancasMap.has(mapKey)) {
+                liderancasMap.set(mapKey, {
+                  nome: currentName,
+                  cargo: cargoUpper || 'LIDERANÇA',
+                  tipo,
+                  diretoria: colabDir,
+                  cidade: colabCidade || cleanCidade(leaderPO?.cidade_comercial) || 'SÃO PAULO',
+                  regional: colabRegional || getRegional(cleanCidade(leaderPO?.cidade_comercial)) || (colabDir.includes('INTERIOR') ? 'SPI' : 'SPC')
+                });
+              }
             }
-          }
-        }
 
-        const liderancas = Array.from(liderancasMap.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+            // Subir um nível na hierarquia (gestor do gestor) através do PO completo
+            currentName = (leaderPO?.gestor || '').toString().trim().toUpperCase() || null;
+          }
+
+          return chain;
+        };
 
         const INTERIOR = 'DIR SERVICOS AO CLIENTE SP INTERIOR';
         const CAPITAL = 'DIR SERVICOS AO CLIENTE SP CAPITAL';
@@ -544,7 +483,7 @@ export async function GET(req: NextRequest) {
 
           const filial = (p?.filial && p.filial.trim()) || fc?.filial || spi?.gerencia || p?.gerencia || a.gerencia || (regional ? `FILIAL ${regional}` : 'SÃO PAULO');
           const cnpj = (p?.cnpj && p.cnpj.trim()) || fc?.cnpj || '-';
-          const lideres = getLeadershipChain(p, spi, gestor);
+          const lideres = crawlLeadership(gestor, diretoria, cidadePrincipal, regional);
 
           return {
             "Número": a.numero,
@@ -595,7 +534,7 @@ export async function GET(req: NextRequest) {
           const filial = fc?.filial || s.gerencia || 'FILIAL SPI';
           const cnpj = fc?.cnpj || '-';
           const dir = normalizeDiretoria(s.diretoria_3 || INTERIOR, regional);
-          const lideres = getLeadershipChain(null, s, gestor);
+          const lideres = crawlLeadership(gestor, dir, cidade, regional);
 
           colaboradoresPO.push({
             matricula: mat,
@@ -648,7 +587,7 @@ export async function GET(req: NextRequest) {
           const dirUpper = (diretoria || '').toString().trim().toUpperCase();
           const filial = (p.filial && p.filial.trim()) || fc?.filial || (spi?.gerencia || p.gerencia || (regional ? `FILIAL ${regional}` : 'SÃO PAULO'));
           const cnpj = (p.cnpj && p.cnpj.trim()) || fc?.cnpj || '-';
-          const lideres = getLeadershipChain(p, spi, gestor);
+          const lideres = crawlLeadership(gestor, dirUpper, cidade, regional);
 
           if (ALLOWED_DIRETORIAS.includes(dirUpper)) {
             colaboradoresPO.push({
@@ -669,6 +608,7 @@ export async function GET(req: NextRequest) {
           }
         }
 
+        const liderancas = Array.from(liderancasMap.values()).sort((a, b) => a.nome.localeCompare(b.nome));
         (rows as any)._colaboradoresPO = colaboradoresPO;
         (rows as any)._liderancas = liderancas;
       } catch (err: any) {
