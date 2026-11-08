@@ -83,6 +83,7 @@ interface LeaderInfo {
 interface HierarchyModalProps {
   isOpen: boolean;
   onClose: () => void;
+  selectedLeaders?: string[];
   selectedGerentes?: string[];
   selectedCoordenadores?: string[];
   selectedSupervisores?: string[];
@@ -109,6 +110,7 @@ interface HierarchyModalProps {
 export const HierarchyModal: React.FC<HierarchyModalProps> = ({
   isOpen,
   onClose,
+  selectedLeaders = [],
   selectedGerentes = [],
   selectedCoordenadores = [],
   selectedSupervisores = [],
@@ -139,6 +141,48 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
       return 'SAMUEL ROSSI DO NASCIMENTO';
     };
 
+    const activeLeaderSet = new Set([
+      ...selectedLeaders.map(s => s.trim().toUpperCase()),
+      ...selectedGerentes.map(s => s.trim().toUpperCase()),
+      ...selectedCoordenadores.map(s => s.trim().toUpperCase()),
+      ...selectedSupervisores.map(s => s.trim().toUpperCase()),
+    ]);
+    const hasLeaderFilter = activeLeaderSet.size > 0;
+
+    // Descobrir toda a sub-árvore e caminho de ancestrais
+    const relevantLeaderNames = new Set<string>();
+    if (hasLeaderFilter) {
+      activeLeaderSet.forEach(n => relevantLeaderNames.add(n));
+
+      // Descendentes (subordinados em qualquer nível)
+      let added = true;
+      while (added) {
+        added = false;
+        liderancas.forEach(l => {
+          const nome = l.nome.trim().toUpperCase();
+          if (!relevantLeaderNames.has(nome)) {
+            const dir = l.diretor?.trim().toUpperCase();
+            const ger = l.gerente?.trim().toUpperCase();
+            const coord = l.coordenador?.trim().toUpperCase();
+            if ((dir && relevantLeaderNames.has(dir)) || (ger && relevantLeaderNames.has(ger)) || (coord && relevantLeaderNames.has(coord))) {
+              relevantLeaderNames.add(nome);
+              added = true;
+            }
+          }
+        });
+      }
+
+      // Ancestrais (diretor, gerente, coordenador acima dos selecionados)
+      liderancas.forEach(l => {
+        const nome = l.nome.trim().toUpperCase();
+        if (activeLeaderSet.has(nome)) {
+          if (l.diretor) relevantLeaderNames.add(l.diretor.trim().toUpperCase());
+          if (l.gerente) relevantLeaderNames.add(l.gerente.trim().toUpperCase());
+          if (l.coordenador) relevantLeaderNames.add(l.coordenador.trim().toUpperCase());
+        }
+      });
+    }
+
     // 1. Pré-popular a partir das lideranças registradas no PO corporativo
     // Isso garante que coordenadores (como Ricardo Garone) e supervisores estejam sempre visíveis na gestão,
     // mesmo quando não tiverem subordinados com APR emitida no mês selecionado.
@@ -147,6 +191,9 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
 
       // Filtro de Diretoria ativa
       if (selectedDiretorias.length > 0 && !selectedDiretorias.includes(dirKey)) return;
+
+      // Se houver filtro de liderança ativo, só inclui líderes que estão na árvore relevante
+      if (hasLeaderFilter && !relevantLeaderNames.has(l.nome.trim().toUpperCase())) return;
 
       if (!dirMap[dirKey]) {
         dirMap[dirKey] = {
@@ -172,8 +219,6 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
 
       // Se for Gerente
       if (l.tipo === 'GERENTE') {
-        if (selectedGerentes.length > 0 && !selectedGerentes.includes(l.nome)) return;
-
         if (!dirObj.gerencias[l.nome]) {
           dirObj.gerencias[l.nome] = {
             gerente: l.nome,
@@ -195,9 +240,7 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
 
       // Se for Coordenador (ex: Ricardo Alexandre Garone Henriques)
       if (l.tipo === 'COORDENADOR') {
-        if (selectedCoordenadores.length > 0 && !selectedCoordenadores.includes(l.nome)) return;
         const gerName = (l.gerente && l.gerente.trim()) ? l.gerente.trim().toUpperCase() : 'GERÊNCIA GERAL / DIRETORIA';
-        if (selectedGerentes.length > 0 && !selectedGerentes.includes(gerName)) return;
 
         if (!dirObj.gerencias[gerName]) {
           dirObj.gerencias[gerName] = {
@@ -235,12 +278,8 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
 
       // Se for Supervisor
       if (l.tipo === 'SUPERVISOR') {
-        if (selectedSupervisores.length > 0 && !selectedSupervisores.includes(l.nome)) return;
         const gerName = (l.gerente && l.gerente.trim()) ? l.gerente.trim().toUpperCase() : 'GERÊNCIA GERAL / DIRETORIA';
         const coordName = (l.coordenador && l.coordenador.trim()) ? l.coordenador.trim().toUpperCase() : 'COORDENAÇÃO GERAL';
-
-        if (selectedGerentes.length > 0 && !selectedGerentes.includes(gerName)) return;
-        if (selectedCoordenadores.length > 0 && !selectedCoordenadores.includes(coordName)) return;
 
         if (!dirObj.gerencias[gerName]) {
           dirObj.gerencias[gerName] = {
@@ -291,20 +330,33 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
       const dirKey = getDiretoriaKey(null, item.diretor);
       if (selectedDiretorias.length > 0 && !selectedDiretorias.includes(dirKey)) return;
 
+      if (hasLeaderFilter) {
+        const itemDir = item.diretor?.trim().toUpperCase();
+        const itemGer = item.gerente?.trim().toUpperCase();
+        const itemCoord = item.coordenador?.trim().toUpperCase();
+        const itemSup = item.supervisor?.trim().toUpperCase();
+        const colabName = item.name.trim().toUpperCase();
+
+        const matches = (itemDir && activeLeaderSet.has(itemDir)) ||
+                        (itemGer && activeLeaderSet.has(itemGer)) ||
+                        (itemCoord && activeLeaderSet.has(itemCoord)) ||
+                        (itemSup && activeLeaderSet.has(itemSup)) ||
+                        activeLeaderSet.has(colabName);
+
+        if (!matches) return;
+      }
+
       const gerName = (item.gerente && item.gerente.trim())
         ? item.gerente.trim().toUpperCase()
         : 'GERÊNCIA GERAL / DIRETORIA';
-      if (selectedGerentes.length > 0 && !selectedGerentes.includes(gerName)) return;
 
       const coordName = (item.coordenador && item.coordenador.trim() && item.coordenador !== gerName)
         ? item.coordenador.trim().toUpperCase()
         : 'COORDENAÇÃO DIRETA COM GERÊNCIA';
-      if (selectedCoordenadores.length > 0 && !selectedCoordenadores.includes(coordName)) return;
 
       const supName = (item.supervisor && item.supervisor.trim() && item.supervisor !== coordName && item.supervisor !== gerName)
         ? item.supervisor.trim().toUpperCase()
         : 'SUPERVISÃO OPERACIONAL DE CAMPO';
-      if (selectedSupervisores.length > 0 && !selectedSupervisores.includes(supName)) return;
 
       const colabCity = item.cidadeBase || item.cidade;
       if (selectedCities.length > 0 && colabCity && !selectedCities.includes(colabCity)) return;
@@ -418,37 +470,43 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
 
     // 3. Converter para listas ordenadas por relevância e contagem
     const diretoriasList = Object.values(dirMap).map(dir => {
-      const gerList = Object.values(dir.gerencias).map(ger => {
-        const coordList = Object.values(ger.coordenadores).map(coord => {
-          const supList = Object.values(coord.supervisores).map(sup => {
-            sup.colaboradores.sort((a, b) => {
-              if (b.count !== a.count) return b.count - a.count;
-              return a.name.localeCompare(b.name);
-            });
-            return sup;
-          });
+      const gerList = Object.values(dir.gerencias)
+        .filter(ger => !hasLeaderFilter || relevantLeaderNames.has(ger.gerente.trim().toUpperCase()) || ger.totalColaboradores > 0)
+        .map(ger => {
+          const coordList = Object.values(ger.coordenadores)
+            .filter(coord => !hasLeaderFilter || relevantLeaderNames.has(coord.coordenador.trim().toUpperCase()) || coord.totalColaboradores > 0)
+            .map(coord => {
+              const supList = Object.values(coord.supervisores)
+                .filter(sup => !hasLeaderFilter || relevantLeaderNames.has(sup.supervisor.trim().toUpperCase()) || sup.colaboradores.length > 0)
+                .map(sup => {
+                  sup.colaboradores.sort((a, b) => {
+                    if (b.count !== a.count) return b.count - a.count;
+                    return a.name.localeCompare(b.name);
+                  });
+                  return sup;
+                });
 
-          supList.sort((a, b) => b.colaboradores.length - a.colaboradores.length);
+              supList.sort((a, b) => b.colaboradores.length - a.colaboradores.length);
+
+              return {
+                ...coord,
+                supervisoresList: supList,
+                totalSupervisores: supList.length,
+              };
+            });
+
+          coordList.sort((a, b) => b.totalColaboradores - a.totalColaboradores);
+
+          const allSupsInGer = new Set<string>();
+          coordList.forEach(c => c.supervisoresList.forEach(s => allSupsInGer.add(s.supervisor)));
 
           return {
-            ...coord,
-            supervisoresList: supList,
-            totalSupervisores: supList.length,
+            ...ger,
+            coordenadoresList: coordList,
+            totalCoordenadores: coordList.length,
+            totalSupervisores: allSupsInGer.size,
           };
         });
-
-        coordList.sort((a, b) => b.totalColaboradores - a.totalColaboradores);
-
-        const allSupsInGer = new Set<string>();
-        coordList.forEach(c => c.supervisoresList.forEach(s => allSupsInGer.add(s.supervisor)));
-
-        return {
-          ...ger,
-          coordenadoresList: coordList,
-          totalCoordenadores: coordList.length,
-          totalSupervisores: allSupsInGer.size,
-        };
-      });
 
       gerList.sort((a, b) => b.totalColaboradores - a.totalColaboradores);
 
@@ -468,11 +526,11 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
         totalCoordenadores: allCoordsInDir.size,
         totalSupervisores: allSupsInDir.size,
       };
-    });
+    }).filter(dir => dir.gerenciasList.length > 0 || dir.totalColaboradores > 0);
 
     diretoriasList.sort((a, b) => b.totalColaboradores - a.totalColaboradores);
     return diretoriasList;
-  }, [rankAgg, liderancas, selectedDiretorias, selectedGerentes, selectedCoordenadores, selectedSupervisores, selectedCities]);
+  }, [rankAgg, liderancas, selectedDiretorias, selectedLeaders, selectedGerentes, selectedCoordenadores, selectedSupervisores, selectedCities]);
 
   // Filtragem da busca textual por Diretor, Gerente, Coordenador, Supervisor, Técnico, Matrícula ou Cidade
   const filteredTree = useMemo(() => {
@@ -661,6 +719,7 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
 
   const leaderFiltersActive = [
     ...selectedDiretorias.map(d => `Diretoria: ${d}`),
+    ...selectedLeaders.map(l => `Gestão: ${l}`),
     ...selectedGerentes.map(g => `Gerente: ${g}`),
     ...selectedCoordenadores.map(c => `Coord: ${c}`),
     ...selectedSupervisores.map(s => `Sup: ${s}`),
