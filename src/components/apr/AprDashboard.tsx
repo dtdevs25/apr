@@ -50,6 +50,34 @@ const cleanTipo = (str: string) => {
   return 'OUTRAS ATIVIDADES';
 };
 
+const isPersonName = (name: any): boolean => {
+  if (!name || typeof name !== 'string') return false;
+  const s = name.trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (!s || s.length < 3) return false;
+
+  const invalidPatterns = [
+    'GERENCIA', 'GER ', 'COORDENACAO', 'COORD ', 'DIRETORIA', 'DIR ',
+    'SUPERVISAO', 'DIVISAO', 'SETOR', 'DEPARTAMENTO',
+    'AREA', 'OPERACAO', 'OPERACOES', 'SERVICO', 'SERVICOS', 'VAGO',
+    'NAO IDENTIFICADO', 'INDEFINIDO', 'SUP '
+  ];
+
+  for (const p of invalidPatterns) {
+    if (s.startsWith(p) || s.includes('SUPERVISAO') || s.includes('GERENCIA DE') || s.includes('COORDENACAO DE')) {
+      return false;
+    }
+  }
+
+  const singleWordRoles = [
+    'COORDENADOR', 'GERENTE', 'SUPERVISOR', 'DIRETOR', 'GESTOR',
+    'TECNICO', 'AUDITOR', 'ANALISTA', 'ESPECIALISTA', 'CONSULTOR',
+    'LIDER', 'ADMINISTRATIVO', 'CAMPO', 'OPERACIONAL', 'DESCONHECIDO'
+  ];
+  if (singleWordRoles.includes(s)) return false;
+
+  return true;
+};
+
 export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, toggleTheme }) => {
   const [data, setData] = useState<any[]>([]);
   const [colaboradoresPO, setColaboradoresPO] = useState<any[]>([]);
@@ -174,7 +202,9 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       (selectedCities.length === 0 || selectedCities.includes(p.cidade))
     ).flatMap(p => [p.supervisor, ...(p.lideres || [])]);
 
-    return Array.from(new Set([...fromLid, ...fromData, ...fromPO])).filter(Boolean).sort();
+    return Array.from(new Set([...fromLid, ...fromData, ...fromPO]))
+      .filter(name => isPersonName(name))
+      .sort();
   }, [liderancas, data, colaboradoresPO, selectedMonths, selectedTipos, selectedDiretorias, selectedCities, onlySpiActive, getItemCity]);
 
   const allCities = useMemo(() => {
@@ -216,9 +246,9 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
     const fromLid = liderancas.filter(l =>
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(l.diretoria)) &&
       (selectedCities.length === 0 || selectedCities.includes(l.cidade))
-    ).map(l => l.nome);
+    ).map(l => l.nome).filter(isPersonName);
 
-    return Array.from(new Set([...fromData, ...fromPO, ...fromLid])).filter(Boolean).sort();
+    return Array.from(new Set([...fromData, ...fromPO, ...fromLid])).filter(isPersonName).sort();
   }, [data, colaboradoresPO, liderancas, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities, onlySpiActive, getItemCity, matchLeader]);
 
   const toggleMonth = (m: string) => setSelectedMonths(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]);

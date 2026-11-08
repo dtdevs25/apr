@@ -171,6 +171,34 @@ function cleanStr(s: any): string {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
+function isPersonName(name: string | null | undefined): boolean {
+  if (!name || typeof name !== 'string') return false;
+  const s = cleanStr(name);
+  if (!s || s.length < 3) return false;
+
+  const invalidPatterns = [
+    'GERENCIA', 'GER ', 'COORDENACAO', 'COORD ', 'DIRETORIA', 'DIR ',
+    'SUPERVISAO', 'SUPERVISÃO', 'DIVISAO', 'SETOR', 'DEPARTAMENTO',
+    'AREA', 'OPERACAO', 'OPERACOES', 'SERVICO', 'SERVICOS', 'VAGO',
+    'NAO IDENTIFICADO', 'INDEFINIDO', 'SUP '
+  ];
+
+  for (const p of invalidPatterns) {
+    if (s.startsWith(p) || s.includes('SUPERVISAO') || s.includes('SUPERVISÃO') || s.includes('GERENCIA DE') || s.includes('COORDENACAO DE')) {
+      return false;
+    }
+  }
+
+  const singleWordRoles = [
+    'COORDENADOR', 'GERENTE', 'SUPERVISOR', 'DIRETOR', 'GESTOR',
+    'TECNICO', 'AUDITOR', 'ANALISTA', 'ESPECIALISTA', 'CONSULTOR',
+    'LIDER', 'ADMINISTRATIVO', 'CAMPO', 'OPERACIONAL', 'DESCONHECIDO'
+  ];
+  if (singleWordRoles.includes(s)) return false;
+
+  return true;
+}
+
 const ALLOWED_DIRETORIAS = [
   'DIR SERVICOS AO CLIENTE SP CAPITAL',
   'DIR SERVICOS AO CLIENTE SP INTERIOR',
@@ -363,23 +391,28 @@ export async function GET(req: NextRequest) {
         // Função auxiliar para rastrear a cadeia hierárquica (Técnico -> Supervisor -> Coordenador -> Gerente)
         const getLeadershipChain = (p: any, spi: any, aGestor?: string | null): string[] => {
           const chain = new Set<string>();
-          if (spi?.gestor_atual) chain.add(spi.gestor_atual.toString().trim().toUpperCase());
-          if (aGestor) chain.add(aGestor.toString().trim().toUpperCase());
-          if (p?.gestor) chain.add(p.gestor.toString().trim().toUpperCase());
-          if (p?.gerencia) chain.add(p.gerencia.toString().trim().toUpperCase());
+          const addIfPerson = (val: any) => {
+            if (!val) return;
+            const str = val.toString().trim().toUpperCase();
+            if (isPersonName(str)) chain.add(str);
+          };
+
+          addIfPerson(spi?.gestor_atual);
+          addIfPerson(aGestor);
+          addIfPerson(p?.gestor);
+          // Nota: p?.gerencia não é adicionado porque representa a área/departamento funcional, não pessoa
 
           const gKey = p?.gestor ? normNome(p.gestor) : null;
           let current = gKey ? allPoByName.get(gKey) : null;
           let depth = 0;
           while (current && depth < 4) {
-            if (current.nome) chain.add(current.nome.toString().trim().toUpperCase());
-            if (current.gestor) chain.add(current.gestor.toString().trim().toUpperCase());
-            if (current.gerencia) chain.add(current.gerencia.toString().trim().toUpperCase());
+            addIfPerson(current.nome);
+            addIfPerson(current.gestor);
             const nextKey = current.gestor ? normNome(current.gestor) : null;
             current = nextKey ? allPoByName.get(nextKey) : null;
             depth++;
           }
-          return Array.from(chain).filter(Boolean);
+          return Array.from(chain);
         };
 
         const liderancasMap = new Map<string, {
@@ -394,7 +427,7 @@ export async function GET(req: NextRequest) {
         // Catalogar todos os líderes presentes no PO geral
         for (const p of poRes.rows) {
           const nm = (p.nome || '').toString().trim().toUpperCase();
-          if (!nm) continue;
+          if (!nm || !isPersonName(nm)) continue;
 
           const cargoUpper = (p.cargo || '').toString().trim().toUpperCase();
           const isLider = cargoUpper.includes('GERENTE') || cargoUpper.includes('GER ') ||
@@ -424,7 +457,7 @@ export async function GET(req: NextRequest) {
           }
 
           const gestorName = (p.gestor || '').toString().trim().toUpperCase();
-          if (gestorName && !liderancasMap.has(gestorName)) {
+          if (gestorName && isPersonName(gestorName) && !liderancasMap.has(gestorName)) {
             liderancasMap.set(gestorName, {
               nome: gestorName,
               cargo: 'GESTOR / COORDENADOR',
@@ -439,7 +472,7 @@ export async function GET(req: NextRequest) {
         // Líderes do SPI Override
         for (const s of spiRes.rows) {
           const g = (s.gestor_atual || '').toString().trim().toUpperCase();
-          if (g && !liderancasMap.has(g)) {
+          if (g && isPersonName(g) && !liderancasMap.has(g)) {
             const cidade = cleanCidade(s.cidade_comercial);
             liderancasMap.set(g, {
               nome: g,
@@ -455,7 +488,7 @@ export async function GET(req: NextRequest) {
         // Líderes das APRs
         for (const a of aprRes.rows) {
           const g = (a.gestor || a.supervisor || '').toString().trim().toUpperCase();
-          if (g && !liderancasMap.has(g)) {
+          if (g && isPersonName(g) && !liderancasMap.has(g)) {
             const cidade = cleanCidade(a.cidade_comercial) || cleanCidade(a.localidade_objeto);
             const regional = getRegional(cidade);
             const dir = normalizeDiretoria(a.diretoria_3, regional);
