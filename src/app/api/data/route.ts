@@ -393,6 +393,12 @@ export async function GET(req: NextRequest) {
           const nm = normNome(p.nome);
           if (nm) allPoByName.set(nm, p);
         }
+        for (const s of spiRes.rows) {
+          const m = normId(s.matricula);
+          if (m && !allPoById.has(m)) allPoById.set(m, s);
+          const nm = normNome(s.nome);
+          if (nm && !allPoByName.has(nm)) allPoByName.set(nm, s);
+        }
 
         const findPoPerson = (nameOrId: string | null | undefined): any | null => {
           if (!nameOrId) return null;
@@ -401,14 +407,68 @@ export async function GET(req: NextRequest) {
           if (id && allPoById.has(id)) return allPoById.get(id);
           const nm = normNome(str);
           if (nm && allPoByName.has(nm)) return allPoByName.get(nm);
+          if (nm && nm.length > 5) {
+            for (const [key, val] of allPoByName.entries()) {
+              if (key === nm || key.includes(nm) || nm.includes(key)) {
+                return val;
+              }
+            }
+          }
           return null;
+        };
+
+        const classifyLeaderRole = (cargo: string | null | undefined): 'DIRETOR' | 'GERENTE' | 'COORDENADOR' | 'SUPERVISOR' => {
+          const c = cleanStr(cargo);
+          if (
+            c.startsWith('DIR ') ||
+            c.startsWith('DIR.') ||
+            c.includes('DIRETOR') ||
+            c.includes('DIRETORIA') ||
+            c.startsWith('VP ') ||
+            c.includes('VICE PRESID') ||
+            c.includes('PRESIDENTE') ||
+            c.includes('CHIEF')
+          ) {
+            return 'DIRETOR';
+          }
+          if (
+            c.startsWith('GER ') ||
+            c.startsWith('GER.') ||
+            c.includes('GERENTE') ||
+            c.includes('GERENCIA') ||
+            c.includes('GERÊNCIA') ||
+            c.includes('GER SR') ||
+            c.includes('GER.SR')
+          ) {
+            return 'GERENTE';
+          }
+          if (
+            c.startsWith('COORD') ||
+            c.includes('COORDENADOR') ||
+            c.includes('COORDENACAO') ||
+            c.includes('COORDENAÇÃO')
+          ) {
+            return 'COORDENADOR';
+          }
+          if (
+            c.startsWith('SUP ') ||
+            c.startsWith('SUP.') ||
+            c.includes('SUPERVISOR') ||
+            c.includes('SUPERVISAO') ||
+            c.includes('SUPERVISÃO')
+          ) {
+            return 'SUPERVISOR';
+          }
+          return 'SUPERVISOR';
         };
 
         const liderancasMap = new Map<string, {
           nome: string;
           cargo: string;
-          tipo: 'DIRETOR' | 'GERENTE' | 'COORDENADOR' | 'SUPERVISOR' | 'GESTOR';
+          tipo: 'DIRETOR' | 'GERENTE' | 'COORDENADOR' | 'SUPERVISOR';
           diretoria: string;
+          gerente?: string;
+          coordenador?: string;
           cidade: string;
           regional: string;
         }>();
@@ -439,50 +499,95 @@ export async function GET(req: NextRequest) {
 
           const visited = new Set<string>();
           let currentRaw = initialGestor ? String(initialGestor).trim() : null;
+          const chainNodes: Array<{
+            nome: string;
+            cargo: string;
+            tipo: 'DIRETOR' | 'GERENTE' | 'COORDENADOR' | 'SUPERVISOR';
+            personPO: any;
+          }> = [];
 
           while (currentRaw && visited.size < 6) {
             const cleanName = normNome(currentRaw);
             if (!cleanName || !isPersonName(cleanName) || visited.has(cleanName)) break;
             visited.add(cleanName);
-            result.chain.push(cleanName);
 
             const personPO = findPoPerson(currentRaw);
             const cargoUpper = cleanStr(personPO?.cargo);
+            const tipo = classifyLeaderRole(cargoUpper);
 
-            let tipo: 'DIRETOR' | 'GERENTE' | 'COORDENADOR' | 'SUPERVISOR' = 'SUPERVISOR';
-            if (cargoUpper.includes('DIRETOR')) {
-              tipo = 'DIRETOR';
-              if (!result.diretor) result.diretor = cleanName;
-            } else if (cargoUpper.includes('GERENTE') || cargoUpper.includes('GER ')) {
-              tipo = 'GERENTE';
-              if (!result.gerente) result.gerente = cleanName;
-            } else if (cargoUpper.includes('COORD')) {
-              tipo = 'COORDENADOR';
-              if (!result.coordenador) result.coordenador = cleanName;
-            } else {
-              tipo = 'SUPERVISOR';
-              if (!result.supervisor) result.supervisor = cleanName;
+            chainNodes.push({
+              nome: cleanName,
+              cargo: personPO?.cargo || tipo,
+              tipo,
+              personPO
+            });
+            result.chain.push(cleanName);
+
+            currentRaw = personPO?.gestor_atual || personPO?.gestor ? String(personPO.gestor_atual || personPO.gestor).trim() : null;
+          }
+
+          if (chainNodes.length > 0) {
+            // 1. Identificar Diretor
+            const dirNode = chainNodes.slice().reverse().find(n => n.tipo === 'DIRETOR');
+            if (dirNode) result.diretor = dirNode.nome;
+
+            // 2. Identificar Gerente
+            const gerNode = chainNodes.slice().reverse().find(n => n.tipo === 'GERENTE');
+            if (gerNode) result.gerente = gerNode.nome;
+
+            // 3. Identificar Coordenador
+            const coordNode = chainNodes.find(n => n.tipo === 'COORDENADOR');
+            if (coordNode) result.coordenador = coordNode.nome;
+
+            // 4. Identificar Supervisor
+            const supNode = chainNodes.find(n => n.tipo === 'SUPERVISOR');
+            if (supNode) result.supervisor = supNode.nome;
+
+            // Fallbacks inteligentes por profundidade para líderes sem cargo explícito:
+            if (!result.supervisor) {
+              result.supervisor = chainNodes[0].nome;
             }
-
-            if (colabDir && ALLOWED_DIRETORIAS.includes(colabDir)) {
-              const mapKey = `${cleanName}__${colabDir}__${colabCidade || ''}`;
-              if (!liderancasMap.has(mapKey)) {
-                liderancasMap.set(mapKey, {
-                  nome: cleanName,
-                  cargo: personPO?.cargo || tipo,
-                  tipo,
-                  diretoria: colabDir,
-                  cidade: colabCidade || cleanCidade(personPO?.cidade_comercial) || 'SÃO PAULO',
-                  regional: colabRegional || getRegional(cleanCidade(personPO?.cidade_comercial)) || (colabDir.includes('INTERIOR') ? 'SPI' : 'SPC')
-                });
+            if (!result.coordenador && chainNodes.length > 1) {
+              const cand = chainNodes.find(n => n.nome !== result.supervisor && n.nome !== result.gerente && n.nome !== result.diretor);
+              if (cand) result.coordenador = cand.nome;
+            }
+            if (!result.gerente && chainNodes.length > 2) {
+              const cand = chainNodes.slice(2).find(n => n.nome !== result.diretor);
+              if (cand) result.gerente = cand.nome;
+            }
+            if (!result.diretor) {
+              if (colabDir?.includes('INTERIOR') || colabRegional === 'SPI') {
+                result.diretor = 'SAMUEL ROSSI DO NASCIMENTO';
+              } else if (colabDir?.includes('CAPITAL') || colabRegional === 'SPC') {
+                result.diretor = 'ELISEU ROBERTO OLIVEIRA';
               }
             }
 
-            currentRaw = personPO?.gestor ? String(personPO.gestor).trim() : null;
-          }
+            // Registrar cada líder no liderancasMap com seu papel canônico
+            chainNodes.forEach(node => {
+              if (colabDir && ALLOWED_DIRETORIAS.includes(colabDir)) {
+                const mapKey = `${node.nome}__${colabDir}__${colabCidade || ''}`;
+                if (!liderancasMap.has(mapKey)) {
+                  const resolvedTipo = (
+                    node.nome === result.diretor ? 'DIRETOR' :
+                    node.nome === result.gerente ? 'GERENTE' :
+                    node.nome === result.coordenador ? 'COORDENADOR' :
+                    node.nome === result.supervisor ? 'SUPERVISOR' : node.tipo
+                  );
 
-          if (!result.supervisor && result.chain.length > 0) {
-            result.supervisor = result.chain[0];
+                  liderancasMap.set(mapKey, {
+                    nome: node.nome,
+                    cargo: node.cargo,
+                    tipo: resolvedTipo,
+                    diretoria: colabDir,
+                    gerente: result.gerente || undefined,
+                    coordenador: result.coordenador || undefined,
+                    cidade: colabCidade || cleanCidade(node.personPO?.cidade_comercial) || 'SÃO PAULO',
+                    regional: colabRegional || getRegional(cleanCidade(node.personPO?.cidade_comercial)) || (colabDir.includes('INTERIOR') ? 'SPI' : 'SPC')
+                  });
+                }
+              }
+            });
           }
 
           return result;

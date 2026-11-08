@@ -94,7 +94,9 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
   const [selectedTipos, setSelectedTipos] = useState<string[]>([]);
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [selectedDiretorias, setSelectedDiretorias] = useState<string[]>([]);
-  const [selectedSupervisors, setSelectedSupervisors] = useState<string[]>([]);
+  const [selectedGerentes, setSelectedGerentes] = useState<string[]>([]);
+  const [selectedCoordenadores, setSelectedCoordenadores] = useState<string[]>([]);
+  const [selectedSupervisores, setSelectedSupervisores] = useState<string[]>([]);
   const [selectedCities, setSelectedCities] = useState<string[]>([]);
   const [selectedAuditores, setSelectedAuditores] = useState<string[]>([]);
   const [onlySpiActive, setOnlySpiActive] = useState<boolean>(true);
@@ -110,19 +112,36 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
     return item['CIDADE_BASE'] || item['CIDADE COMERCIAL'] || '';
   }, [cityMode]);
 
-  // Helper para verificar se um item ou colaborador pertence a uma liderança selecionada
-  const matchLeader = useCallback((item: any, selectedLeaders: string[]) => {
-    if (!selectedLeaders || selectedLeaders.length === 0) return true;
-    const sup = item['Supervisor'] || item['GESTOR'] || item.supervisor;
-    if (sup && selectedLeaders.includes(sup)) return true;
-    const ger = item['GERÊNCIA'] || item.gerencia;
-    if (ger && selectedLeaders.includes(ger)) return true;
-    const lideres = item['LIDERES'] || item.lideres;
-    if (Array.isArray(lideres)) {
-      return lideres.some((l: string) => selectedLeaders.includes(l));
+  // Helper para verificar se um item ou colaborador pertence às lideranças selecionadas (Gerente, Coordenador, Supervisor)
+  const matchLeader = useCallback((
+    item: any,
+    gerentes: string[] = selectedGerentes,
+    coords: string[] = selectedCoordenadores,
+    sups: string[] = selectedSupervisores
+  ) => {
+    // 1. Filtro por Gerente
+    if (gerentes && gerentes.length > 0) {
+      const itemGer = item['GERENTE'] || item.gerente;
+      const lideres = item['LIDERES'] || item.lideres || [];
+      const matchGer = (itemGer && gerentes.includes(itemGer)) || (Array.isArray(lideres) && lideres.some((l: string) => gerentes.includes(l)));
+      if (!matchGer) return false;
     }
-    return false;
-  }, []);
+    // 2. Filtro por Coordenador
+    if (coords && coords.length > 0) {
+      const itemCoord = item['COORDENADOR'] || item.coordenador;
+      const lideres = item['LIDERES'] || item.lideres || [];
+      const matchCoord = (itemCoord && coords.includes(itemCoord)) || (Array.isArray(lideres) && lideres.some((l: string) => coords.includes(l)));
+      if (!matchCoord) return false;
+    }
+    // 3. Filtro por Supervisor
+    if (sups && sups.length > 0) {
+      const itemSup = item['Supervisor'] || item['GESTOR'] || item.supervisor;
+      const lideres = item['LIDERES'] || item.lideres || [];
+      const matchSup = (itemSup && sups.includes(itemSup)) || (Array.isArray(lideres) && lideres.some((l: string) => sups.includes(l)));
+      if (!matchSup) return false;
+    }
+    return true;
+  }, [selectedGerentes, selectedCoordenadores, selectedSupervisores]);
 
   const loadData = () => {
     setLoading(true);
@@ -163,51 +182,112 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       matchSpiFilter(i) &&
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
-      matchLeader(i, selectedSupervisors) &&
+      matchLeader(i, selectedGerentes, selectedCoordenadores, selectedSupervisores) &&
       (selectedCities.length === 0 || selectedCities.includes(getItemCity(i)))
     );
     return Array.from(new Set(base.map(i => cleanTipo(i['Questionário'])))).filter(Boolean).sort();
-  }, [data, selectedMonths, selectedDiretorias, selectedSupervisors, selectedCities, onlySpiActive, getItemCity, matchLeader]);
+  }, [data, selectedMonths, selectedDiretorias, selectedGerentes, selectedCoordenadores, selectedSupervisores, selectedCities, onlySpiActive, getItemCity, matchLeader]);
 
   const allDiretorias = useMemo(() => {
     const base = data.filter(i =>
       matchSpiFilter(i) &&
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
-      matchLeader(i, selectedSupervisors) &&
+      matchLeader(i, selectedGerentes, selectedCoordenadores, selectedSupervisores) &&
       (selectedCities.length === 0 || selectedCities.includes(getItemCity(i)))
     );
     return Array.from(new Set(base.map(i => i['DIRETORIA 3']))).filter(Boolean).sort();
-  }, [data, selectedMonths, selectedTipos, selectedSupervisors, selectedCities, onlySpiActive, getItemCity, matchLeader]);
+  }, [data, selectedMonths, selectedTipos, selectedGerentes, selectedCoordenadores, selectedSupervisores, selectedCities, onlySpiActive, getItemCity, matchLeader]);
 
-  const allSupervisors = useMemo(() => {
-    // 1. Da lista oficial de lideranças do PO (Gerentes, Coordenadores, Supervisores)
+  // 1. Gerentes disponíveis (filtrados por Diretoria e Cidade)
+  const allGerentes = useMemo(() => {
     const fromLid = liderancas.filter(l => {
       const matchDir = selectedDiretorias.length === 0 || selectedDiretorias.includes(l.diretoria);
       const matchCity = selectedCities.length === 0 || selectedCities.includes(l.cidade);
-      return matchDir && matchCity;
+      return l.tipo === 'GERENTE' && matchDir && matchCity;
     }).map(l => l.nome);
 
-    // 2. Do histórico de APRs filtradas
     const fromData = data.filter(i =>
       matchSpiFilter(i) &&
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
       (selectedCities.length === 0 || selectedCities.includes(getItemCity(i)))
-    ).flatMap(i => [i['Supervisor'], i['GESTOR'], ...(i['LIDERES'] || [])]);
+    ).map(i => i['GERENTE']).filter(Boolean);
 
-    // 3. Do PO de campo
     const fromPO = colaboradoresPO.filter(p =>
       (!onlySpiActive || p.diretoria !== 'DIR SERVICOS AO CLIENTE SP INTERIOR' || p.ativo_spi !== 0) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(p.diretoria)) &&
       (selectedCities.length === 0 || selectedCities.includes(p.cidade))
-    ).flatMap(p => [p.supervisor, ...(p.lideres || [])]);
+    ).map(p => p.gerente).filter(Boolean);
 
     return Array.from(new Set([...fromLid, ...fromData, ...fromPO]))
       .filter(name => isPersonName(name))
       .sort();
   }, [liderancas, data, colaboradoresPO, selectedMonths, selectedTipos, selectedDiretorias, selectedCities, onlySpiActive, getItemCity]);
+
+  // 2. Coordenadores disponíveis (cascateados pelo Gerente selecionado)
+  const allCoordenadores = useMemo(() => {
+    const fromLid = liderancas.filter(l => {
+      const matchDir = selectedDiretorias.length === 0 || selectedDiretorias.includes(l.diretoria);
+      const matchCity = selectedCities.length === 0 || selectedCities.includes(l.cidade);
+      const matchGer = selectedGerentes.length === 0 || (l.gerente && selectedGerentes.includes(l.gerente));
+      return l.tipo === 'COORDENADOR' && matchDir && matchCity && matchGer;
+    }).map(l => l.nome);
+
+    const fromData = data.filter(i =>
+      matchSpiFilter(i) &&
+      (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
+      (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
+      (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
+      (selectedCities.length === 0 || selectedCities.includes(getItemCity(i))) &&
+      (selectedGerentes.length === 0 || selectedGerentes.includes(i['GERENTE']) || (Array.isArray(i['LIDERES']) && i['LIDERES'].some((l: string) => selectedGerentes.includes(l))))
+    ).map(i => i['COORDENADOR']).filter(Boolean);
+
+    const fromPO = colaboradoresPO.filter(p =>
+      (!onlySpiActive || p.diretoria !== 'DIR SERVICOS AO CLIENTE SP INTERIOR' || p.ativo_spi !== 0) &&
+      (selectedDiretorias.length === 0 || selectedDiretorias.includes(p.diretoria)) &&
+      (selectedCities.length === 0 || selectedCities.includes(p.cidade)) &&
+      (selectedGerentes.length === 0 || selectedGerentes.includes(p.gerente) || (Array.isArray(p.lideres) && p.lideres.some((l: string) => selectedGerentes.includes(l))))
+    ).map(p => p.coordenador).filter(Boolean);
+
+    return Array.from(new Set([...fromLid, ...fromData, ...fromPO]))
+      .filter(name => isPersonName(name))
+      .sort();
+  }, [liderancas, data, colaboradoresPO, selectedMonths, selectedTipos, selectedDiretorias, selectedGerentes, selectedCities, onlySpiActive, getItemCity]);
+
+  // 3. Supervisores disponíveis (cascateados por Gerente e Coordenador selecionados)
+  const allSupervisores = useMemo(() => {
+    const fromLid = liderancas.filter(l => {
+      const matchDir = selectedDiretorias.length === 0 || selectedDiretorias.includes(l.diretoria);
+      const matchCity = selectedCities.length === 0 || selectedCities.includes(l.cidade);
+      const matchGer = selectedGerentes.length === 0 || (l.gerente && selectedGerentes.includes(l.gerente));
+      const matchCoord = selectedCoordenadores.length === 0 || (l.coordenador && selectedCoordenadores.includes(l.coordenador));
+      return l.tipo === 'SUPERVISOR' && matchDir && matchCity && matchGer && matchCoord;
+    }).map(l => l.nome);
+
+    const fromData = data.filter(i =>
+      matchSpiFilter(i) &&
+      (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
+      (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
+      (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
+      (selectedCities.length === 0 || selectedCities.includes(getItemCity(i))) &&
+      (selectedGerentes.length === 0 || selectedGerentes.includes(i['GERENTE']) || (Array.isArray(i['LIDERES']) && i['LIDERES'].some((l: string) => selectedGerentes.includes(l)))) &&
+      (selectedCoordenadores.length === 0 || selectedCoordenadores.includes(i['COORDENADOR']) || (Array.isArray(i['LIDERES']) && i['LIDERES'].some((l: string) => selectedCoordenadores.includes(l))))
+    ).flatMap(i => [i['Supervisor'], i['GESTOR']]).filter(Boolean);
+
+    const fromPO = colaboradoresPO.filter(p =>
+      (!onlySpiActive || p.diretoria !== 'DIR SERVICOS AO CLIENTE SP INTERIOR' || p.ativo_spi !== 0) &&
+      (selectedDiretorias.length === 0 || selectedDiretorias.includes(p.diretoria)) &&
+      (selectedCities.length === 0 || selectedCities.includes(p.cidade)) &&
+      (selectedGerentes.length === 0 || selectedGerentes.includes(p.gerente) || (Array.isArray(p.lideres) && p.lideres.some((l: string) => selectedGerentes.includes(l)))) &&
+      (selectedCoordenadores.length === 0 || selectedCoordenadores.includes(p.coordenador) || (Array.isArray(p.lideres) && p.lideres.some((l: string) => selectedCoordenadores.includes(l))))
+    ).map(p => p.supervisor).filter(Boolean);
+
+    return Array.from(new Set([...fromLid, ...fromData, ...fromPO]))
+      .filter(name => isPersonName(name))
+      .sort();
+  }, [liderancas, data, colaboradoresPO, selectedMonths, selectedTipos, selectedDiretorias, selectedGerentes, selectedCoordenadores, selectedCities, onlySpiActive, getItemCity]);
 
   const allCities = useMemo(() => {
     const base = data.filter(i =>
@@ -215,18 +295,18 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
-      matchLeader(i, selectedSupervisors)
+      matchLeader(i, selectedGerentes, selectedCoordenadores, selectedSupervisores)
     );
     const dataCities = base.map(i => getItemCity(i)).filter(Boolean);
     const poCities = (cityMode === 'base')
       ? colaboradoresPO.filter(p =>
           (!onlySpiActive || p.diretoria !== 'DIR SERVICOS AO CLIENTE SP INTERIOR' || p.ativo_spi !== 0) &&
           (selectedDiretorias.length === 0 || selectedDiretorias.includes(p.diretoria)) &&
-          matchLeader(p, selectedSupervisors)
+          matchLeader(p, selectedGerentes, selectedCoordenadores, selectedSupervisores)
         ).map(p => p.cidade).filter(Boolean)
       : [];
     return Array.from(new Set([...dataCities, ...poCities])).sort();
-  }, [data, colaboradoresPO, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, onlySpiActive, getItemCity, cityMode, matchLeader]);
+  }, [data, colaboradoresPO, selectedMonths, selectedTipos, selectedDiretorias, selectedGerentes, selectedCoordenadores, selectedSupervisores, onlySpiActive, getItemCity, cityMode, matchLeader]);
 
   const allAuditores = useMemo(() => {
     const fromData = data.filter(i =>
@@ -234,14 +314,14 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
-      matchLeader(i, selectedSupervisors) &&
+      matchLeader(i, selectedGerentes, selectedCoordenadores, selectedSupervisores) &&
       (selectedCities.length === 0 || selectedCities.includes(getItemCity(i)))
     ).map(i => i['Nome Auditor'] || i['Matrícula Auditor']);
 
     const fromPO = colaboradoresPO.filter(p =>
       (!onlySpiActive || p.diretoria !== 'DIR SERVICOS AO CLIENTE SP INTERIOR' || p.ativo_spi !== 0) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(p.diretoria)) &&
-      matchLeader(p, selectedSupervisors) &&
+      matchLeader(p, selectedGerentes, selectedCoordenadores, selectedSupervisores) &&
       (selectedCities.length === 0 || selectedCities.includes(p.cidade))
     ).map(p => p.nome || p.matricula);
 
@@ -251,7 +331,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
     ).map(l => l.nome).filter(isPersonName);
 
     return Array.from(new Set([...fromData, ...fromPO, ...fromLid])).filter(isPersonName).sort();
-  }, [data, colaboradoresPO, liderancas, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities, onlySpiActive, getItemCity, matchLeader]);
+  }, [data, colaboradoresPO, liderancas, selectedMonths, selectedTipos, selectedDiretorias, selectedGerentes, selectedCoordenadores, selectedSupervisores, selectedCities, onlySpiActive, getItemCity, matchLeader]);
 
   const toggleMonth = (m: string) => setSelectedMonths(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]);
 
@@ -264,11 +344,15 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
     setSelectedMonths([]);
     setSelectedTipos([]);
     setSelectedDiretorias([]);
-    setSelectedSupervisors([]);
+    setSelectedGerentes([]);
+    setSelectedCoordenadores([]);
+    setSelectedSupervisores([]);
     setSelectedCities([]);
     setSelectedAuditores([]);
     setRankingGroup('colaborador');
     setRankingFilter('todos');
+    setOnlySpiActive(true);
+    setCityMode('base');
   };
 
   const filteredData = useMemo(() => {
@@ -281,10 +365,10 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
         (selectedMonths.length === 0 || selectedMonths.includes(String(item['Mês']))) &&
         (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(item['Questionário']))) &&
         (selectedDiretorias.length === 0 || selectedDiretorias.includes(item['DIRETORIA 3'])) &&
-        matchLeader(item, selectedSupervisors) &&
+        matchLeader(item, selectedGerentes, selectedCoordenadores, selectedSupervisores) &&
         (selectedCities.length === 0 || selectedCities.includes(getItemCity(item)));
     });
-  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities, selectedAuditores, onlySpiActive, getItemCity, matchLeader]);
+  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedGerentes, selectedCoordenadores, selectedSupervisores, selectedCities, selectedAuditores, onlySpiActive, getItemCity, matchLeader]);
 
   // KPIs base
   const totalAprs = filteredData.length;
@@ -397,7 +481,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       colaboradoresPO.forEach(p => {
         if (onlySpiActive && p.diretoria === 'DIR SERVICOS AO CLIENTE SP INTERIOR' && p.ativo_spi === 0) return;
         if (selectedDiretorias.length > 0 && !selectedDiretorias.includes(p.diretoria)) return;
-        if (!matchLeader(p, selectedSupervisors)) return;
+        if (!matchLeader(p, selectedGerentes, selectedCoordenadores, selectedSupervisores)) return;
         if (selectedCities.length > 0 && !selectedCities.includes(p.cidade)) return;
         if (selectedAuditores.length > 0 && !selectedAuditores.includes(p.nome) && !selectedAuditores.includes(p.matricula)) return;
 
@@ -427,7 +511,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
     }
 
     return Object.values(agg);
-  }, [filteredData, colaboradoresPO, selectedAuditores, selectedDiretorias, selectedSupervisors, selectedCities, onlySpiActive, rankingGroup, getItemCity, matchLeader]);
+  }, [filteredData, colaboradoresPO, selectedAuditores, selectedDiretorias, selectedGerentes, selectedCoordenadores, selectedSupervisores, selectedCities, onlySpiActive, rankingGroup, getItemCity, matchLeader]);
 
   // Ranking ordenado e filtrado
   const rankAgg = useMemo(() => {
@@ -452,12 +536,21 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
   const semAprCount = useMemo(() => allRankAgg.filter(i => i.count === 0).length, [allRankAgg]);
   const maxRank = Math.max(1, ...rankAgg.map(i => i.count));
 
-  // Lideranças diretas no filtro (coordenadores e supervisores que possuem colaboradores/APRs neste escopo)
+  // Lideranças diretas no filtro (gerentes, coordenadores e supervisores que possuem colaboradores/APRs neste escopo)
+  const gerentesNoFiltro = useMemo(() => {
+    const gSet = new Set<string>();
+    allRankAgg.forEach(item => {
+      const g = (item.gerente || '').trim().toUpperCase();
+      if (g && isPersonName(g) && !g.includes('GERÊNCIA GERAL')) gSet.add(g);
+    });
+    return Array.from(gSet).sort();
+  }, [allRankAgg]);
+
   const coordenadoresNoFiltro = useMemo(() => {
     const coords = new Set<string>();
     allRankAgg.forEach(item => {
       const c = (item.coordenador || '').trim().toUpperCase();
-      if (c && isPersonName(c)) coords.add(c);
+      if (c && isPersonName(c) && !c.includes('DIRETA')) coords.add(c);
     });
     return Array.from(coords).sort();
   }, [allRankAgg]);
@@ -474,30 +567,45 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
   const totalColaboradores = allRankAgg.length;
   const comAprCount = useMemo(() => allRankAgg.filter(i => i.count > 0).length, [allRankAgg]);
 
-  const kpiItems = useMemo(() => [
-    { v: formatNum(totalAprs), l: 'APRs no Filtro', icon: FileText, c: 'border-l-pink-500', t: 'text-pink-500' },
-    { v: formatNum(diretoriasUnicas), l: 'Diretorias', icon: Building, c: 'border-l-blue-500', t: 'text-blue-500' },
-    {
-      v: formatNum(coordenadoresNoFiltro.length > 0 ? coordenadoresNoFiltro.length : supervisoresNoFiltro.length),
-      l: 'Hierarquia',
-      icon: Users,
-      c: 'border-l-orange-500',
-      t: 'text-orange-500',
-      sub: selectedSupervisors.length > 0
+  const kpiItems = useMemo(() => {
+    const hierarquiaCount = (
+      selectedSupervisores.length > 0 ? supervisoresNoFiltro.length :
+      selectedCoordenadores.length > 0 ? coordenadoresNoFiltro.length :
+      selectedGerentes.length > 0 ? coordenadoresNoFiltro.length :
+      gerentesNoFiltro.length > 0 ? gerentesNoFiltro.length : supervisoresNoFiltro.length
+    );
+
+    const hierarquiaSub = (
+      selectedGerentes.length > 0
         ? `${coordenadoresNoFiltro.length} coord. • ${supervisoresNoFiltro.length} sup.`
-        : `${supervisoresNoFiltro.length} supervisões`,
-      onClick: () => setIsHierarchyModalOpen(true)
-    },
-    { v: formatNum(cidadesUnicas), l: 'Cidades', icon: MapPin, c: 'border-l-teal-500', t: 'text-teal-500' },
-    {
-      v: formatNum(totalColaboradores),
-      l: 'Colaboradores',
-      icon: UserCheck,
-      c: 'border-l-purple-500',
-      t: 'text-purple-500',
-      sub: `${comAprCount} com APR • ${semAprCount} sem APR`
-    }
-  ], [totalAprs, diretoriasUnicas, coordenadoresNoFiltro, supervisoresNoFiltro, selectedSupervisors, cidadesUnicas, totalColaboradores, comAprCount, semAprCount]);
+        : selectedCoordenadores.length > 0
+        ? `${supervisoresNoFiltro.length} supervisões`
+        : `${gerentesNoFiltro.length} ger. • ${coordenadoresNoFiltro.length} coord.`
+    );
+
+    return [
+      { v: formatNum(totalAprs), l: 'APRs no Filtro', icon: FileText, c: 'border-l-pink-500', t: 'text-pink-500' },
+      { v: formatNum(diretoriasUnicas), l: 'Diretorias', icon: Building, c: 'border-l-blue-500', t: 'text-blue-500' },
+      {
+        v: formatNum(hierarquiaCount),
+        l: 'Hierarquia',
+        icon: Users,
+        c: 'border-l-orange-500',
+        t: 'text-orange-500',
+        sub: hierarquiaSub,
+        onClick: () => setIsHierarchyModalOpen(true)
+      },
+      { v: formatNum(cidadesUnicas), l: 'Cidades', icon: MapPin, c: 'border-l-teal-500', t: 'text-teal-500' },
+      {
+        v: formatNum(totalColaboradores),
+        l: 'Colaboradores',
+        icon: UserCheck,
+        c: 'border-l-purple-500',
+        t: 'text-purple-500',
+        sub: `${comAprCount} com APR • ${semAprCount} sem APR`
+      }
+    ];
+  }, [totalAprs, diretoriasUnicas, gerentesNoFiltro, coordenadoresNoFiltro, supervisoresNoFiltro, selectedGerentes, selectedCoordenadores, selectedSupervisores, cidadesUnicas, totalColaboradores, comAprCount, semAprCount]);
 
   // Rank Atividade
   const rankAtividade = useMemo(() => {
@@ -515,7 +623,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
 
   const maxAtiv = rankAtividade.length > 0 ? rankAtividade[0].count : 1;
 
-  // Meses - Evolução Histórica no Gráfico respeitando filtros (Supervisor, Cidade, etc.)
+  // Meses - Evolução Histórica no Gráfico respeitando filtros (Gerente, Coordenador, Supervisor, Cidade, etc.)
   const monthAgg = useMemo(() => {
     const baseWithoutMonthFilter = data.filter(item => {
       const matchAuditor = selectedAuditores.length === 0 ||
@@ -525,7 +633,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
         matchAuditor &&
         (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(item['Questionário']))) &&
         (selectedDiretorias.length === 0 || selectedDiretorias.includes(item['DIRETORIA 3'])) &&
-        matchLeader(item, selectedSupervisors) &&
+        matchLeader(item, selectedGerentes, selectedCoordenadores, selectedSupervisores) &&
         (selectedCities.length === 0 || selectedCities.includes(getItemCity(item)));
     });
 
@@ -535,7 +643,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       agg[m] = (agg[m] || 0) + 1;
     });
     return allMonths.map(m => ({ month: m, count: agg[m] || 0 }));
-  }, [data, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities, selectedAuditores, allMonths, onlySpiActive, getItemCity, matchLeader]);
+  }, [data, selectedTipos, selectedDiretorias, selectedGerentes, selectedCoordenadores, selectedSupervisores, selectedCities, selectedAuditores, allMonths, onlySpiActive, getItemCity, matchLeader]);
 
   const maxMonth = Math.max(1, ...monthAgg.map(m => m.count));
 
@@ -557,7 +665,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       rankAgg,
       onlySpiActive,
       selectedDiretorias,
-      selectedSupervisors,
+      selectedSupervisors: [...selectedGerentes, ...selectedCoordenadores, ...selectedSupervisores],
       selectedCities,
       selectedAuditores,
     });
@@ -643,7 +751,9 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
             <div className="w-px h-12 bg-gray-200 dark:bg-gray-800 hidden md:block"></div>
 
             <PremiumMultiSelect label="Diretoria 3" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-[340px]" />
-            <PremiumMultiSelect label="Gerente / Coordenador" options={allSupervisors} selected={selectedSupervisors} onChange={handleMultiSelect(setSelectedSupervisors)} icon={Users} widthClass="w-[280px]" />
+            <PremiumMultiSelect label="Gerente" options={allGerentes} selected={selectedGerentes} onChange={handleMultiSelect(setSelectedGerentes)} icon={Users} widthClass="w-[240px]" />
+            <PremiumMultiSelect label="Coordenador" options={allCoordenadores} selected={selectedCoordenadores} onChange={handleMultiSelect(setSelectedCoordenadores)} icon={Users} widthClass="w-[240px]" />
+            <PremiumMultiSelect label="Supervisor" options={allSupervisores} selected={selectedSupervisores} onChange={handleMultiSelect(setSelectedSupervisores)} icon={Users} widthClass="w-[240px]" />
             <PremiumMultiSelect label="Cidade" options={allCities} selected={selectedCities} onChange={handleMultiSelect(setSelectedCities)} icon={MapPin} />
             <PremiumMultiSelect label="Tipo de Atividade" options={allTipos} selected={selectedTipos} onChange={handleMultiSelect(setSelectedTipos)} icon={FileText} widthClass="w-[220px]" />
 
@@ -701,7 +811,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
               </label>
             </div>
 
-            {(selectedMonths.length > 0 || selectedTipos.length > 0 || selectedDiretorias.length > 0 || selectedSupervisors.length > 0 || selectedCities.length > 0 || selectedAuditores.length > 0 || !onlySpiActive) && (
+            {(selectedMonths.length > 0 || selectedTipos.length > 0 || selectedDiretorias.length > 0 || selectedGerentes.length > 0 || selectedCoordenadores.length > 0 || selectedSupervisores.length > 0 || selectedCities.length > 0 || selectedAuditores.length > 0 || !onlySpiActive) && (
               <div className="flex flex-col gap-1.5 ml-auto">
                 <span className="text-[10px] font-semibold opacity-0">Limpar</span>
                 <button
@@ -1042,7 +1152,9 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       <HierarchyModal
         isOpen={isHierarchyModalOpen}
         onClose={() => setIsHierarchyModalOpen(false)}
-        selectedLeaders={selectedSupervisors}
+        selectedGerentes={selectedGerentes}
+        selectedCoordenadores={selectedCoordenadores}
+        selectedSupervisores={selectedSupervisores}
         selectedDiretorias={selectedDiretorias}
         selectedCities={selectedCities}
         rankAgg={allRankAgg}
