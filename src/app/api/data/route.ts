@@ -163,11 +163,29 @@ function getRegional(cidade: string | null): 'SPC' | 'SPI' | null {
 }
 
 const ALLOWED_DIRETORIAS = [
-  'DIR ENGENHARIA TRANSPORTE E INFRA',
-  'DIR EXPERIENCIA COLABORADOR',
   'DIR SERVICOS AO CLIENTE SP CAPITAL',
-  'DIR SERVICOS AO CLIENTE SP INTERIOR'
+  'DIR SERVICOS AO CLIENTE SP INTERIOR',
+  'DIR ENGENHARIA TRANSPORTE E INFRA - CAPITAL',
+  'DIR ENGENHARIA TRANSPORTE E INFRA - INTERIOR',
+  'DIR ENGENHARIA TRANSPORTE E INFRA'
 ];
+
+function normalizeDiretoria(dir: string | null, regional: 'SPC' | 'SPI' | null): string | null {
+  if (!dir) return null;
+  const d = dir.trim().toUpperCase();
+  if (d.includes('ENGENHARIA')) {
+    return regional === 'SPI'
+      ? 'DIR ENGENHARIA TRANSPORTE E INFRA - INTERIOR'
+      : 'DIR ENGENHARIA TRANSPORTE E INFRA - CAPITAL';
+  }
+  if (regional === 'SPI' && (d === 'DIR SERVICOS AO CLIENTE SP CAPITAL' || d === 'DIR SERVICOS AO CLIENTE SP INTERIOR')) {
+    return 'DIR SERVICOS AO CLIENTE SP INTERIOR';
+  }
+  if (regional === 'SPC' && (d === 'DIR SERVICOS AO CLIENTE SP CAPITAL' || d === 'DIR SERVICOS AO CLIENTE SP INTERIOR')) {
+    return 'DIR SERVICOS AO CLIENTE SP CAPITAL';
+  }
+  return d;
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -285,7 +303,10 @@ export async function GET(req: NextRequest) {
         const [aprRes, poRes, spiRes] = await Promise.all([
           pool.query(`SELECT * FROM aprs ORDER BY data_inicio DESC`),
           pool.query(`
-            SELECT user_id_ssff, nome, diretoria_3, gerencia, gestor, cidade_comercial, uf_comercial,
+            SELECT user_id_ssff, nome, cargo,
+                   COALESCE(to_jsonb(po)->>'categoria', '') AS categoria,
+                   COALESCE(to_jsonb(po)->>'subgrupo', '') AS subgrupo,
+                   diretoria_3, gerencia, gestor, cidade_comercial, uf_comercial,
                    COALESCE(to_jsonb(po)->>'cnpj', '') AS cnpj,
                    COALESCE(to_jsonb(po)->>'filial', '') AS filial
             FROM po ORDER BY id ASC
@@ -327,26 +348,23 @@ export async function GET(req: NextRequest) {
           const p = (idMat && poById.get(idMat)) || (idRe && poById.get(idRe)) || poByNome.get(normNome(a.nome_auditor) || '') || null;
           const spi = (idMat && spiByMat.get(idMat)) || (idRe && spiByMat.get(idRe)) || (normNome(a.nome_auditor) && spiByNome.get(normNome(a.nome_auditor)!)) || null;
 
-          const cidade = cleanCidade(a.localidade_objeto) || cleanCidade(a.cidade_comercial) || cleanCidade(spi?.cidade_comercial) || cleanCidade(p?.cidade_comercial) || null;
-          const regional = getRegional(cidade);
-          const fc = getFilialCnpj(cidade);
+          // Cidade Base (Lotação oficial conforme PO / SPI) vs Cidade de Execução (Local onde o checklist foi preenchido)
+          const cidadeBase = cleanCidade(spi?.cidade_comercial) || cleanCidade(p?.cidade_comercial) || cleanCidade(a.cidade_comercial) || null;
+          const cidadeExecucao = cleanCidade(a.localidade_objeto) || cleanCidade(a.cidade_comercial) || cidadeBase || null;
+          const cidadePrincipal = cidadeBase || cidadeExecucao;
 
-          let diretoria = p?.diretoria_3 || a.diretoria_3 || null;
-          let gestor = p?.gestor || a.gestor || null;
+          // Regional e Diretoria são determinadas pela Cidade Base (Lotação do Colaborador) para não distorcer equipe/liderança em mutirões
+          const regional = getRegional(cidadePrincipal);
+          const fc = getFilialCnpj(cidadePrincipal);
 
-          if (spi) {
-            diretoria = INTERIOR;
-            gestor = (spi.gestor_atual || '').toString().trim().toUpperCase() || gestor;
-          } else if (regional === 'SPI') {
-            // Correção inteligente: cidade comprovadamente de SPI corrige diretoria para INTERIOR
-            if (diretoria === CAPITAL || !diretoria || diretoria === INTERIOR) {
-              diretoria = INTERIOR;
-            }
-          } else if (regional === 'SPC') {
-            // Correção inteligente: cidade comprovadamente de SPC corrige diretoria para CAPITAL
-            if (diretoria === INTERIOR || !diretoria || diretoria === CAPITAL) {
-              diretoria = CAPITAL;
-            }
+          let rawDir = (spi ? INTERIOR : null) || p?.diretoria_3 || a.diretoria_3 || null;
+          let diretoria = normalizeDiretoria(rawDir, regional);
+
+          let gestor = spi?.gestor_atual || p?.gestor || a.gestor || a.supervisor || null;
+          if (gestor) {
+            gestor = gestor.toString().trim().toUpperCase();
+          } else {
+            gestor = regional ? `SUPERVISÃO ${regional}` : 'SUPERVISÃO NÃO IDENTIFICADA';
           }
 
           const filial = (p?.filial && p.filial.trim()) || fc?.filial || spi?.gerencia || p?.gerencia || a.gerencia || (regional ? `FILIAL ${regional}` : 'SÃO PAULO');
@@ -363,9 +381,12 @@ export async function GET(req: NextRequest) {
             "Nome Auditor": a.nome_auditor,
             "Localidade Objeto": a.localidade_objeto,
             "Questionário": a.questionario,
+            "CARGO": (spi?.cargo || p?.cargo || null)?.toString()?.trim()?.toUpperCase() || null,
             "RE": a.re,
-            "CIDADE COMERCIAL": cidade,
-            "REGIONAL": regional || (diretoria === INTERIOR ? 'SPI' : diretoria === CAPITAL ? 'SPC' : null),
+            "CIDADE COMERCIAL": cidadePrincipal,
+            "CIDADE_BASE": cidadeBase || cidadePrincipal,
+            "CIDADE_EXECUCAO": cidadeExecucao,
+            "REGIONAL": regional || (diretoria?.includes('INTERIOR') ? 'SPI' : 'SPC'),
             "UF COMERCIAL": p?.uf_comercial || a.uf_comercial || null,
             "DIRETORIA 3": diretoria,
             "GERÊNCIA": spi?.gerencia || p?.gerencia || a.gerencia || null,
@@ -375,7 +396,7 @@ export async function GET(req: NextRequest) {
             "Supervisor": gestor,
             "Mês": a.mes,
             "Ano": a.ano,
-            "ATIVO_SPI": spi ? spi.ativo : (regional === 'SPI' || diretoria === INTERIOR ? 0 : null),
+            "ATIVO_SPI": spi ? spi.ativo : (regional === 'SPI' || diretoria?.includes('INTERIOR') ? 0 : null),
             "IS_SPI": !!spi,
           };
         });
@@ -391,16 +412,18 @@ export async function GET(req: NextRequest) {
           seenMatriculas.add(mat);
 
           const cidade = cleanCidade(s.cidade_comercial) || null;
+          const regional = getRegional(cidade) || 'SPI';
           const fc = getFilialCnpj(cidade);
           const gestor = (s.gestor_atual || '').toString().trim().toUpperCase() || 'SUPERVISÃO SPI';
           const filial = fc?.filial || s.gerencia || 'FILIAL SPI';
           const cnpj = fc?.cnpj || '-';
+          const dir = normalizeDiretoria(s.diretoria_3 || INTERIOR, regional);
 
           colaboradoresPO.push({
             matricula: mat,
             nome: (s.nome || mat).toString().trim().toUpperCase(),
             cargo: (s.cargo || 'TECNICO SERVICO AO CLIENTE').toString().trim().toUpperCase(),
-            diretoria: INTERIOR,
+            diretoria: dir,
             gerencia: (s.gerencia || '').toString().trim().toUpperCase(),
             filial: filial,
             cnpj: cnpj,
@@ -416,6 +439,16 @@ export async function GET(req: NextRequest) {
         for (const p of poRes.rows) {
           const mat = normId(p.user_id_ssff);
           if (!mat || seenMatriculas.has(mat)) continue;
+
+          // REGRA DE CAMPO: Apenas quem possui CATEGORIA = CAMPO ou SUBGRUPO = CAMPO
+          // (ou cargos típicos de campo caso categoria/subgrupo ainda não estejam povoados)
+          const cat = (p.categoria || '').toString().trim().toUpperCase();
+          const sub = (p.subgrupo || '').toString().trim().toUpperCase();
+          const cargo = (p.cargo || '').toString().trim().toUpperCase();
+          const isCampo = cat === 'CAMPO' || sub === 'CAMPO' ||
+            (cargo && (cargo.includes('TECNICO') || cargo.includes('CABISTA') || cargo.includes('LIGADOR') || cargo.includes('OFICIAL') || cargo.includes('EMENDADOR')));
+          if (!isCampo) continue;
+
           seenMatriculas.add(mat);
 
           const spi = spiByMat.get(mat) || (normNome(p.nome) && spiByNome.get(normNome(p.nome)!));
@@ -423,24 +456,13 @@ export async function GET(req: NextRequest) {
           const regional = getRegional(cidade);
           const fc = getFilialCnpj(cidade);
 
-          let diretoria = p.diretoria_3 || null;
-          let gestor = p.gestor || null;
+          let rawDir = p.diretoria_3 || null;
+          let diretoria = normalizeDiretoria(rawDir, regional);
 
-          if (spi) {
-            diretoria = INTERIOR;
-            gestor = (spi.gestor_atual || '').toString().trim().toUpperCase() || gestor;
-          } else if (regional === 'SPI') {
-            if (diretoria === CAPITAL || !diretoria || diretoria === INTERIOR) {
-              diretoria = INTERIOR;
-            }
-          } else if (regional === 'SPC') {
-            if (diretoria === INTERIOR || !diretoria || diretoria === CAPITAL) {
-              diretoria = CAPITAL;
-            }
-          }
-
-          // Se não encontrou o gestor/supervisor, enquadra na regional pelo menos
-          if (!gestor) {
+          let gestor = spi?.gestor_atual || p.gestor || null;
+          if (gestor) {
+            gestor = gestor.toString().trim().toUpperCase();
+          } else {
             gestor = regional ? `SUPERVISÃO ${regional}` : 'SUPERVISÃO NÃO IDENTIFICADA';
           }
 
@@ -452,15 +474,15 @@ export async function GET(req: NextRequest) {
             colaboradoresPO.push({
               matricula: mat,
               nome: (p.nome || mat).toString().trim().toUpperCase(),
-              cargo: (p.cargo || 'COLABORADOR').toString().trim().toUpperCase(),
+              cargo: cargo || 'COLABORADOR',
               diretoria: dirUpper,
               gerencia: (spi?.gerencia || p.gerencia || '').toString().trim().toUpperCase(),
               filial: filial,
               cnpj: cnpj,
-              supervisor: (gestor || '').toString().trim().toUpperCase(),
+              supervisor: gestor,
               cidade: cidade,
-              regional: regional || (dirUpper === INTERIOR ? 'SPI' : dirUpper === CAPITAL ? 'SPC' : null),
-              ativo_spi: spi ? spi.ativo : (dirUpper === INTERIOR ? 0 : 1),
+              regional: regional || (dirUpper.includes('INTERIOR') ? 'SPI' : 'SPC'),
+              ativo_spi: spi ? spi.ativo : (dirUpper.includes('INTERIOR') ? 0 : 1),
               is_spi: !!spi
             });
           }
@@ -499,13 +521,13 @@ export async function GET(req: NextRequest) {
       if (type === 'DSS') {
         const cid = cleanCidade(r["CIDADE COMERCIAL"]);
         const reg = getRegional(cid);
-        let dir = r["DIRETORIA 3"];
+        let dir = normalizeDiretoria(r["DIRETORIA 3"], reg);
         if (r["IS_SPI"] || reg === 'SPI') {
-          if (dir === 'DIR SERVICOS AO CLIENTE SP CAPITAL' || !dir) {
+          if (!dir || dir === 'DIR SERVICOS AO CLIENTE SP CAPITAL') {
             dir = 'DIR SERVICOS AO CLIENTE SP INTERIOR';
           }
         } else if (reg === 'SPC') {
-          if (dir === 'DIR SERVICOS AO CLIENTE SP INTERIOR' || !dir) {
+          if (!dir || dir === 'DIR SERVICOS AO CLIENTE SP INTERIOR') {
             dir = 'DIR SERVICOS AO CLIENTE SP CAPITAL';
           }
         }
@@ -513,7 +535,7 @@ export async function GET(req: NextRequest) {
           ...r,
           "CIDADE COMERCIAL": cid,
           "DIRETORIA 3": dir,
-          "REGIONAL": reg || (dir === 'DIR SERVICOS AO CLIENTE SP INTERIOR' ? 'SPI' : dir === 'DIR SERVICOS AO CLIENTE SP CAPITAL' ? 'SPC' : null),
+          "REGIONAL": reg || (dir?.includes('INTERIOR') ? 'SPI' : 'SPC'),
           "Data Fechamento": formatData(r["Data Fechamento"])
         };
       }
@@ -521,6 +543,8 @@ export async function GET(req: NextRequest) {
       return {
         ...r,
         "CIDADE COMERCIAL": cleanCidade(r["CIDADE COMERCIAL"]),
+        "CIDADE_BASE": cleanCidade(r["CIDADE_BASE"]) || cleanCidade(r["CIDADE COMERCIAL"]),
+        "CIDADE_EXECUCAO": cleanCidade(r["CIDADE_EXECUCAO"]) || cleanCidade(r["Localidade Objeto"]) || cleanCidade(r["CIDADE COMERCIAL"]),
         "Data Checklist": formatData(r["Data Checklist"]),
         "Data Início": formatData(r["Data Início"]),
         "Data Fim": formatData(r["Data Fim"])

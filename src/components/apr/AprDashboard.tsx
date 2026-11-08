@@ -1,13 +1,15 @@
 "use client";
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx-js-style';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Download, ChevronDown, Building, Users, MapPin, 
+import {
+  Download, ChevronDown, Building, Users, MapPin,
   FileText, UserCheck, Clock, X, Settings, ArrowLeft, Sun, Moon, HelpCircle
 } from 'lucide-react';
 import { PremiumMultiSelect } from '@/components/common/PremiumMultiSelect';
 import { AdminModal } from '@/components/common/AdminModal';
+import { KpiGrid } from '@/components/common/KpiGrid';
+import { exportAprToExcel } from '@/lib/excel/exportApr';
 
 interface AprDashboardProps {
   onBack: () => void;
@@ -55,7 +57,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isMetaModalOpen, setIsMetaModalOpen] = useState(false);
   const [rankingGroup, setRankingGroup] = useState<'colaborador' | 'cidade'>('colaborador');
-  const [rankingFilter, setRankingFilter] = useState<'todos' | 'sem_apr'>('todos');
+  const [rankingFilter, setRankingFilter] = useState<'todos' | 'mais' | 'menos' | 'sem_apr'>('todos');
   const [selectedAuditorDetails, setSelectedAuditorDetails] = useState<any | null>(null);
 
   // Filtros
@@ -66,6 +68,16 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
   const [selectedCities, setSelectedCities] = useState<string[]>([]);
   const [selectedAuditores, setSelectedAuditores] = useState<string[]>([]);
   const [onlySpiActive, setOnlySpiActive] = useState<boolean>(true);
+  // Flag de Origem da Cidade: 'base' (Lotação oficial PO) ou 'execucao' (Local da APR)
+  const [cityMode, setCityMode] = useState<'base' | 'execucao'>('base');
+
+  const getItemCity = useCallback((item: any) => {
+    if (!item) return '';
+    if (cityMode === 'execucao') {
+      return item['CIDADE_EXECUCAO'] || item['Localidade Objeto'] || item['CIDADE COMERCIAL'] || '';
+    }
+    return item['CIDADE_BASE'] || item['CIDADE COMERCIAL'] || '';
+  }, [cityMode]);
 
   const loadData = () => {
     setLoading(true);
@@ -88,87 +100,95 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
     loadData();
   }, []);
 
-  const allMonths = useMemo(() => Array.from(new Set(data.map(i => String(i['Mês'])))).filter(Boolean).sort(), [data]);
+  const allMonths = useMemo(() => Array.from(new Set(data.map(i => String(i['Mês'])))).filter(Boolean).sort((a, b) => parseInt(a, 10) - parseInt(b, 10)), [data]);
 
   const matchSpiFilter = (i: any) => {
     if (!onlySpiActive) return true;
     if (i['DIRETORIA 3'] === 'DIR SERVICOS AO CLIENTE SP INTERIOR') {
-      return i['ATIVO_SPI'] === 1;
+      return i['ATIVO_SPI'] !== 0;
     }
     return true;
   };
 
   // Filtros Cruzados (Cross-filtering)
   const allTipos = useMemo(() => {
-    const base = data.filter(i => 
+    const base = data.filter(i =>
       matchSpiFilter(i) &&
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
       (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor'] || i['GESTOR'])) &&
-      (selectedCities.length === 0 || selectedCities.includes(i['CIDADE COMERCIAL']))
+      (selectedCities.length === 0 || selectedCities.includes(getItemCity(i)))
     );
     return Array.from(new Set(base.map(i => cleanTipo(i['Questionário'])))).filter(Boolean).sort();
-  }, [data, selectedMonths, selectedDiretorias, selectedSupervisors, selectedCities, onlySpiActive]);
+  }, [data, selectedMonths, selectedDiretorias, selectedSupervisors, selectedCities, onlySpiActive, getItemCity]);
 
   const allDiretorias = useMemo(() => {
-    const base = data.filter(i => 
+    const base = data.filter(i =>
       matchSpiFilter(i) &&
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
       (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor'] || i['GESTOR'])) &&
-      (selectedCities.length === 0 || selectedCities.includes(i['CIDADE COMERCIAL']))
+      (selectedCities.length === 0 || selectedCities.includes(getItemCity(i)))
     );
     return Array.from(new Set(base.map(i => i['DIRETORIA 3']))).filter(Boolean).sort();
-  }, [data, selectedMonths, selectedTipos, selectedSupervisors, selectedCities, onlySpiActive]);
+  }, [data, selectedMonths, selectedTipos, selectedSupervisors, selectedCities, onlySpiActive, getItemCity]);
 
   const allSupervisors = useMemo(() => {
-    const fromData = data.filter(i => 
+    const fromData = data.filter(i =>
       matchSpiFilter(i) &&
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
-      (selectedCities.length === 0 || selectedCities.includes(i['CIDADE COMERCIAL']))
+      (selectedCities.length === 0 || selectedCities.includes(getItemCity(i)))
     ).map(i => i['Supervisor'] || i['GESTOR']);
 
-    const fromPO = colaboradoresPO.filter(p => 
-      (!onlySpiActive || p.diretoria !== 'DIR SERVICOS AO CLIENTE SP INTERIOR' || p.ativo_spi === 1) &&
+    const fromPO = colaboradoresPO.filter(p =>
+      (!onlySpiActive || p.diretoria !== 'DIR SERVICOS AO CLIENTE SP INTERIOR' || p.ativo_spi !== 0) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(p.diretoria)) &&
       (selectedCities.length === 0 || selectedCities.includes(p.cidade))
     ).map(p => p.supervisor);
 
     return Array.from(new Set([...fromData, ...fromPO])).filter(Boolean).sort();
-  }, [data, colaboradoresPO, selectedMonths, selectedTipos, selectedDiretorias, selectedCities, onlySpiActive]);
+  }, [data, colaboradoresPO, selectedMonths, selectedTipos, selectedDiretorias, selectedCities, onlySpiActive, getItemCity]);
 
   const allCities = useMemo(() => {
-    const base = data.filter(i => 
+    const base = data.filter(i =>
       matchSpiFilter(i) &&
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
       (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor'] || i['GESTOR']))
     );
-    return Array.from(new Set(base.map(i => i['CIDADE COMERCIAL']))).filter(Boolean).sort();
-  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, onlySpiActive]);
+    const dataCities = base.map(i => getItemCity(i)).filter(Boolean);
+    const poCities = (cityMode === 'base')
+      ? colaboradoresPO.filter(p =>
+          (!onlySpiActive || p.diretoria !== 'DIR SERVICOS AO CLIENTE SP INTERIOR' || p.ativo_spi !== 0) &&
+          (selectedDiretorias.length === 0 || selectedDiretorias.includes(p.diretoria)) &&
+          (selectedSupervisors.length === 0 || selectedSupervisors.includes(p.supervisor))
+        ).map(p => p.cidade).filter(Boolean)
+      : [];
+    return Array.from(new Set([...dataCities, ...poCities])).sort();
+  }, [data, colaboradoresPO, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, onlySpiActive, getItemCity, cityMode]);
 
   const allAuditores = useMemo(() => {
-    const fromData = data.filter(i => 
+    const fromData = data.filter(i =>
       matchSpiFilter(i) &&
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
       (selectedSupervisors.length === 0 || selectedSupervisors.includes(i['Supervisor'] || i['GESTOR'])) &&
-      (selectedCities.length === 0 || selectedCities.includes(i['CIDADE COMERCIAL']))
+      (selectedCities.length === 0 || selectedCities.includes(getItemCity(i)))
     ).map(i => i['Nome Auditor'] || i['Matrícula Auditor']);
 
-    const fromPO = colaboradoresPO.filter(p => 
-      (!onlySpiActive || p.diretoria !== 'DIR SERVICOS AO CLIENTE SP INTERIOR' || p.ativo_spi === 1) &&
+    const fromPO = colaboradoresPO.filter(p =>
+      (!onlySpiActive || p.diretoria !== 'DIR SERVICOS AO CLIENTE SP INTERIOR' || p.ativo_spi !== 0) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(p.diretoria)) &&
       (selectedSupervisors.length === 0 || selectedSupervisors.includes(p.supervisor)) &&
       (selectedCities.length === 0 || selectedCities.includes(p.cidade))
     ).map(p => p.nome || p.matricula);
 
     return Array.from(new Set([...fromData, ...fromPO])).filter(Boolean).sort();
-  }, [data, colaboradoresPO, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities, onlySpiActive]);
+  }, [data, colaboradoresPO, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities, onlySpiActive, getItemCity]);
 
   const toggleMonth = (m: string) => setSelectedMonths(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]);
 
@@ -190,37 +210,45 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
 
   const filteredData = useMemo(() => {
     return data.filter(item => {
-      const matchAuditor = selectedAuditores.length === 0 || 
-        selectedAuditores.includes(item['Nome Auditor']) || 
+      const matchAuditor = selectedAuditores.length === 0 ||
+        selectedAuditores.includes(item['Nome Auditor']) ||
         selectedAuditores.includes(item['Matrícula Auditor']);
       return matchSpiFilter(item) &&
-             matchAuditor &&
-             (selectedMonths.length === 0 || selectedMonths.includes(String(item['Mês']))) &&
-             (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(item['Questionário']))) &&
-             (selectedDiretorias.length === 0 || selectedDiretorias.includes(item['DIRETORIA 3'])) &&
-             (selectedSupervisors.length === 0 || selectedSupervisors.includes(item['Supervisor'] || item['GESTOR'])) &&
-             (selectedCities.length === 0 || selectedCities.includes(item['CIDADE COMERCIAL']));
+        matchAuditor &&
+        (selectedMonths.length === 0 || selectedMonths.includes(String(item['Mês']))) &&
+        (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(item['Questionário']))) &&
+        (selectedDiretorias.length === 0 || selectedDiretorias.includes(item['DIRETORIA 3'])) &&
+        (selectedSupervisors.length === 0 || selectedSupervisors.includes(item['Supervisor'] || item['GESTOR'])) &&
+        (selectedCities.length === 0 || selectedCities.includes(getItemCity(item)));
     });
-  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities, selectedAuditores, onlySpiActive]);
+  }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities, selectedAuditores, onlySpiActive, getItemCity]);
 
   // KPIs
   const totalAprs = filteredData.length;
   const auditoresSet = new Set(filteredData.map(i => i['Matrícula Auditor'] || i['Nome Auditor']));
   const totalAuditores = auditoresSet.size;
   const diretoriasUnicas = new Set(filteredData.map(i => i['DIRETORIA 3']).filter(Boolean)).size;
-  const cidadesUnicas = new Set(filteredData.map(i => i['CIDADE COMERCIAL']).filter(Boolean)).size;
+  const cidadesUnicas = new Set(filteredData.map(i => getItemCity(i)).filter(Boolean)).size;
   const supervisoresUnicos = new Set(filteredData.map(i => i['Supervisor'] || i['GESTOR']).filter(Boolean)).size;
+
+  const kpiItems = useMemo(() => [
+    { v: formatNum(totalAprs), l: 'APRs no Filtro', icon: FileText, c: 'border-l-pink-500', t: 'text-pink-500' },
+    { v: formatNum(diretoriasUnicas), l: 'Diretorias', icon: Building, c: 'border-l-blue-500', t: 'text-blue-500' },
+    { v: formatNum(supervisoresUnicos), l: 'Supervisores', icon: Users, c: 'border-l-orange-500', t: 'text-orange-500' },
+    { v: formatNum(cidadesUnicas), l: 'Cidades', icon: MapPin, c: 'border-l-teal-500', t: 'text-teal-500' },
+    { v: formatNum(totalAuditores), l: 'Auditores Ativos', icon: UserCheck, c: 'border-l-purple-500', t: 'text-purple-500' }
+  ], [totalAprs, diretoriasUnicas, supervisoresUnicos, cidadesUnicas, totalAuditores]);
 
   const getAvgTimeStr = (totalSecs: number, validCount: number) => {
     const avgSecs = validCount > 0 ? Math.round(totalSecs / validCount) : 0;
     if (avgSecs === 0) return '0s';
     if (avgSecs < 60) return `${avgSecs}s`;
-    if (avgSecs < 3600) return `${Math.floor(avgSecs/60)}m ${avgSecs%60}s`;
-    return `${Math.floor(avgSecs/3600)}h ${Math.floor((avgSecs%3600)/60)}m`;
+    if (avgSecs < 3600) return `${Math.floor(avgSecs / 60)}m ${avgSecs % 60}s`;
+    return `${Math.floor(avgSecs / 3600)}h ${Math.floor((avgSecs % 3600) / 60)}m`;
   };
 
   const getWorkingDays = (m: number) => {
-    const wd: Record<number, number> = { 1:22, 2:20, 3:22, 4:21, 5:21, 6:22, 7:23, 8:21, 9:22, 10:22, 11:21, 12:23 };
+    const wd: Record<number, number> = { 1: 22, 2: 20, 3: 22, 4: 21, 5: 21, 6: 22, 7: 23, 8: 21, 9: 22, 10: 22, 11: 21, 12: 23 };
     return wd[m] || 22;
   };
 
@@ -233,35 +261,53 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
 
   // Ranking
   const allRankAgg = useMemo(() => {
-    const agg: Record<string, { count: number, name: string, data: any[], totalSecs: number, validCount: number, uniquePeople: Set<string>, semApr?: boolean, supervisor?: string, cidade?: string }> = {};
-    
+    const agg: Record<string, {
+      count: number,
+      name: string,
+      data: any[],
+      totalSecs: number,
+      validCount: number,
+      uniquePeople: Set<string>,
+      semApr?: boolean,
+      supervisor?: string,
+      cidade?: string,
+      cidadeBase?: string,
+      cidadesExecucao: Set<string>
+    }> = {};
+
     filteredData.forEach(item => {
-      const name = rankingGroup === 'cidade' 
-        ? (item['CIDADE COMERCIAL'] || 'Não Identificada') 
+      const name = rankingGroup === 'cidade'
+        ? (getItemCity(item) || 'Não Identificada')
         : (item['Nome Auditor'] || item['Matrícula Auditor'] || 'Não Identificado');
-      
+
       const mat = item['Matrícula Auditor'] || 'N/A';
       const auditorName = item['Nome Auditor'] || mat;
-      
+
       if (selectedAuditores.length > 0 && !selectedAuditores.includes(auditorName) && !selectedAuditores.includes(mat)) return;
-      
+
+      const cidBase = item['CIDADE_BASE'] || item['CIDADE COMERCIAL'];
+      const cidExec = item['CIDADE_EXECUCAO'] || item['Localidade Objeto'] || item['CIDADE COMERCIAL'];
+
       if (!agg[name]) {
-        agg[name] = { 
-          count: 0, 
-          name, 
-          data: [], 
-          totalSecs: 0, 
-          validCount: 0, 
+        agg[name] = {
+          count: 0,
+          name,
+          data: [],
+          totalSecs: 0,
+          validCount: 0,
           uniquePeople: new Set(),
           semApr: false,
           supervisor: item['Supervisor'] || item['GESTOR'],
-          cidade: item['CIDADE COMERCIAL']
+          cidade: getItemCity(item),
+          cidadeBase: cidBase,
+          cidadesExecucao: new Set()
         };
       }
-      agg[name].count += 1; 
+      if (cidExec) agg[name].cidadesExecucao.add(cidExec);
+      agg[name].count += 1;
       agg[name].data.push(item);
       agg[name].uniquePeople.add(mat);
-      
+
       const durKey = Object.keys(item).find(k => k.toLowerCase().includes('dura') && k.toLowerCase().includes('o'));
       if (durKey && typeof item[durKey] === 'string') {
         const parts = item[durKey].split(':');
@@ -289,7 +335,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       });
 
       colaboradoresPO.forEach(p => {
-        if (onlySpiActive && p.diretoria === 'DIR SERVICOS AO CLIENTE SP INTERIOR' && p.ativo_spi !== 1) return;
+        if (onlySpiActive && p.diretoria === 'DIR SERVICOS AO CLIENTE SP INTERIOR' && p.ativo_spi === 0) return;
         if (selectedDiretorias.length > 0 && !selectedDiretorias.includes(p.diretoria)) return;
         if (selectedSupervisors.length > 0 && !selectedSupervisors.includes(p.supervisor)) return;
         if (selectedCities.length > 0 && !selectedCities.includes(p.cidade)) return;
@@ -309,19 +355,25 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
           uniquePeople: new Set([pMat]),
           semApr: true,
           supervisor: p.supervisor,
-          cidade: p.cidade
+          cidade: p.cidade,
+          cidadeBase: p.cidade,
+          cidadesExecucao: new Set()
         };
       });
     }
 
     return Object.values(agg);
-  }, [filteredData, colaboradoresPO, selectedAuditores, selectedDiretorias, selectedSupervisors, selectedCities, onlySpiActive, rankingGroup]);
+  }, [filteredData, colaboradoresPO, selectedAuditores, selectedDiretorias, selectedSupervisors, selectedCities, onlySpiActive, rankingGroup, getItemCity]);
 
   // Ranking ordenado e filtrado
   const rankAgg = useMemo(() => {
     let list = [...allRankAgg];
     if (rankingGroup === 'colaborador') {
-      if (rankingFilter === 'sem_apr') {
+      if (rankingFilter === 'mais') {
+        list = list.filter(i => i.count > 0).sort((a, b) => b.count - a.count);
+      } else if (rankingFilter === 'menos') {
+        list = list.filter(i => i.count > 0).sort((a, b) => a.count - b.count);
+      } else if (rankingFilter === 'sem_apr') {
         list = list.filter(i => i.count === 0).sort((a, b) => a.name.localeCompare(b.name));
       } else {
         // 'todos': quem mais fez no topo, quem não fez no final
@@ -355,21 +407,21 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
   // Meses - Evolução Histórica no Gráfico respeitando filtros (Supervisor, Cidade, etc.)
   const monthAgg = useMemo(() => {
     const baseWithoutMonthFilter = data.filter(item => {
-      const matchAuditor = selectedAuditores.length === 0 || 
-        selectedAuditores.includes(item['Nome Auditor']) || 
+      const matchAuditor = selectedAuditores.length === 0 ||
+        selectedAuditores.includes(item['Nome Auditor']) ||
         selectedAuditores.includes(item['Matrícula Auditor']);
       return matchSpiFilter(item) &&
-             matchAuditor &&
-             (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(item['Questionário']))) &&
-             (selectedDiretorias.length === 0 || selectedDiretorias.includes(item['DIRETORIA 3'])) &&
-             (selectedSupervisors.length === 0 || selectedSupervisors.includes(item['Supervisor'] || item['GESTOR'])) &&
-             (selectedCities.length === 0 || selectedCities.includes(item['CIDADE COMERCIAL']));
+        matchAuditor &&
+        (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(item['Questionário']))) &&
+        (selectedDiretorias.length === 0 || selectedDiretorias.includes(item['DIRETORIA 3'])) &&
+        (selectedSupervisors.length === 0 || selectedSupervisors.includes(item['Supervisor'] || item['GESTOR'])) &&
+        (selectedCities.length === 0 || selectedCities.includes(item['CIDADE COMERCIAL']));
     });
 
     const agg: Record<string, number> = {};
-    baseWithoutMonthFilter.forEach(item => { 
-      const m = String(item['Mês']); 
-      agg[m] = (agg[m] || 0) + 1; 
+    baseWithoutMonthFilter.forEach(item => {
+      const m = String(item['Mês']);
+      agg[m] = (agg[m] || 0) + 1;
     });
     return allMonths.map(m => ({ month: m, count: agg[m] || 0 }));
   }, [data, selectedTipos, selectedDiretorias, selectedSupervisors, selectedCities, selectedAuditores, allMonths, onlySpiActive]);
@@ -386,208 +438,18 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
   };
 
   const exportToExcel = () => {
-    // 1. Aba Dados Filtrados
-    const ws_dados = XLSX.utils.json_to_sheet(filteredData);
-    const rangeDados = XLSX.utils.decode_range(ws_dados['!ref'] || 'A1:A1');
-    for (let C = rangeDados.s.c; C <= rangeDados.e.c; ++C) {
-      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
-      if (!ws_dados[cellAddress]) continue;
-      ws_dados[cellAddress].s = {
-        fill: { fgColor: { rgb: "660099" } },
-        font: { color: { rgb: "FFFFFF" }, bold: true },
-        alignment: { horizontal: "center", vertical: "center" }
-      };
-    }
-
-    // 2. Mapeamento auxiliar do PO para garantir preenchimento de diretoria, filial (gerência), cidade e supervisor
-    const poMapByMat = new Map<string, any>();
-    const poMapByNome = new Map<string, any>();
-    colaboradoresPO.forEach(p => {
-      const mat = String(p.matricula || '').trim();
-      const nome = String(p.nome || '').trim().toUpperCase();
-      if (mat) poMapByMat.set(mat, p);
-      if (nome) poMapByNome.set(nome, p);
+    exportAprToExcel({
+      filteredData,
+      colaboradoresPO,
+      targetAprs,
+      rankingGroup,
+      rankAgg,
+      onlySpiActive,
+      selectedDiretorias,
+      selectedSupervisors,
+      selectedCities,
+      selectedAuditores,
     });
-
-    // 3. Aba Dedicada: Ranking por Técnicos
-    const tecnicosAgg: Record<string, {
-      name: string;
-      matricula: string;
-      diretoria: string;
-      filial: string;
-      cnpj: string;
-      cidade: string;
-      supervisor: string;
-      count: number;
-      totalSecs: number;
-      validCount: number;
-    }> = {};
-
-    filteredData.forEach(item => {
-      const mat = String(item['Matrícula Auditor'] || item['RE'] || '').trim();
-      const nome = String(item['Nome Auditor'] || mat || 'Não Identificado').trim().toUpperCase();
-      const key = mat || nome;
-
-      const pInfo = (mat && poMapByMat.get(mat)) || poMapByNome.get(nome) || null;
-      const filialVal = item['FILIAL'] || pInfo?.filial || pInfo?.cnpj || item['CNPJ'] || item['GERÊNCIA'] || 'São Paulo';
-      const cnpjVal = item['CNPJ'] || pInfo?.cnpj || '-';
-
-      if (!tecnicosAgg[key]) {
-        tecnicosAgg[key] = {
-          name: nome,
-          matricula: mat || pInfo?.matricula || '-',
-          diretoria: item['DIRETORIA 3'] || pInfo?.diretoria || 'N/A',
-          filial: filialVal,
-          cnpj: cnpjVal,
-          cidade: item['CIDADE COMERCIAL'] || pInfo?.cidade || 'São Paulo',
-          supervisor: item['Supervisor'] || item['GESTOR'] || pInfo?.supervisor || 'N/A',
-          count: 0,
-          totalSecs: 0,
-          validCount: 0
-        };
-      }
-
-      tecnicosAgg[key].count += 1;
-
-      const durKey = Object.keys(item).find(k => k.toLowerCase().includes('dura') && k.toLowerCase().includes('o'));
-      if (durKey && typeof item[durKey] === 'string') {
-        const parts = item[durKey].split(':');
-        if (parts.length === 3) {
-          const h = parseInt(parts[0], 10); const m = parseInt(parts[1], 10); const s = parseInt(parts[2], 10);
-          if (!isNaN(h) && !isNaN(m) && !isNaN(s)) {
-            const secs = h * 3600 + m * 60 + s;
-            if (secs > 0 && secs <= 600) {
-              tecnicosAgg[key].totalSecs += secs;
-              tecnicosAgg[key].validCount++;
-            }
-          }
-        }
-      }
-    });
-
-    // Cruzar colaboradores ativos do PO para identificar quem não fez APR no escopo filtrado
-    colaboradoresPO.forEach(p => {
-      if (onlySpiActive && p.diretoria === 'DIR SERVICOS AO CLIENTE SP INTERIOR' && p.ativo_spi !== 1) return;
-      if (selectedDiretorias.length > 0 && !selectedDiretorias.includes(p.diretoria)) return;
-      if (selectedSupervisors.length > 0 && !selectedSupervisors.includes(p.supervisor)) return;
-      if (selectedCities.length > 0 && !selectedCities.includes(p.cidade)) return;
-      if (selectedAuditores.length > 0 && !selectedAuditores.includes(p.nome) && !selectedAuditores.includes(p.matricula)) return;
-
-      const pMat = String(p.matricula || '').trim();
-      const pNome = String(p.nome || pMat).trim().toUpperCase();
-      const key = pMat || pNome;
-
-      if (!tecnicosAgg[key]) {
-        tecnicosAgg[key] = {
-          name: pNome,
-          matricula: pMat,
-          diretoria: p.diretoria,
-          filial: p.filial || p.cnpj || p.gerencia || 'São Paulo',
-          cnpj: p.cnpj || '-',
-          cidade: p.cidade || 'São Paulo',
-          supervisor: p.supervisor || 'N/A',
-          count: 0,
-          totalSecs: 0,
-          validCount: 0
-        };
-      }
-    });
-
-    const tecnicosList = Object.values(tecnicosAgg).sort((a, b) => b.count - a.count);
-
-    const rankingTecnicosData = tecnicosList.map((item, idx) => {
-      const expected = targetAprs;
-      const perc = expected > 0 ? ((item.count / expected) * 100).toFixed(1) + '%' : '0.0%';
-      const avgSecs = item.validCount > 0 ? Math.round(item.totalSecs / item.validCount) : 0;
-
-      return {
-        "Posição": `${idx + 1}º`,
-        "Técnico": item.name,
-        "Matrícula": item.matricula,
-        "Diretoria": item.diretoria,
-        "Filial": item.filial,
-        "CNPJ": item.cnpj,
-        "Cidade": item.cidade,
-        "Supervisor": item.supervisor,
-        "Realizado (APRs)": item.count,
-        "Esperado": expected,
-        "Meta (%)": perc,
-        "Tempo Médio (HH:MM:SS)": formatSecondsToHMS(avgSecs),
-        "Tempo Total Gasto no Mês (HH:MM:SS)": formatSecondsToHMS(item.totalSecs),
-        "Situação": item.count === 0 ? "Sem APR" : item.count >= expected ? "Meta Atingida" : "Abaixo da Meta"
-      };
-    });
-
-    const ws_tecnicos = XLSX.utils.json_to_sheet(rankingTecnicosData);
-    const rangeTecnicos = XLSX.utils.decode_range(ws_tecnicos['!ref'] || 'A1:A1');
-    for (let C = rangeTecnicos.s.c; C <= rangeTecnicos.e.c; ++C) {
-      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
-      if (!ws_tecnicos[cellAddress]) continue;
-      ws_tecnicos[cellAddress].s = {
-        fill: { fgColor: { rgb: "660099" } },
-        font: { color: { rgb: "FFFFFF" }, bold: true },
-        alignment: { horizontal: "center", vertical: "center" }
-      };
-    }
-    ws_tecnicos['!cols'] = [
-      { wch: 10 }, // Posição
-      { wch: 38 }, // Técnico
-      { wch: 15 }, // Matrícula
-      { wch: 38 }, // Diretoria
-      { wch: 28 }, // Filial
-      { wch: 20 }, // CNPJ
-      { wch: 25 }, // Cidade
-      { wch: 32 }, // Supervisor
-      { wch: 18 }, // Realizado
-      { wch: 15 }, // Esperado
-      { wch: 15 }, // Meta %
-      { wch: 24 }, // Tempo Médio
-      { wch: 34 }, // Tempo Total Gasto
-      { wch: 18 }  // Situação
-    ];
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws_dados, "Dados Filtrados APR");
-    XLSX.utils.book_append_sheet(wb, ws_tecnicos, "Ranking Técnicos APR");
-
-    // Se o usuário selecionou agrupamento por cidade no painel, adicionamos também a aba de Cidades
-    if (rankingGroup === 'cidade') {
-      const rankingCidadesData = rankAgg.map((item, idx) => {
-        const multiplier = item.uniquePeople?.size || 1;
-        const expected = Math.round(targetAprs * multiplier);
-        const perc = expected > 0 ? ((item.count / expected) * 100).toFixed(1) + '%' : '0.0%';
-        const avgSecs = item.validCount > 0 ? Math.round(item.totalSecs / item.validCount) : 0;
-
-        return {
-          "Posição": `${idx + 1}º`,
-          "Cidade": item.name,
-          "Técnicos Ativos": multiplier,
-          "Realizado (APRs)": item.count,
-          "Esperado": expected,
-          "Meta (%)": perc,
-          "Tempo Médio (HH:MM:SS)": formatSecondsToHMS(avgSecs),
-          "Tempo Total Gasto no Mês (HH:MM:SS)": formatSecondsToHMS(item.totalSecs)
-        };
-      });
-
-      const ws_cidades = XLSX.utils.json_to_sheet(rankingCidadesData);
-      const rangeCidades = XLSX.utils.decode_range(ws_cidades['!ref'] || 'A1:A1');
-      for (let C = rangeCidades.s.c; C <= rangeCidades.e.c; ++C) {
-        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
-        if (!ws_cidades[cellAddress]) continue;
-        ws_cidades[cellAddress].s = {
-          fill: { fgColor: { rgb: "660099" } },
-          font: { color: { rgb: "FFFFFF" }, bold: true },
-          alignment: { horizontal: "center", vertical: "center" }
-        };
-      }
-      ws_cidades['!cols'] = [
-        { wch: 10 }, { wch: 30 }, { wch: 18 }, { wch: 18 }, { wch: 15 }, { wch: 15 }, { wch: 24 }, { wch: 34 }
-      ];
-      XLSX.utils.book_append_sheet(wb, ws_cidades, "Ranking Cidades APR");
-    }
-
-    XLSX.writeFile(wb, `vivo_painel_apr.xlsx`);
   };
 
   if (loading) {
@@ -604,12 +466,12 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] dark:bg-[#0b0f19] text-gray-900 dark:text-gray-100 pb-20 transition-colors duration-200">
-      
+
       {/* Header Premium APR */}
       <header className="bg-white dark:bg-[#151d2f] border-b border-gray-200 dark:border-gray-800 shadow-sm sticky top-0 z-40 transition-colors duration-200">
         <div className="max-w-[1600px] mx-auto px-6 py-2.5 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <button 
+            <button
               onClick={onBack}
               className="flex items-center justify-center w-8 h-8 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-950/40 hover:text-[#660099] dark:hover:text-purple-400 hover:border-purple-200 dark:hover:border-purple-700 transition-all shadow-sm"
               title="Voltar aos Módulos"
@@ -619,7 +481,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
             <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
               <img src="/icone.png" alt="Vivo" className="h-7 object-contain" />
               <span className="h-5 w-px bg-gray-300 dark:bg-gray-700 ml-1"></span>
-              Painel de APR
+              Painel de APR (Análise Preliminar de Riscos)
             </h1>
           </div>
           <div className="flex items-center gap-3">
@@ -630,13 +492,13 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
             >
               {isDark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
-            <button 
+            <button
               onClick={exportToExcel}
               className="flex items-center gap-2 px-4 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-[#660099] dark:hover:border-purple-400 hover:text-[#660099] dark:hover:text-purple-400 hover:shadow-md transition-all font-medium text-xs text-gray-700 dark:text-gray-200"
             >
               <Download size={14} /> Exportar XLSX
             </button>
-            <button 
+            <button
               onClick={() => setIsAdminOpen(true)}
               className="flex items-center justify-center w-8 h-8 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-gray-400 dark:hover:border-gray-500 hover:text-gray-900 dark:hover:text-white transition-all text-gray-500 dark:text-gray-400 shadow-sm"
               title="Administração"
@@ -649,7 +511,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
         {/* Filter Bar */}
         <div className="bg-gray-50/50 dark:bg-[#0f172a]/70 backdrop-blur-md border-t border-gray-100 dark:border-gray-800/80">
           <div className="max-w-[1600px] mx-auto px-6 py-2 flex flex-wrap items-center gap-4">
-            
+
             <div className="relative">
               <div className="flex flex-col gap-1.5">
                 <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Agrupamento</span>
@@ -669,32 +531,60 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
 
             <div className="w-px h-12 bg-gray-200 dark:bg-gray-800 hidden md:block"></div>
 
-            <PremiumMultiSelect label="Diretoria" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-[320px]" />
-            <PremiumMultiSelect label="Supervisor" options={allSupervisors} selected={selectedSupervisors} onChange={handleMultiSelect(setSelectedSupervisors)} icon={Users} />
+            <PremiumMultiSelect label="Diretoria 3" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-[340px]" />
+            <PremiumMultiSelect label="Gerente / Coordenador" options={allSupervisors} selected={selectedSupervisors} onChange={handleMultiSelect(setSelectedSupervisors)} icon={Users} widthClass="w-[280px]" />
             <PremiumMultiSelect label="Cidade" options={allCities} selected={selectedCities} onChange={handleMultiSelect(setSelectedCities)} icon={MapPin} />
+            <PremiumMultiSelect label="Tipo de Atividade" options={allTipos} selected={selectedTipos} onChange={handleMultiSelect(setSelectedTipos)} icon={FileText} widthClass="w-[220px]" />
+
+            {/* Flag Origem da Cidade: Base (PO) vs Execução (APR) */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Origem da Cidade</span>
+              <div className="flex items-center h-[34px] bg-white dark:bg-[#1e293b] border border-gray-200 dark:border-gray-700 rounded-xl p-0.5 shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setCityMode('base')}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${cityMode === 'base'
+                    ? 'bg-[#660099] text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                  }`}
+                  title="Cidade Base oficial do colaborador no Plano de Ocupações (PO)"
+                >
+                  Base (PO)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCityMode('execucao')}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${cityMode === 'execucao'
+                    ? 'bg-[#660099] text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                  }`}
+                  title="Localidade onde a APR foi efetivamente realizada"
+                >
+                  Local APR
+                </button>
+              </div>
+            </div>
 
             <div className="flex flex-col gap-1.5">
               <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Interior (SPI)</span>
-              <label 
-                className={`flex items-center gap-2 px-3 py-1.5 h-[34px] rounded-xl border text-xs font-semibold cursor-pointer transition-all shadow-sm select-none ${
-                  onlySpiActive 
-                    ? 'bg-purple-50 dark:bg-purple-950/40 border-purple-300 dark:border-purple-700 text-[#660099] dark:text-purple-300' 
-                    : 'bg-white dark:bg-[#1e293b] border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300'
-                }`}
+              <label
+                className={`flex items-center gap-2 px-3 py-1.5 h-[34px] rounded-xl border text-xs font-semibold cursor-pointer transition-all shadow-sm select-none ${onlySpiActive
+                  ? 'bg-purple-50 dark:bg-purple-950/40 border-purple-300 dark:border-purple-700 text-[#660099] dark:text-purple-300'
+                  : 'bg-white dark:bg-[#1e293b] border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300'
+                  }`}
                 title="Quando ativo, considera apenas colaboradores ativos em campo da DIR Interior (desconsidera treinamento e administrativo)"
               >
-                <input 
-                  type="checkbox" 
-                  checked={onlySpiActive} 
-                  onChange={e => setOnlySpiActive(e.target.checked)} 
+                <input
+                  type="checkbox"
+                  checked={onlySpiActive}
+                  onChange={e => setOnlySpiActive(e.target.checked)}
                   className="w-4 h-4 text-[#660099] rounded border-gray-300 dark:border-gray-600 focus:ring-[#660099] cursor-pointer"
                 />
                 <span className="whitespace-nowrap">Ativos em Campo</span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
-                  onlySpiActive 
-                    ? 'bg-[#660099] text-white dark:bg-purple-600' 
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
-                }`}>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${onlySpiActive
+                  ? 'bg-[#660099] text-white dark:bg-purple-600'
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
+                  }`}>
                   {onlySpiActive ? 'SPI' : 'Todos'}
                 </span>
               </label>
@@ -717,35 +607,9 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       </header>
 
       <main className="max-w-[1600px] mx-auto px-6 py-10">
-        
+
         {/* KPIs APR */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-          {[
-            { v: formatNum(totalAprs), l: 'APRs no Filtro', icon: FileText, c: 'border-l-pink-500', t: 'text-pink-500' },
-            { v: formatNum(diretoriasUnicas), l: 'Diretorias', icon: Building, c: 'border-l-blue-500', t: 'text-blue-500' },
-            { v: formatNum(supervisoresUnicos), l: 'Supervisores', icon: Users, c: 'border-l-orange-500', t: 'text-orange-500' },
-            { v: formatNum(cidadesUnicas), l: 'Cidades', icon: MapPin, c: 'border-l-teal-500', t: 'text-teal-500' },
-            { v: formatNum(totalAuditores), l: 'Auditores Ativos', icon: UserCheck, c: 'border-l-purple-500', t: 'text-purple-500' }
-          ].map((kpi, i) => (
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-              key={kpi.l} 
-              className={`bg-white dark:bg-[#151d2f] rounded-2xl p-5 border border-gray-100 dark:border-gray-800 border-l-4 ${kpi.c} shadow-sm hover:shadow-md transition-all group flex justify-between items-center`}
-            >
-              <div>
-                <div className="text-3xl font-bold text-gray-900 dark:text-white mb-1 group-hover:scale-105 transform origin-left transition-transform">
-                  {kpi.v}
-                </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                  {kpi.l}
-                </div>
-              </div>
-              <div className={`opacity-20 group-hover:opacity-100 transition-opacity transform group-hover:scale-110 ${kpi.t}`}>
-                <kpi.icon size={36} strokeWidth={1.5} />
-              </div>
-            </motion.div>
-          ))}
-        </div>
+        <KpiGrid items={kpiItems} />
 
         {/* Gráfico de Evolução por Mês */}
         <div className="bg-white dark:bg-[#151d2f] rounded-2xl p-8 border border-gray-100 dark:border-gray-800 shadow-sm mb-6 transition-colors duration-200">
@@ -755,13 +619,13 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
               const pct = (m.count / maxMonth) * 100;
               const isSelected = selectedMonths.length === 0 || selectedMonths.includes(m.month);
               return (
-                <div 
-                  key={m.month} 
+                <div
+                  key={m.month}
                   onClick={() => toggleMonth(m.month)}
                   className={`flex-1 flex flex-col justify-end items-center h-full cursor-pointer group ${isSelected ? 'opacity-100' : 'opacity-40 hover:opacity-70'}`}
                 >
                   <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 mb-2 group-hover:text-[#660099] dark:group-hover:text-purple-400 transition-colors">{m.count}</span>
-                  <motion.div 
+                  <motion.div
                     initial={{ height: 0 }} animate={{ height: `${pct}%` }} transition={{ delay: i * 0.1, type: 'spring' }}
                     className="w-full bg-[#660099] rounded-t-lg transition-all shadow-[0_0_15px_rgba(102,0,153,0.1)] group-hover:bg-[#9933cc]"
                   />
@@ -782,13 +646,13 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
                 Ranking por {rankingGroup === 'cidade' ? 'Cidade' : 'Colaborador'}
               </h2>
               <div className="z-20">
-                <PremiumMultiSelect 
-                  label="Filtrar Colaborador" 
-                  options={allAuditores} 
-                  selected={selectedAuditores} 
-                  onChange={handleMultiSelect(setSelectedAuditores)} 
-                  icon={UserCheck} 
-                  widthClass="w-[280px]" 
+                <PremiumMultiSelect
+                  label="Filtrar Colaborador"
+                  options={allAuditores}
+                  selected={selectedAuditores}
+                  onChange={handleMultiSelect(setSelectedAuditores)}
+                  icon={UserCheck}
+                  widthClass="w-[280px]"
                 />
               </div>
             </div>
@@ -797,21 +661,37 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
               <div className="flex flex-wrap items-center gap-2 mb-3 pb-3 border-b border-gray-100 dark:border-gray-800">
                 <button
                   onClick={() => setRankingFilter('todos')}
-                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
-                    rankingFilter === 'todos'
-                      ? 'bg-[#660099] text-white shadow-sm'
-                      : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-                  }`}
+                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${rankingFilter === 'todos'
+                    ? 'bg-[#660099] text-white shadow-sm'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    }`}
                 >
                   Todos ({allRankAgg.length})
                 </button>
                 <button
+                  onClick={() => setRankingFilter('mais')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${rankingFilter === 'mais'
+                    ? 'bg-purple-100 dark:bg-purple-950/60 text-[#660099] dark:text-purple-300 border border-purple-300 dark:border-purple-800'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                >
+                  Mais APRs
+                </button>
+                <button
+                  onClick={() => setRankingFilter('menos')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${rankingFilter === 'menos'
+                    ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-800'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                >
+                  Menos APRs
+                </button>
+                <button
                   onClick={() => setRankingFilter('sem_apr')}
-                  className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
-                    rankingFilter === 'sem_apr'
-                      ? 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800'
-                      : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-                  }`}
+                  className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg transition-all ${rankingFilter === 'sem_apr'
+                    ? 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    }`}
                 >
                   <span>Sem APR</span>
                   {semAprCount > 0 && (
@@ -832,8 +712,8 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
               <div className="text-center">Realizado</div>
               <div className="flex items-center justify-center gap-1">
                 Esperado
-                <button 
-                  onClick={() => setIsMetaModalOpen(true)} 
+                <button
+                  onClick={() => setIsMetaModalOpen(true)}
                   className="focus:outline-none rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 p-0.5 transition-colors"
                   title="Ver como a meta é calculada"
                 >
@@ -858,34 +738,40 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
 
                   return (
                     <div key={`${item.name}-${idx}`}>
-                      <div 
+                      <div
                         onClick={() => rankingGroup === 'colaborador' && item.count > 0 && setSelectedAuditorDetails(item)}
                         className={`grid grid-cols-[30px_1fr_80px_80px_80px_110px] items-center gap-4 py-2 px-3 rounded-xl mb-1.5 border border-transparent bg-white dark:bg-[#151d2f] hover:bg-purple-50/50 dark:hover:bg-purple-950/20 hover:border-purple-200 dark:hover:border-purple-800/40 transition-all ${rankingGroup === 'colaborador' && item.count > 0 ? 'cursor-pointer' : ''}`}
                       >
                         <div className={`text-xs font-bold ${item.count === 0 ? 'text-red-500' : idx < 3 ? 'text-[#660099] dark:text-purple-400 font-extrabold text-sm' : 'text-gray-400 dark:text-gray-500'}`}>
                           {idx + 1}º
                         </div>
-                        
+
                         <div className="overflow-hidden pr-2">
                           <div className="text-sm font-semibold truncate text-gray-800 dark:text-gray-200" title={item.name}>
                             {item.name}
                           </div>
-                          {rankingGroup === 'cidade' ? (
-                            <div className="text-[11px] text-gray-400 dark:text-gray-500 truncate mt-0.5">
-                              {item.uniquePeople?.size || 0} {(item.uniquePeople?.size || 0) === 1 ? 'colaborador atuante' : 'colaboradores atuantes'}
+                          {(item.supervisor || item.cidade) && (
+                            <div className="text-[11px] text-gray-400 dark:text-gray-500 truncate mt-0.5 flex items-center gap-1.5 flex-wrap">
+                              {item.supervisor && <span>Sup: {item.supervisor}</span>}
+                              {rankingGroup === 'colaborador' ? (
+                                <>
+                                  {item.cidadeBase && <span>• Base: <strong className="text-gray-700 dark:text-gray-300 font-medium">{item.cidadeBase}</strong></span>}
+                                  {item.cidadesExecucao && item.cidadesExecucao.size > 0 && Array.from(item.cidadesExecucao).some(c => c !== item.cidadeBase) && (
+                                    <span className="text-[10px] px-1.5 py-0.2 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 rounded font-medium border border-amber-200 dark:border-amber-800">
+                                      Mutirão: {Array.from(item.cidadesExecucao).filter(c => c !== item.cidadeBase).join(', ')}
+                                    </span>
+                                  )}
+                                </>
+                              ) : (
+                                item.cidade && <span>• {item.cidade}</span>
+                              )}
                             </div>
-                          ) : (
-                            (item.supervisor || item.cidade) && (
-                              <div className="text-[11px] text-gray-400 dark:text-gray-500 truncate mt-0.5">
-                                {item.supervisor ? `Sup: ${item.supervisor}` : ''} {item.cidade ? `• ${item.cidade}` : ''}
-                              </div>
-                            )
                           )}
                           <div className="h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full mt-1.5 overflow-hidden">
                             <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} className={`h-full ${item.count === 0 ? 'bg-transparent' : barColor} rounded-full opacity-80`} />
                           </div>
                         </div>
-                        
+
                         <div className="flex justify-center items-center">
                           <div className={`text-sm font-bold ${item.count === 0 ? 'text-red-500 font-extrabold' : 'text-gray-900 dark:text-white'}`}>
                             {formatNum(item.count)}
@@ -897,13 +783,12 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
                         </div>
 
                         <div className="flex justify-center items-center">
-                          <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
-                            item.count === 0 ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-400' :
+                          <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${item.count === 0 ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-400' :
                             perc >= 100 ? 'bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-400' :
-                            perc >= 70 ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400' :
-                            perc > 0 ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-400' :
-                            'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400'
-                          }`}>
+                              perc >= 70 ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400' :
+                                perc > 0 ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-400' :
+                                  'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400'
+                            }`}>
                             {perc}%
                           </span>
                         </div>
@@ -921,44 +806,22 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
             </div>
           </div>
 
-          {/* Ranking por Atividade (Clicável para filtrar) */}
+          {/* Ranking por Atividade */}
           <div className="bg-white dark:bg-[#151d2f] rounded-2xl p-6 border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col h-[600px] transition-colors duration-200">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-                Atividades de APR
-              </h2>
-              {selectedTipos.length > 0 && (
-                <button 
-                  onClick={() => setSelectedTipos([])}
-                  className="text-xs text-[#660099] dark:text-purple-400 hover:underline font-semibold"
-                >
-                  Limpar ({selectedTipos.length})
-                </button>
-              )}
-            </div>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
+              Atividades de APR
+            </h2>
             <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin">
               {rankAtividade.map((item, idx) => {
                 const pct = Math.min(100, Math.round((item.count / maxAtiv) * 100));
-                const isSelected = selectedTipos.includes(item.name);
                 return (
-                  <div 
-                    key={item.name} 
-                    onClick={() => handleMultiSelect(setSelectedTipos)(item.name)}
-                    className={`p-3 rounded-xl mb-3 border cursor-pointer transition-all ${
-                      isSelected 
-                        ? 'bg-purple-50 dark:bg-purple-950/40 border-[#660099] dark:border-purple-500 shadow-sm' 
-                        : 'border-gray-100 dark:border-gray-800 hover:border-purple-300 dark:hover:border-purple-700 hover:bg-gray-50/50 dark:hover:bg-gray-800/40'
-                    }`}
-                    title="Clique para filtrar ou desfiltrar esta atividade"
-                  >
+                  <div key={item.name} className="p-3 rounded-xl mb-3 border border-gray-100 dark:border-gray-800">
                     <div className="flex items-center justify-between mb-2">
-                      <span className={`font-semibold text-xs ${isSelected ? 'text-[#660099] dark:text-purple-300 font-bold' : 'text-gray-700 dark:text-gray-300'}`}>
-                        {item.name}
-                      </span>
-                      <span className="text-xs font-bold text-[#660099] dark:text-purple-400">{formatNum(item.count)}</span>
+                      <span className="font-semibold text-xs text-gray-700 dark:text-gray-300">{item.name}</span>
+                      <span className="text-xs font-bold text-[#660099] dark:text-purple-400">{item.count}</span>
                     </div>
                     <div className="w-full bg-gray-100 dark:bg-gray-800 h-2 rounded-full overflow-hidden">
-                      <div className={`h-full ${isSelected ? 'bg-[#660099] dark:bg-purple-500' : 'bg-purple-600'} rounded-full`} style={{ width: `${pct}%` }} />
+                      <div className="h-full bg-purple-600 rounded-full" style={{ width: `${pct}%` }} />
                     </div>
                   </div>
                 );
@@ -974,14 +837,16 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       <AnimatePresence>
         {selectedAuditorDetails && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white dark:bg-[#151d2f] rounded-2xl shadow-xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden border border-gray-100 dark:border-gray-800"
             >
               <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50">
                 <div>
                   <h3 className="text-lg font-bold text-gray-900 dark:text-white">{selectedAuditorDetails.name}</h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Total de {selectedAuditorDetails.count} APRs registradas</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Total de {selectedAuditorDetails.count} APRs registradas • Cidade Base: <span className="font-semibold text-[#660099] dark:text-purple-300">{selectedAuditorDetails.cidadeBase || selectedAuditorDetails.cidade || 'Não informada'}</span>
+                  </p>
                 </div>
                 <button onClick={() => setSelectedAuditorDetails(null)} className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600">
                   <X size={20} />
@@ -994,6 +859,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
                       <th className="py-2">Número</th>
                       <th className="py-2">Data Início</th>
                       <th className="py-2">Duração</th>
+                      <th className="py-2">Local APR</th>
                       <th className="py-2">Questionário</th>
                     </tr>
                   </thead>
@@ -1003,6 +869,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
                         <td className="py-2 font-mono font-medium">{r['Número']}</td>
                         <td className="py-2">{r['Data Início'] || '-'}</td>
                         <td className="py-2">{r['Duração'] || '-'}</td>
+                        <td className="py-2 font-medium text-[#660099] dark:text-purple-300">{r['Localidade Objeto'] || r['CIDADE_EXECUCAO'] || '-'}</td>
                         <td className="py-2 max-w-[200px] truncate" title={r['Questionário']}>{cleanTipo(r['Questionário'])}</td>
                       </tr>
                     ))}
@@ -1046,7 +913,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
                   Cada colaborador tem como objetivo realizar ao menos 2 Análises Preliminares de Riscos para cada dia útil trabalhado nos meses filtrados. Para o agrupamento por cidade, a meta é multiplicada pela quantidade de colaboradores daquela localidade.
                 </p>
                 <div className="mt-6 flex justify-end">
-                  <button 
+                  <button
                     onClick={() => setIsMetaModalOpen(false)}
                     className="px-6 py-2 bg-[#660099] dark:bg-purple-600 text-white text-sm font-semibold rounded-xl hover:bg-[#8000bf] dark:hover:bg-purple-500 transition-colors shadow-sm"
                   >

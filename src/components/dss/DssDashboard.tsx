@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { PremiumMultiSelect } from '@/components/common/PremiumMultiSelect';
 import { AdminModal } from '@/components/common/AdminModal';
+import { exportDssToExcel } from '@/lib/excel/exportDss';
 
 interface DssDashboardProps {
   onBack: () => void;
@@ -109,7 +110,7 @@ export const DssDashboard: React.FC<DssDashboardProps> = ({ onBack, isDark, togg
   // No DSS, a base padrão considera os registros com Status PRESENTE
   const baseData = useMemo(() => data.filter(i => i['Status'] === 'PRESENTE'), [data]);
 
-  const allMonths = useMemo(() => Array.from(new Set(baseData.map(i => String(i['Mês'])))).filter(Boolean).sort(), [baseData]);
+  const allMonths = useMemo(() => Array.from(new Set(baseData.map(i => String(i['Mês'])))).filter(Boolean).sort((a, b) => parseInt(a, 10) - parseInt(b, 10)), [baseData]);
 
   const matchSpiFilter = (i: any) => {
     if (!onlySpiActive) return true;
@@ -281,203 +282,12 @@ export const DssDashboard: React.FC<DssDashboardProps> = ({ onBack, isDark, togg
   const maxMonth = Math.max(1, ...monthAgg.map(m => m.count));
 
   const exportToExcel = () => {
-    // 1. Aba Dados Filtrados DSS
-    const ws_dados = XLSX.utils.json_to_sheet(filteredData);
-    const rangeDados = XLSX.utils.decode_range(ws_dados['!ref'] || 'A1:A1');
-    for (let C = rangeDados.s.c; C <= rangeDados.e.c; ++C) {
-      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
-      if (!ws_dados[cellAddress]) continue;
-      ws_dados[cellAddress].s = {
-        fill: { fgColor: { rgb: "660099" } },
-        font: { color: { rgb: "FFFFFF" }, bold: true },
-        alignment: { horizontal: "center", vertical: "center" }
-      };
-    }
-
-    // 2. Aba Dedicada: Ranking por Técnicos / Colaboradores em DSS
-    const tecnicosAgg: Record<string, {
-      name: string;
-      matricula: string;
-      diretoria: string;
-      filial: string;
-      cnpj: string;
-      cidade: string;
-      supervisor: string;
-      count: number;
-    }> = {};
-
-    filteredData.forEach(item => {
-      const mat = String(item['Matrícula'] || '').trim();
-      const nome = String(item['Nome'] || mat || 'Não Identificado').trim().toUpperCase();
-      const key = mat || nome;
-      const cidade = item['CIDADE COMERCIAL'] || item['Localidade'] || 'São Paulo';
-      const fc = getFilialCnpj(cidade);
-
-      if (!tecnicosAgg[key]) {
-        tecnicosAgg[key] = {
-          name: nome,
-          matricula: mat || '-',
-          diretoria: item['DIRETORIA 3'] || 'N/A',
-          filial: fc?.filial || item['Base'] || 'São Paulo',
-          cnpj: fc?.cnpj || '-',
-          cidade: cidade,
-          supervisor: item['Supervisor'] || item['Líder'] || 'N/A',
-          count: 0
-        };
-      }
-      tecnicosAgg[key].count += 1;
+    exportDssToExcel({
+      filteredData,
+      targetDss: targetAprs,
+      rankingGroup,
+      rankAgg,
     });
-
-    const tecnicosList = Object.values(tecnicosAgg).sort((a, b) => b.count - a.count);
-
-    const rankingTecnicosData = tecnicosList.map((item, idx) => {
-      const expected = targetAprs;
-      const perc = expected > 0 ? ((item.count / expected) * 100).toFixed(1) + '%' : '0.0%';
-
-      return {
-        "Posição": `${idx + 1}º`,
-        "Técnico / Colaborador": item.name,
-        "Matrícula": item.matricula,
-        "Diretoria": item.diretoria,
-        "Filial": item.filial,
-        "CNPJ": item.cnpj,
-        "Cidade": item.cidade,
-        "Supervisor / Líder": item.supervisor,
-        "Presenças em DSS": item.count,
-        "Esperado": expected,
-        "Meta (%)": perc,
-        "Situação": item.count >= expected ? "Meta Atingida" : "Abaixo da Meta"
-      };
-    });
-
-    const ws_tecnicos = XLSX.utils.json_to_sheet(rankingTecnicosData);
-    const rangeTecnicos = XLSX.utils.decode_range(ws_tecnicos['!ref'] || 'A1:A1');
-    for (let C = rangeTecnicos.s.c; C <= rangeTecnicos.e.c; ++C) {
-      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
-      if (!ws_tecnicos[cellAddress]) continue;
-      ws_tecnicos[cellAddress].s = {
-        fill: { fgColor: { rgb: "660099" } },
-        font: { color: { rgb: "FFFFFF" }, bold: true },
-        alignment: { horizontal: "center", vertical: "center" }
-      };
-    }
-    ws_tecnicos['!cols'] = [
-      { wch: 10 }, { wch: 38 }, { wch: 15 }, { wch: 38 }, { wch: 28 }, { wch: 20 }, { wch: 25 }, { wch: 32 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 18 }
-    ];
-
-    // 3. Aba Dedicada: Ranking por Líderes DSS
-    const lideresAgg: Record<string, {
-      name: string;
-      diretoria: string;
-      filial: string;
-      cnpj: string;
-      cidade: string;
-      dssSet: Set<string>;
-      participantesCount: number;
-    }> = {};
-
-    filteredData.forEach(item => {
-      const lider = String(item['Líder'] || 'Não Identificado').trim();
-      const dssId = item['Número do Diálogo'];
-      const cidade = item['CIDADE COMERCIAL'] || item['Localidade'] || 'São Paulo';
-      const fc = getFilialCnpj(cidade);
-
-      if (!lideresAgg[lider]) {
-        lideresAgg[lider] = {
-          name: lider,
-          diretoria: item['DIRETORIA 3'] || 'N/A',
-          filial: fc?.filial || item['Base'] || 'São Paulo',
-          cnpj: fc?.cnpj || '-',
-          cidade: cidade,
-          dssSet: new Set(),
-          participantesCount: 0
-        };
-      }
-
-      if (dssId && !lideresAgg[lider].dssSet.has(dssId)) {
-        lideresAgg[lider].dssSet.add(dssId);
-      }
-      lideresAgg[lider].participantesCount += 1;
-    });
-
-    const lideresList = Object.values(lideresAgg)
-      .map(i => ({ ...i, count: i.dssSet.size || i.participantesCount }))
-      .sort((a, b) => b.count - a.count);
-
-    const rankingLideresData = lideresList.map((item, idx) => {
-      const expected = targetAprs;
-      const perc = expected > 0 ? ((item.count / expected) * 100).toFixed(1) + '%' : '0.0%';
-
-      return {
-        "Posição": `${idx + 1}º`,
-        "Líder DSS": item.name,
-        "Diretoria": item.diretoria,
-        "Filial": item.filial,
-        "CNPJ": item.cnpj,
-        "Cidade": item.cidade,
-        "Diálogos Realizados": item.count,
-        "Esperado": expected,
-        "Meta (%)": perc,
-        "Participantes Presentes": item.participantesCount,
-        "Situação": item.count >= expected ? "Meta Atingida" : "Abaixo da Meta"
-      };
-    });
-
-    const ws_lideres = XLSX.utils.json_to_sheet(rankingLideresData);
-    const rangeLideres = XLSX.utils.decode_range(ws_lideres['!ref'] || 'A1:A1');
-    for (let C = rangeLideres.s.c; C <= rangeLideres.e.c; ++C) {
-      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
-      if (!ws_lideres[cellAddress]) continue;
-      ws_lideres[cellAddress].s = {
-        fill: { fgColor: { rgb: "660099" } },
-        font: { color: { rgb: "FFFFFF" }, bold: true },
-        alignment: { horizontal: "center", vertical: "center" }
-      };
-    }
-    ws_lideres['!cols'] = [
-      { wch: 10 }, { wch: 38 }, { wch: 38 }, { wch: 28 }, { wch: 20 }, { wch: 25 }, { wch: 22 }, { wch: 15 }, { wch: 15 }, { wch: 25 }, { wch: 18 }
-    ];
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws_dados, "Dados Filtrados DSS");
-    XLSX.utils.book_append_sheet(wb, ws_tecnicos, "Ranking Técnicos DSS");
-    XLSX.utils.book_append_sheet(wb, ws_lideres, "Ranking Líderes DSS");
-
-    if (rankingGroup === 'cidade') {
-      const rankingCidadesData = rankAgg.map((item, idx) => {
-        const multiplier = item.uniquePeople?.size || 1;
-        const expected = Math.round(targetAprs * multiplier);
-        const perc = expected > 0 ? ((item.count / expected) * 100).toFixed(1) + '%' : '0.0%';
-
-        return {
-          "Posição": `${idx + 1}º`,
-          "Cidade": item.name,
-          "Líderes Ativos": multiplier,
-          "Diálogos Realizados": item.count,
-          "Esperado": expected,
-          "Meta (%)": perc,
-          "Participantes Presentes": item.data.length
-        };
-      });
-
-      const ws_cidades = XLSX.utils.json_to_sheet(rankingCidadesData);
-      const rangeCidades = XLSX.utils.decode_range(ws_cidades['!ref'] || 'A1:A1');
-      for (let C = rangeCidades.s.c; C <= rangeCidades.e.c; ++C) {
-        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
-        if (!ws_cidades[cellAddress]) continue;
-        ws_cidades[cellAddress].s = {
-          fill: { fgColor: { rgb: "660099" } },
-          font: { color: { rgb: "FFFFFF" }, bold: true },
-          alignment: { horizontal: "center", vertical: "center" }
-        };
-      }
-      ws_cidades['!cols'] = [
-        { wch: 10 }, { wch: 30 }, { wch: 18 }, { wch: 22 }, { wch: 15 }, { wch: 15 }, { wch: 25 }
-      ];
-      XLSX.utils.book_append_sheet(wb, ws_cidades, "Ranking Cidades DSS");
-    }
-
-    XLSX.writeFile(wb, `vivo_painel_dss.xlsx`);
   };
 
   const basePessoasDss = selectedAuditores.length > 0 
@@ -566,10 +376,10 @@ export const DssDashboard: React.FC<DssDashboardProps> = ({ onBack, isDark, togg
 
             <div className="w-px h-12 bg-gray-200 dark:bg-gray-800 hidden md:block"></div>
 
-            <PremiumMultiSelect label="Assunto do DSS" options={allTipos} selected={selectedTipos} onChange={handleMultiSelect(setSelectedTipos)} icon={FileText} widthClass="w-[240px]" />
-            <PremiumMultiSelect label="Diretoria" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-[320px]" />
-            <PremiumMultiSelect label="Líder DSS" options={allSupervisors} selected={selectedSupervisors} onChange={handleMultiSelect(setSelectedSupervisors)} icon={Users} />
+            <PremiumMultiSelect label="Diretoria 3" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-[340px]" />
+            <PremiumMultiSelect label="Gerente / Líder" options={allSupervisors} selected={selectedSupervisors} onChange={handleMultiSelect(setSelectedSupervisors)} icon={Users} widthClass="w-[280px]" />
             <PremiumMultiSelect label="Cidade" options={allCities} selected={selectedCities} onChange={handleMultiSelect(setSelectedCities)} icon={MapPin} />
+            <PremiumMultiSelect label="Assunto do DSS" options={allTipos} selected={selectedTipos} onChange={handleMultiSelect(setSelectedTipos)} icon={FileText} widthClass="w-[240px]" />
 
             <div className="flex flex-col gap-1.5">
               <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Interior (SPI)</span>

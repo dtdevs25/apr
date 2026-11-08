@@ -91,6 +91,8 @@ export async function POST(req: Request) {
       status: findHeader(['STATUS']),
       nome: findHeader(['NOME']),
       cargo: findHeader(['CARGO']),
+      categoria: findHeader(['CATEGORIA']),
+      subgrupo: findHeader(['SUBGRUPO', 'SUB GRUPO']),
       cnpj: findHeader(['CNPJ']),
       filial: findHeader(['FILIAL', 'NOME FILIAL']),
       diretoria3: findHeader(['DIRETORIA 3', 'DIRETORIA3']),
@@ -140,7 +142,9 @@ export async function POST(req: Request) {
 
       rowsToInsert.push([
         rowAno, rowMes, toUpper(get(row, H.status)) || 'ATIVO', userId,
-        toUpper(get(row, H.nome)), toUpper(get(row, H.cargo)), toUpper(get(row, H.diretoria3)),
+        toUpper(get(row, H.nome)), toUpper(get(row, H.cargo)),
+        toUpper(get(row, H.categoria)), toUpper(get(row, H.subgrupo)),
+        toUpper(get(row, H.diretoria3)),
         toUpper(get(row, H.gerencia)), toUpper(get(row, H.gestor)),
         toUpper(get(row, H.cidade)), 'SP',
         toUpper(get(row, H.cnpj)), toUpper(get(row, H.filial)),
@@ -168,6 +172,8 @@ export async function POST(req: Request) {
           user_id_ssff VARCHAR(50),
           nome VARCHAR(255),
           cargo VARCHAR(255),
+          categoria VARCHAR(100),
+          subgrupo VARCHAR(100),
           diretoria_3 VARCHAR(255),
           gerencia VARCHAR(255),
           gestor VARCHAR(255),
@@ -178,6 +184,8 @@ export async function POST(req: Request) {
           data_admissao TIMESTAMP,
           data_desligamento TIMESTAMP
         );
+        ALTER TABLE po ADD COLUMN IF NOT EXISTS categoria VARCHAR(100);
+        ALTER TABLE po ADD COLUMN IF NOT EXISTS subgrupo VARCHAR(100);
         ALTER TABLE po ADD COLUMN IF NOT EXISTS cnpj VARCHAR(50);
         ALTER TABLE po ADD COLUMN IF NOT EXISTS filial VARCHAR(255);
       `);
@@ -192,7 +200,10 @@ export async function POST(req: Request) {
 
         if (prevMes && prevAno) {
           const prevRes = await client.query(
-            `SELECT user_id_ssff, nome, cargo, diretoria_3, gerencia, gestor, cidade_comercial,
+            `SELECT user_id_ssff, nome, cargo,
+                    COALESCE(to_jsonb(po)->>'categoria', '') AS categoria,
+                    COALESCE(to_jsonb(po)->>'subgrupo', '') AS subgrupo,
+                    diretoria_3, gerencia, gestor, cidade_comercial,
                     COALESCE(to_jsonb(po)->>'cnpj', '') AS cnpj,
                     COALESCE(to_jsonb(po)->>'filial', '') AS filial,
                     data_admissao 
@@ -216,6 +227,8 @@ export async function POST(req: Request) {
                 prevId,
                 toUpper(prevRow.nome),
                 toUpper(prevRow.cargo),
+                toUpper(prevRow.categoria),
+                toUpper(prevRow.subgrupo),
                 toUpper(prevRow.diretoria_3),
                 toUpper(prevRow.gerencia),
                 toUpper(prevRow.gestor),
@@ -239,7 +252,7 @@ export async function POST(req: Request) {
       }
 
       // 4. Inserção em lote (colaboradores ativos + desligados identificados)
-      const COLS = 15;
+      const COLS = 17;
       const BATCH_SIZE = 1000;
       for (let i = 0; i < rowsToInsert.length; i += BATCH_SIZE) {
         const batch = rowsToInsert.slice(i, i + BATCH_SIZE);
@@ -252,7 +265,7 @@ export async function POST(req: Request) {
 
         await client.query(`
           INSERT INTO po (
-            ano, mes, status, user_id_ssff, nome, cargo, diretoria_3,
+            ano, mes, status, user_id_ssff, nome, cargo, categoria, subgrupo, diretoria_3,
             gerencia, gestor, cidade_comercial, uf_comercial, cnpj, filial, data_admissao, data_desligamento
           ) VALUES ${placeholders}
         `, values);
