@@ -322,6 +322,10 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       uniquePeople: Set<string>,
       semApr?: boolean,
       supervisor?: string,
+      coordenador?: string | null,
+      gerente?: string | null,
+      diretor?: string | null,
+      cargo?: string | null,
       cidade?: string,
       cidadeBase?: string,
       cidadesExecucao: Set<string>
@@ -350,6 +354,10 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
           uniquePeople: new Set(),
           semApr: false,
           supervisor: item['Supervisor'] || item['GESTOR'],
+          coordenador: item['COORDENADOR'] || null,
+          gerente: item['GERENTE'] || null,
+          diretor: item['DIRETOR'] || null,
+          cargo: item['CARGO'] || null,
           cidade: getItemCity(item),
           cidadeBase: cidBase,
           cidadesExecucao: new Set()
@@ -407,6 +415,10 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
           uniquePeople: new Set([pMat]),
           semApr: true,
           supervisor: p.supervisor,
+          coordenador: p.coordenador || null,
+          gerente: p.gerente || null,
+          diretor: p.diretor || null,
+          cargo: p.cargo || null,
           cidade: p.cidade,
           cidadeBase: p.cidade,
           cidadesExecucao: new Set()
@@ -440,7 +452,16 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
   const semAprCount = useMemo(() => allRankAgg.filter(i => i.count === 0).length, [allRankAgg]);
   const maxRank = Math.max(1, ...rankAgg.map(i => i.count));
 
-  // Lideranças diretas no filtro (supervisores que possuem colaboradores/APRs neste escopo)
+  // Lideranças diretas no filtro (coordenadores e supervisores que possuem colaboradores/APRs neste escopo)
+  const coordenadoresNoFiltro = useMemo(() => {
+    const coords = new Set<string>();
+    allRankAgg.forEach(item => {
+      const c = (item.coordenador || '').trim().toUpperCase();
+      if (c && isPersonName(c)) coords.add(c);
+    });
+    return Array.from(coords).sort();
+  }, [allRankAgg]);
+
   const supervisoresNoFiltro = useMemo(() => {
     const sups = new Set<string>();
     allRankAgg.forEach(item => {
@@ -457,14 +478,14 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
     { v: formatNum(totalAprs), l: 'APRs no Filtro', icon: FileText, c: 'border-l-pink-500', t: 'text-pink-500' },
     { v: formatNum(diretoriasUnicas), l: 'Diretorias', icon: Building, c: 'border-l-blue-500', t: 'text-blue-500' },
     {
-      v: formatNum(supervisoresNoFiltro.length),
+      v: formatNum(coordenadoresNoFiltro.length > 0 ? coordenadoresNoFiltro.length : supervisoresNoFiltro.length),
       l: 'Hierarquia',
       icon: Users,
       c: 'border-l-orange-500',
       t: 'text-orange-500',
       sub: selectedSupervisors.length > 0
-        ? `${selectedSupervisors[0]} (${supervisoresNoFiltro.length} supervisores)`
-        : `${supervisoresNoFiltro.length} supervisores`,
+        ? `${coordenadoresNoFiltro.length} coord. • ${supervisoresNoFiltro.length} sup.`
+        : `${supervisoresNoFiltro.length} supervisões`,
       onClick: () => setIsHierarchyModalOpen(true)
     },
     { v: formatNum(cidadesUnicas), l: 'Cidades', icon: MapPin, c: 'border-l-teal-500', t: 'text-teal-500' },
@@ -476,7 +497,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       t: 'text-purple-500',
       sub: `${comAprCount} com APR • ${semAprCount} sem APR`
     }
-  ], [totalAprs, diretoriasUnicas, supervisoresNoFiltro, selectedSupervisors, cidadesUnicas, totalColaboradores, comAprCount, semAprCount]);
+  ], [totalAprs, diretoriasUnicas, coordenadoresNoFiltro, supervisoresNoFiltro, selectedSupervisors, cidadesUnicas, totalColaboradores, comAprCount, semAprCount]);
 
   // Rank Atividade
   const rankAtividade = useMemo(() => {
