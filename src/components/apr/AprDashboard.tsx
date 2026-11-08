@@ -202,13 +202,13 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
       (selectedCities.length === 0 || selectedCities.includes(getItemCity(i)))
-    ).flatMap(i => [i['GERENTE'], i['COORDENADOR'], i['Supervisor'], i['GESTOR']]).filter(Boolean);
+    ).flatMap(i => [i['DIRETOR'], i['GERENTE'], i['COORDENADOR'], i['Supervisor'], i['GESTOR']]).filter(Boolean);
 
     const fromPO = colaboradoresPO.filter(p =>
       (!onlySpiActive || p.diretoria !== 'DIR SERVICOS AO CLIENTE SP INTERIOR' || p.ativo_spi !== 0) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(p.diretoria)) &&
       (selectedCities.length === 0 || selectedCities.includes(p.cidade))
-    ).flatMap(p => [p.gerente, p.coordenador, p.supervisor]).filter(Boolean);
+    ).flatMap(p => [p.diretor, p.gerente, p.coordenador, p.supervisor]).filter(Boolean);
 
     return Array.from(new Set([...fromLid, ...fromData, ...fromPO]))
       .filter(name => isPersonName(name))

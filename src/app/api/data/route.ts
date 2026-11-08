@@ -420,6 +420,20 @@ export async function GET(req: NextRequest) {
         const DIRECTOR_SPI = 'SAMUEL ROSSI DO NASCIMENTO';
         const DIRECTOR_SPC = 'ELISEU ROBERTO OLIVEIRA';
 
+        const isDirectorSpi = (name?: string | null) => {
+          if (!name) return false;
+          const n = normNome(name);
+          if (!n) return false;
+          return (n.includes('SAMUEL') && n.includes('ROSSI')) || n === DIRECTOR_SPI;
+        };
+
+        const isDirectorSpc = (name?: string | null) => {
+          if (!name) return false;
+          const n = normNome(name);
+          if (!n) return false;
+          return (n.includes('ELISEU') && n.includes('OLIVEIRA')) || n === DIRECTOR_SPC;
+        };
+
         const classifyLeaderRole = (cargo: string | null | undefined): 'DIRETOR' | 'GERENTE' | 'COORDENADOR' | 'SUPERVISOR' => {
           const c = cleanStr(cargo);
           if (
@@ -536,11 +550,10 @@ export async function GET(req: NextRequest) {
           }
 
           if (chainNodes.length > 0) {
-            // 1. Diretor: busca quem é Diretor na cadeia (ou usa o diretor padrão da regional)
-            const dirNode = chainNodes.find(n => n.tipo === 'DIRETOR' || n.nome === DIRECTOR_SPI || n.nome === DIRECTOR_SPC);
-            if (dirNode) {
-              result.diretor = dirNode.nome;
-            }
+            // 1. Diretor: fixo e canônico por regional
+            // SP INTERIOR (SPI) -> SAMUEL ROSSI DO NASCIMENTO
+            // SP CAPITAL (SPC) -> ELISEU ROBERTO OLIVEIRA
+            result.diretor = defaultDirector;
 
             // 2. Gerente: pessoa estritamente com cargo de gerência
             const gerNode = chainNodes.find(n => n.tipo === 'GERENTE');
@@ -574,19 +587,36 @@ export async function GET(req: NextRequest) {
 
             // Registrar cada líder no liderancasMap com seu papel canônico inalterado
             chainNodes.forEach(node => {
-              if (colabDir && ALLOWED_DIRETORIAS.includes(colabDir)) {
-                const mapKey = `${node.nome}__${colabDir}__${colabCidade || ''}`;
+              const nodeIsSamuel = isDirectorSpi(node.nome);
+              const nodeIsEliseu = isDirectorSpc(node.nome);
+
+              let nodeDir = colabDir;
+              let nodeReg = colabRegional;
+              let nodeDiretor = defaultDirector;
+
+              if (nodeIsSamuel) {
+                nodeDir = INTERIOR;
+                nodeReg = 'SPI';
+                nodeDiretor = DIRECTOR_SPI;
+              } else if (nodeIsEliseu) {
+                nodeDir = CAPITAL;
+                nodeReg = 'SPC';
+                nodeDiretor = DIRECTOR_SPC;
+              }
+
+              if (nodeDir && ALLOWED_DIRETORIAS.includes(nodeDir)) {
+                const mapKey = `${node.nome}__${nodeDir}`;
                 if (!liderancasMap.has(mapKey)) {
                   liderancasMap.set(mapKey, {
                     nome: node.nome,
-                    cargo: node.cargo,
-                    tipo: node.tipo,
-                    diretoria: colabDir,
-                    diretor: result.diretor || defaultDirector,
+                    cargo: (nodeIsSamuel || nodeIsEliseu) ? `DIRETOR REGIONAL ${nodeReg}` : node.cargo,
+                    tipo: (nodeIsSamuel || nodeIsEliseu) ? 'DIRETOR' : node.tipo,
+                    diretoria: nodeDir,
+                    diretor: nodeDiretor,
                     gerente: node.tipo !== 'DIRETOR' && node.tipo !== 'GERENTE' ? (result.gerente || undefined) : undefined,
                     coordenador: node.tipo === 'SUPERVISOR' ? (result.coordenador || undefined) : undefined,
-                    cidade: colabCidade || cleanCidade(node.personPO?.cidade_comercial) || 'SÃO PAULO',
-                    regional: colabRegional || getRegional(cleanCidade(node.personPO?.cidade_comercial)) || (colabDir.includes('INTERIOR') ? 'SPI' : 'SPC')
+                    cidade: colabCidade || cleanCidade(node.personPO?.cidade_comercial) || (nodeDir.includes('INTERIOR') ? 'CAMPINAS' : 'SÃO PAULO'),
+                    regional: nodeReg || (nodeDir.includes('INTERIOR') ? 'SPI' : 'SPC')
                   });
                 }
               }
@@ -607,26 +637,41 @@ export async function GET(req: NextRequest) {
           if (!nomeClean || !isPersonName(nomeClean)) continue;
 
           const cargoClean = cleanStr(p.cargo);
-          const isKnownDirector = nomeClean === DIRECTOR_SPI || nomeClean === DIRECTOR_SPC || cargoClean.startsWith('DIR SERVICOS AO CLIENTE');
+          const isSamuel = isDirectorSpi(nomeClean);
+          const isEliseu = isDirectorSpc(nomeClean);
+          const isKnownDirector = isSamuel || isEliseu || cargoClean.startsWith('DIR SERVICOS AO CLIENTE');
           const role = isKnownDirector ? 'DIRETOR' : classifyLeaderRole(cargoClean);
           if (role !== 'DIRETOR' && role !== 'GERENTE' && role !== 'COORDENADOR' && role !== 'SUPERVISOR') {
             continue;
           }
 
-          const cidade = cleanCidade(p.cidade_comercial) || null;
-          const reg = getRegional(cidade);
-          let rawDir = p.diretoria_3 || null;
-          let dir = normalizeDiretoria(rawDir, reg);
-          if (!dir || !ALLOWED_DIRETORIAS.includes(dir)) {
-            if (reg === 'SPI' || cleanStr(p.diretoria_3).includes('INTERIOR')) {
-              dir = INTERIOR;
-            } else if (reg === 'SPC' || cleanStr(p.diretoria_3).includes('CAPITAL')) {
-              dir = CAPITAL;
+          let dir: string | null;
+          let reg: 'SPC' | 'SPI';
+          let diretor: string;
+          let cidade = cleanCidade(p.cidade_comercial) || null;
+
+          if (isSamuel) {
+            dir = INTERIOR;
+            reg = 'SPI';
+            diretor = DIRECTOR_SPI;
+            cidade = cidade || 'CAMPINAS';
+          } else if (isEliseu) {
+            dir = CAPITAL;
+            reg = 'SPC';
+            diretor = DIRECTOR_SPC;
+            cidade = cidade || 'SÃO PAULO';
+          } else {
+            reg = getRegional(cidade) || (cleanStr(p.diretoria_3).includes('INTERIOR') ? 'SPI' : 'SPC');
+            let rawDir = p.diretoria_3 || null;
+            dir = normalizeDiretoria(rawDir, reg);
+            if (!dir || !ALLOWED_DIRETORIAS.includes(dir)) {
+              dir = reg === 'SPI' ? INTERIOR : CAPITAL;
             }
+            diretor = (dir && dir.includes('INTERIOR') || reg === 'SPI') ? DIRECTOR_SPI : DIRECTOR_SPC;
           }
+
           if (!dir || !ALLOWED_DIRETORIAS.includes(dir)) continue;
 
-          const diretor = (dir.includes('INTERIOR') || reg === 'SPI') ? DIRECTOR_SPI : DIRECTOR_SPC;
           let gerente: string | undefined = undefined;
           let coordenador: string | undefined = undefined;
 
@@ -636,21 +681,41 @@ export async function GET(req: NextRequest) {
             coordenador = hLeader.coordenador || undefined;
           }
 
-          const mapKey = `${nomeClean}__${dir}__${cidade || ''}`;
+          const mapKey = `${nomeClean}__${dir}`;
           if (!liderancasMap.has(mapKey)) {
             liderancasMap.set(mapKey, {
               nome: nomeClean,
-              cargo: p.cargo || role,
+              cargo: (isSamuel || isEliseu) ? `DIRETOR REGIONAL ${reg}` : (p.cargo || role),
               tipo: role,
               diretoria: dir,
               diretor,
               gerente: role === 'DIRETOR' || role === 'GERENTE' ? undefined : gerente,
               coordenador: role === 'SUPERVISOR' ? coordenador : undefined,
               cidade: cidade || (dir.includes('INTERIOR') ? 'CAMPINAS' : 'SÃO PAULO'),
-              regional: reg || (dir.includes('INTERIOR') ? 'SPI' : 'SPC'),
+              regional: reg,
             });
           }
         }
+
+        // Garantir que os diretores regionais canônicos estão sempre presentes com suas respectivas diretorias
+        liderancasMap.set(`${DIRECTOR_SPI}__${INTERIOR}`, {
+          nome: DIRECTOR_SPI,
+          cargo: 'DIRETOR REGIONAL SP INTERIOR',
+          tipo: 'DIRETOR',
+          diretoria: INTERIOR,
+          diretor: DIRECTOR_SPI,
+          cidade: 'CAMPINAS',
+          regional: 'SPI',
+        });
+        liderancasMap.set(`${DIRECTOR_SPC}__${CAPITAL}`, {
+          nome: DIRECTOR_SPC,
+          cargo: 'DIRETOR REGIONAL SP CAPITAL',
+          tipo: 'DIRETOR',
+          diretoria: CAPITAL,
+          diretor: DIRECTOR_SPC,
+          cidade: 'SÃO PAULO',
+          regional: 'SPC',
+        });
 
         const seenNumbers = new Set<string>();
         rows = aprRes.rows

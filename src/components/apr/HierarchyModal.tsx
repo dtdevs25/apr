@@ -130,9 +130,24 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
   const hierarchyTree = useMemo(() => {
     const dirMap: Record<string, DirNode> = {};
 
-    const getDiretoriaKey = (dir?: string | null, diretor?: string | null): string => {
+    const SPC_CITIES = new Set([
+      'SAO PAULO', 'SÃO PAULO', 'MAUA', 'MAUÁ', 'PRAIA GRANDE', 'SANTOS',
+      'MOGI DAS CRUZES', 'BARUERI', 'GUARULHOS', 'SANTO ANDRE', 'SANTO ANDRÉ',
+      'SAO VICENTE', 'SÃO VICENTE', 'SAO CAETANO DO SUL', 'SÃO CAETANO DO SUL',
+      'SAO BERNARDO DO CAMPO', 'SÃO BERNARDO DO CAMPO', 'GUARUJA', 'GUARUJÁ',
+      'TABOAO DA SERRA', 'TABOÃO DA SERRA', 'CARAGUATATUBA', 'CUBATAO', 'CUBATÃO'
+    ]);
+
+    const getDiretoriaKey = (dir?: string | null, diretor?: string | null, cidade?: string | null): string => {
+      if (diretor && (diretor.includes('SAMUEL') || diretor.includes('ROSSI'))) {
+        return 'DIR SERVICOS AO CLIENTE SP INTERIOR';
+      }
+      if (diretor && (diretor.includes('ELISEU') || diretor.includes('OLIVEIRA'))) {
+        return 'DIR SERVICOS AO CLIENTE SP CAPITAL';
+      }
       if (dir && dir.includes('CAPITAL')) return 'DIR SERVICOS AO CLIENTE SP CAPITAL';
-      if (diretor && diretor.includes('ELISEU')) return 'DIR SERVICOS AO CLIENTE SP CAPITAL';
+      if (dir && dir.includes('INTERIOR')) return 'DIR SERVICOS AO CLIENTE SP INTERIOR';
+      if (cidade && SPC_CITIES.has(cidade.toUpperCase())) return 'DIR SERVICOS AO CLIENTE SP CAPITAL';
       return 'DIR SERVICOS AO CLIENTE SP INTERIOR';
     };
 
@@ -187,7 +202,17 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
     // Isso garante que coordenadores (como Ricardo Garone) e supervisores estejam sempre visíveis na gestão,
     // mesmo quando não tiverem subordinados com APR emitida no mês selecionado.
     liderancas.forEach(l => {
-      const dirKey = getDiretoriaKey(l.diretoria, l.diretor);
+      const isSamuel = l.nome.includes('SAMUEL') || l.nome.includes('ROSSI');
+      const isEliseu = l.nome.includes('ELISEU') || l.nome.includes('OLIVEIRA');
+
+      let dirKey: string;
+      if (isSamuel) {
+        dirKey = 'DIR SERVICOS AO CLIENTE SP INTERIOR';
+      } else if (isEliseu) {
+        dirKey = 'DIR SERVICOS AO CLIENTE SP CAPITAL';
+      } else {
+        dirKey = getDiretoriaKey(l.diretoria, l.diretor, l.cidade);
+      }
 
       // Filtro de Diretoria ativa
       if (selectedDiretorias.length > 0 && !selectedDiretorias.includes(dirKey)) return;
@@ -212,8 +237,9 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
       }
 
       const dirObj = dirMap[dirKey];
-      if (l.tipo === 'DIRETOR') {
-        dirObj.diretor = l.nome;
+      dirObj.diretor = getDiretorName(dirKey);
+
+      if (l.tipo === 'DIRETOR' || isSamuel || isEliseu) {
         return;
       }
 
@@ -327,7 +353,8 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
 
     // 2. Anexar os colaboradores (com ou sem APR) nas suas respectivas supervisões
     rankAgg.forEach(item => {
-      const dirKey = getDiretoriaKey(null, item.diretor);
+      const colabCity = item.cidadeBase || item.cidade;
+      const dirKey = getDiretoriaKey(null, item.diretor, colabCity);
       if (selectedDiretorias.length > 0 && !selectedDiretorias.includes(dirKey)) return;
 
       if (hasLeaderFilter) {
@@ -358,13 +385,12 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
         ? item.supervisor.trim().toUpperCase()
         : 'SUPERVISÃO OPERACIONAL DE CAMPO';
 
-      const colabCity = item.cidadeBase || item.cidade;
       if (selectedCities.length > 0 && colabCity && !selectedCities.includes(colabCity)) return;
 
       if (!dirMap[dirKey]) {
         dirMap[dirKey] = {
           diretoria: dirKey,
-          diretor: item.diretor || getDiretorName(dirKey),
+          diretor: getDiretorName(dirKey),
           gerencias: {},
           gerenciasList: [],
           totalGerencias: 0,
@@ -378,7 +404,7 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
       }
 
       const dirObj = dirMap[dirKey];
-      if (item.diretor && !dirObj.diretor) dirObj.diretor = item.diretor;
+      dirObj.diretor = getDiretorName(dirKey);
 
       if (!dirObj.gerencias[gerName]) {
         dirObj.gerencias[gerName] = {
