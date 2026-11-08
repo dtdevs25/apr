@@ -4,8 +4,81 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, Users, UserCheck, AlertTriangle, FileText,
   Search, ChevronDown, ChevronRight, Building, MapPin, CheckCircle2,
-  Briefcase, Award, ShieldCheck, User
+  Briefcase, Award, ShieldCheck, User, Compass
 } from 'lucide-react';
+
+interface ColabItem {
+  name: string;
+  matricula: string;
+  cargo: string;
+  cidade: string;
+  count: number;
+  semApr: boolean;
+  avgDuration: string;
+}
+
+interface SupNode {
+  supervisor: string;
+  cidade?: string;
+  colaboradores: ColabItem[];
+  totalAprs: number;
+  comApr: number;
+  semApr: number;
+}
+
+interface CoordNode {
+  coordenador: string;
+  cargo?: string;
+  cidade?: string;
+  supervisores: Record<string, SupNode>;
+  supervisoresList: SupNode[];
+  totalSupervisores: number;
+  totalColaboradores: number;
+  totalAprs: number;
+  comApr: number;
+  semApr: number;
+}
+
+interface GerNode {
+  gerente: string;
+  cargo?: string;
+  cidade?: string;
+  diretor?: string;
+  coordenadores: Record<string, CoordNode>;
+  coordenadoresList: CoordNode[];
+  totalCoordenadores: number;
+  totalSupervisores: number;
+  totalColaboradores: number;
+  totalAprs: number;
+  comApr: number;
+  semApr: number;
+}
+
+interface DirNode {
+  diretoria: string;
+  diretor: string;
+  gerencias: Record<string, GerNode>;
+  gerenciasList: GerNode[];
+  totalGerencias: number;
+  totalCoordenadores: number;
+  totalSupervisores: number;
+  totalColaboradores: number;
+  totalAprs: number;
+  comApr: number;
+  semApr: number;
+}
+
+interface LeaderInfo {
+  nome: string;
+  cargo: string;
+  tipo: 'DIRETOR' | 'GERENTE' | 'COORDENADOR' | 'SUPERVISOR';
+  diretoria: string;
+  diretor?: string;
+  gerente?: string;
+  coordenador?: string;
+  cidade: string;
+  regional: string;
+}
 
 interface HierarchyModalProps {
   isOpen: boolean;
@@ -30,6 +103,7 @@ interface HierarchyModalProps {
     totalSecs: number;
     validCount: number;
   }>;
+  liderancas?: LeaderInfo[];
 }
 
 export const HierarchyModal: React.FC<HierarchyModalProps> = ({
@@ -38,72 +112,49 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
   selectedGerentes = [],
   selectedCoordenadores = [],
   selectedSupervisores = [],
-  selectedDiretorias,
-  selectedCities,
-  rankAgg,
+  selectedDiretorias = [],
+  selectedCities = [],
+  rankAgg = [],
+  liderancas = [],
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [expandedDiretorias, setExpandedDiretorias] = useState<Record<string, boolean>>({});
   const [expandedGerentes, setExpandedGerentes] = useState<Record<string, boolean>>({});
   const [expandedCoords, setExpandedCoords] = useState<Record<string, boolean>>({});
   const [expandedSups, setExpandedSups] = useState<Record<string, boolean>>({});
 
-  // Construir a árvore hierárquica completa de 4 níveis:
-  // GERENTE -> COORDENADOR -> SUPERVISOR -> COLABORADORES
+  // Construir a árvore hierárquica estrita de 5 níveis:
+  // DIRETORIA (Diretor) -> GERÊNCIA (Gerente) -> COORDENAÇÃO (Coordenador) -> SUPERVISÃO (Supervisor) -> COLABORADORES
   const hierarchyTree = useMemo(() => {
-    const gerMap: Record<string, {
-      gerente: string;
-      diretor?: string;
-      cidade?: string;
-      coordenadores: Record<string, {
-        coordenador: string;
-        supervisores: Record<string, {
-          supervisor: string;
-          cidade?: string;
-          colaboradores: Array<{
-            name: string;
-            matricula: string;
-            cargo?: string;
-            cidade?: string;
-            count: number;
-            semApr?: boolean;
-            avgDuration?: string;
-          }>;
-          totalAprs: number;
-          comApr: number;
-          semApr: number;
-        }>;
-        totalColaboradores: number;
-        totalAprs: number;
-        comApr: number;
-        semApr: number;
-      }>;
-      totalCoordenadores: number;
-      totalSupervisores: number;
-      totalColaboradores: number;
-      totalAprs: number;
-      comApr: number;
-      semApr: number;
-    }> = {};
+    const dirMap: Record<string, DirNode> = {};
 
-    rankAgg.forEach(item => {
-      const gerName = (item.gerente && item.gerente.trim())
-        ? item.gerente.trim().toUpperCase()
-        : 'GERÊNCIA GERAL / DIRETORIA';
+    const getDiretoriaKey = (dir?: string | null, diretor?: string | null): string => {
+      if (dir && dir.includes('CAPITAL')) return 'DIR SERVICOS AO CLIENTE SP CAPITAL';
+      if (diretor && diretor.includes('ELISEU')) return 'DIR SERVICOS AO CLIENTE SP CAPITAL';
+      return 'DIR SERVICOS AO CLIENTE SP INTERIOR';
+    };
 
-      const coordName = (item.coordenador && item.coordenador.trim() && item.coordenador !== gerName)
-        ? item.coordenador.trim().toUpperCase()
-        : 'COORDENAÇÃO DIRETA COM GERÊNCIA';
+    const getDiretorName = (dirKey: string): string => {
+      if (dirKey.includes('CAPITAL')) return 'ELISEU ROBERTO OLIVEIRA';
+      return 'SAMUEL ROSSI DO NASCIMENTO';
+    };
 
-      const supName = (item.supervisor && item.supervisor.trim() && item.supervisor !== coordName && item.supervisor !== gerName)
-        ? item.supervisor.trim().toUpperCase()
-        : 'SUPERVISÃO OPERACIONAL DE CAMPO';
+    // 1. Pré-popular a partir das lideranças registradas no PO corporativo
+    // Isso garante que coordenadores (como Ricardo Garone) e supervisores estejam sempre visíveis na gestão,
+    // mesmo quando não tiverem subordinados com APR emitida no mês selecionado.
+    liderancas.forEach(l => {
+      const dirKey = getDiretoriaKey(l.diretoria, l.diretor);
 
-      if (!gerMap[gerName]) {
-        gerMap[gerName] = {
-          gerente: gerName,
-          diretor: item.diretor || undefined,
-          cidade: item.cidadeBase || item.cidade,
-          coordenadores: {},
+      // Filtro de Diretoria ativa
+      if (selectedDiretorias.length > 0 && !selectedDiretorias.includes(dirKey)) return;
+
+      if (!dirMap[dirKey]) {
+        dirMap[dirKey] = {
+          diretoria: dirKey,
+          diretor: getDiretorName(dirKey),
+          gerencias: {},
+          gerenciasList: [],
+          totalGerencias: 0,
           totalCoordenadores: 0,
           totalSupervisores: 0,
           totalColaboradores: 0,
@@ -113,12 +164,194 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
         };
       }
 
-      const gerObj = gerMap[gerName];
+      const dirObj = dirMap[dirKey];
+      if (l.tipo === 'DIRETOR') {
+        dirObj.diretor = l.nome;
+        return;
+      }
+
+      // Se for Gerente
+      if (l.tipo === 'GERENTE') {
+        if (selectedGerentes.length > 0 && !selectedGerentes.includes(l.nome)) return;
+
+        if (!dirObj.gerencias[l.nome]) {
+          dirObj.gerencias[l.nome] = {
+            gerente: l.nome,
+            cargo: l.cargo,
+            cidade: l.cidade,
+            diretor: dirObj.diretor,
+            coordenadores: {},
+            coordenadoresList: [],
+            totalCoordenadores: 0,
+            totalSupervisores: 0,
+            totalColaboradores: 0,
+            totalAprs: 0,
+            comApr: 0,
+            semApr: 0,
+          };
+        }
+        return;
+      }
+
+      // Se for Coordenador (ex: Ricardo Alexandre Garone Henriques)
+      if (l.tipo === 'COORDENADOR') {
+        if (selectedCoordenadores.length > 0 && !selectedCoordenadores.includes(l.nome)) return;
+        const gerName = (l.gerente && l.gerente.trim()) ? l.gerente.trim().toUpperCase() : 'GERÊNCIA GERAL / DIRETORIA';
+        if (selectedGerentes.length > 0 && !selectedGerentes.includes(gerName)) return;
+
+        if (!dirObj.gerencias[gerName]) {
+          dirObj.gerencias[gerName] = {
+            gerente: gerName,
+            diretor: dirObj.diretor,
+            cidade: l.cidade,
+            coordenadores: {},
+            coordenadoresList: [],
+            totalCoordenadores: 0,
+            totalSupervisores: 0,
+            totalColaboradores: 0,
+            totalAprs: 0,
+            comApr: 0,
+            semApr: 0,
+          };
+        }
+
+        const gerObj = dirObj.gerencias[gerName];
+        if (!gerObj.coordenadores[l.nome]) {
+          gerObj.coordenadores[l.nome] = {
+            coordenador: l.nome,
+            cargo: l.cargo,
+            cidade: l.cidade,
+            supervisores: {},
+            supervisoresList: [],
+            totalSupervisores: 0,
+            totalColaboradores: 0,
+            totalAprs: 0,
+            comApr: 0,
+            semApr: 0,
+          };
+        }
+        return;
+      }
+
+      // Se for Supervisor
+      if (l.tipo === 'SUPERVISOR') {
+        if (selectedSupervisores.length > 0 && !selectedSupervisores.includes(l.nome)) return;
+        const gerName = (l.gerente && l.gerente.trim()) ? l.gerente.trim().toUpperCase() : 'GERÊNCIA GERAL / DIRETORIA';
+        const coordName = (l.coordenador && l.coordenador.trim()) ? l.coordenador.trim().toUpperCase() : 'COORDENAÇÃO GERAL';
+
+        if (selectedGerentes.length > 0 && !selectedGerentes.includes(gerName)) return;
+        if (selectedCoordenadores.length > 0 && !selectedCoordenadores.includes(coordName)) return;
+
+        if (!dirObj.gerencias[gerName]) {
+          dirObj.gerencias[gerName] = {
+            gerente: gerName,
+            diretor: dirObj.diretor,
+            cidade: l.cidade,
+            coordenadores: {},
+            coordenadoresList: [],
+            totalCoordenadores: 0,
+            totalSupervisores: 0,
+            totalColaboradores: 0,
+            totalAprs: 0,
+            comApr: 0,
+            semApr: 0,
+          };
+        }
+
+        const gerObj = dirObj.gerencias[gerName];
+        if (!gerObj.coordenadores[coordName]) {
+          gerObj.coordenadores[coordName] = {
+            coordenador: coordName,
+            supervisores: {},
+            supervisoresList: [],
+            totalSupervisores: 0,
+            totalColaboradores: 0,
+            totalAprs: 0,
+            comApr: 0,
+            semApr: 0,
+          };
+        }
+
+        const coordObj = gerObj.coordenadores[coordName];
+        if (!coordObj.supervisores[l.nome]) {
+          coordObj.supervisores[l.nome] = {
+            supervisor: l.nome,
+            cidade: l.cidade,
+            colaboradores: [],
+            totalAprs: 0,
+            comApr: 0,
+            semApr: 0,
+          };
+        }
+      }
+    });
+
+    // 2. Anexar os colaboradores (com ou sem APR) nas suas respectivas supervisões
+    rankAgg.forEach(item => {
+      const dirKey = getDiretoriaKey(null, item.diretor);
+      if (selectedDiretorias.length > 0 && !selectedDiretorias.includes(dirKey)) return;
+
+      const gerName = (item.gerente && item.gerente.trim())
+        ? item.gerente.trim().toUpperCase()
+        : 'GERÊNCIA GERAL / DIRETORIA';
+      if (selectedGerentes.length > 0 && !selectedGerentes.includes(gerName)) return;
+
+      const coordName = (item.coordenador && item.coordenador.trim() && item.coordenador !== gerName)
+        ? item.coordenador.trim().toUpperCase()
+        : 'COORDENAÇÃO DIRETA COM GERÊNCIA';
+      if (selectedCoordenadores.length > 0 && !selectedCoordenadores.includes(coordName)) return;
+
+      const supName = (item.supervisor && item.supervisor.trim() && item.supervisor !== coordName && item.supervisor !== gerName)
+        ? item.supervisor.trim().toUpperCase()
+        : 'SUPERVISÃO OPERACIONAL DE CAMPO';
+      if (selectedSupervisores.length > 0 && !selectedSupervisores.includes(supName)) return;
+
+      const colabCity = item.cidadeBase || item.cidade;
+      if (selectedCities.length > 0 && colabCity && !selectedCities.includes(colabCity)) return;
+
+      if (!dirMap[dirKey]) {
+        dirMap[dirKey] = {
+          diretoria: dirKey,
+          diretor: item.diretor || getDiretorName(dirKey),
+          gerencias: {},
+          gerenciasList: [],
+          totalGerencias: 0,
+          totalCoordenadores: 0,
+          totalSupervisores: 0,
+          totalColaboradores: 0,
+          totalAprs: 0,
+          comApr: 0,
+          semApr: 0,
+        };
+      }
+
+      const dirObj = dirMap[dirKey];
+      if (item.diretor && !dirObj.diretor) dirObj.diretor = item.diretor;
+
+      if (!dirObj.gerencias[gerName]) {
+        dirObj.gerencias[gerName] = {
+          gerente: gerName,
+          diretor: dirObj.diretor,
+          cidade: colabCity,
+          coordenadores: {},
+          coordenadoresList: [],
+          totalCoordenadores: 0,
+          totalSupervisores: 0,
+          totalColaboradores: 0,
+          totalAprs: 0,
+          comApr: 0,
+          semApr: 0,
+        };
+      }
+
+      const gerObj = dirObj.gerencias[gerName];
 
       if (!gerObj.coordenadores[coordName]) {
         gerObj.coordenadores[coordName] = {
           coordenador: coordName,
           supervisores: {},
+          supervisoresList: [],
+          totalSupervisores: 0,
           totalColaboradores: 0,
           totalAprs: 0,
           comApr: 0,
@@ -131,7 +364,7 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
       if (!coordObj.supervisores[supName]) {
         coordObj.supervisores[supName] = {
           supervisor: supName,
-          cidade: item.cidadeBase || item.cidade,
+          cidade: colabCity,
           colaboradores: [],
           totalAprs: 0,
           comApr: 0,
@@ -150,13 +383,13 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
         else avgDur = `${Math.floor(avgSecs / 3600)}h ${Math.floor((avgSecs % 3600) / 60)}m`;
       }
 
-      const colabItem = {
+      const colabItem: ColabItem = {
         name: item.name,
         matricula: mat,
         cargo: item.cargo || 'TÉCNICO DE CAMPO',
-        cidade: item.cidadeBase || item.cidade,
+        cidade: colabCity || 'NÃO INFORMADA',
         count: item.count,
-        semApr: item.semApr,
+        semApr: item.semApr || item.count === 0,
         avgDuration: avgDur,
       };
 
@@ -164,107 +397,148 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
       supObj.totalAprs += item.count;
       coordObj.totalAprs += item.count;
       gerObj.totalAprs += item.count;
+      dirObj.totalAprs += item.count;
 
       coordObj.totalColaboradores += 1;
       gerObj.totalColaboradores += 1;
+      dirObj.totalColaboradores += 1;
 
       if (item.count > 0) {
         supObj.comApr += 1;
         coordObj.comApr += 1;
         gerObj.comApr += 1;
+        dirObj.comApr += 1;
       } else {
         supObj.semApr += 1;
         coordObj.semApr += 1;
         gerObj.semApr += 1;
+        dirObj.semApr += 1;
       }
     });
 
-    // Converter para arrays ordenados
-    const result = Object.values(gerMap).map(g => {
-      const coordsList = Object.values(g.coordenadores).map(c => {
-        const supsList = Object.values(c.supervisores).map(s => {
-          s.colaboradores.sort((a, b) => {
-            if (b.count !== a.count) return b.count - a.count;
-            return a.name.localeCompare(b.name);
+    // 3. Converter para listas ordenadas por relevância e contagem
+    const diretoriasList = Object.values(dirMap).map(dir => {
+      const gerList = Object.values(dir.gerencias).map(ger => {
+        const coordList = Object.values(ger.coordenadores).map(coord => {
+          const supList = Object.values(coord.supervisores).map(sup => {
+            sup.colaboradores.sort((a, b) => {
+              if (b.count !== a.count) return b.count - a.count;
+              return a.name.localeCompare(b.name);
+            });
+            return sup;
           });
-          return s;
+
+          supList.sort((a, b) => b.colaboradores.length - a.colaboradores.length);
+
+          return {
+            ...coord,
+            supervisoresList: supList,
+            totalSupervisores: supList.length,
+          };
         });
 
-        supsList.sort((a, b) => b.colaboradores.length - a.colaboradores.length);
+        coordList.sort((a, b) => b.totalColaboradores - a.totalColaboradores);
+
+        const allSupsInGer = new Set<string>();
+        coordList.forEach(c => c.supervisoresList.forEach(s => allSupsInGer.add(s.supervisor)));
 
         return {
-          ...c,
-          supervisoresList: supsList,
+          ...ger,
+          coordenadoresList: coordList,
+          totalCoordenadores: coordList.length,
+          totalSupervisores: allSupsInGer.size,
         };
       });
 
-      coordsList.sort((a, b) => b.totalColaboradores - a.totalColaboradores);
+      gerList.sort((a, b) => b.totalColaboradores - a.totalColaboradores);
 
-      const allSupsInGer = new Set<string>();
-      coordsList.forEach(c => c.supervisoresList.forEach(s => allSupsInGer.add(s.supervisor)));
+      const allCoordsInDir = new Set<string>();
+      const allSupsInDir = new Set<string>();
+      gerList.forEach(g => {
+        g.coordenadoresList.forEach(c => {
+          allCoordsInDir.add(c.coordenador);
+          c.supervisoresList.forEach(s => allSupsInDir.add(s.supervisor));
+        });
+      });
 
       return {
-        ...g,
-        coordenadoresList: coordsList,
-        totalCoordenadores: coordsList.filter(c => !c.coordenador.includes('DIRETA')).length || coordsList.length,
-        totalSupervisores: allSupsInGer.size,
+        ...dir,
+        gerenciasList: gerList,
+        totalGerencias: gerList.length,
+        totalCoordenadores: allCoordsInDir.size,
+        totalSupervisores: allSupsInDir.size,
       };
     });
 
-    result.sort((a, b) => b.totalColaboradores - a.totalColaboradores);
-    return result;
-  }, [rankAgg]);
+    diretoriasList.sort((a, b) => b.totalColaboradores - a.totalColaboradores);
+    return diretoriasList;
+  }, [rankAgg, liderancas, selectedDiretorias, selectedGerentes, selectedCoordenadores, selectedSupervisores, selectedCities]);
 
-  // Filtragem da busca textual
+  // Filtragem da busca textual por Diretor, Gerente, Coordenador, Supervisor, Técnico, Matrícula ou Cidade
   const filteredTree = useMemo(() => {
     if (!searchTerm.trim()) return hierarchyTree;
     const term = searchTerm.trim().toUpperCase();
 
     return hierarchyTree
-      .map(ger => {
-        const gerMatches = ger.gerente.includes(term) || (ger.diretor && ger.diretor.includes(term));
+      .map(dir => {
+        const dirMatches = dir.diretoria.includes(term) || dir.diretor.includes(term);
 
-        const matchingCoords = ger.coordenadoresList
-          .map(coord => {
-            const coordMatches = coord.coordenador.includes(term);
+        const matchingGerencias = dir.gerenciasList
+          .map(ger => {
+            const gerMatches = ger.gerente.includes(term) || (ger.cargo && ger.cargo.toUpperCase().includes(term));
 
-            const matchingSups = coord.supervisoresList
-              .map(sup => {
-                const supMatches = sup.supervisor.includes(term);
-                const matchingColabs = sup.colaboradores.filter(c =>
-                  c.name.toUpperCase().includes(term) ||
-                  c.matricula.toUpperCase().includes(term) ||
-                  (c.cargo && c.cargo.toUpperCase().includes(term)) ||
-                  (c.cidade && c.cidade.toUpperCase().includes(term))
-                );
+            const matchingCoords = ger.coordenadoresList
+              .map(coord => {
+                const coordMatches = coord.coordenador.includes(term) || (coord.cargo && coord.cargo.toUpperCase().includes(term));
 
-                if (supMatches || gerMatches || coordMatches) return sup;
-                if (matchingColabs.length > 0) {
+                const matchingSups = coord.supervisoresList
+                  .map(sup => {
+                    const supMatches = sup.supervisor.includes(term);
+                    const matchingColabs = sup.colaboradores.filter(c =>
+                      c.name.toUpperCase().includes(term) ||
+                      c.matricula.toUpperCase().includes(term) ||
+                      c.cargo.toUpperCase().includes(term) ||
+                      c.cidade.toUpperCase().includes(term)
+                    );
+
+                    if (supMatches || coordMatches || gerMatches || dirMatches) return sup;
+                    if (matchingColabs.length > 0) {
+                      return {
+                        ...sup,
+                        colaboradores: matchingColabs,
+                      };
+                    }
+                    return null;
+                  })
+                  .filter(Boolean) as typeof coord.supervisoresList;
+
+                if (coordMatches || gerMatches || dirMatches) return coord;
+                if (matchingSups.length > 0) {
                   return {
-                    ...sup,
-                    colaboradores: matchingColabs,
+                    ...coord,
+                    supervisoresList: matchingSups,
                   };
                 }
                 return null;
               })
-              .filter(Boolean) as typeof coord.supervisoresList;
+              .filter(Boolean) as typeof ger.coordenadoresList;
 
-            if (coordMatches || gerMatches) return coord;
-            if (matchingSups.length > 0) {
+            if (gerMatches || dirMatches) return ger;
+            if (matchingCoords.length > 0) {
               return {
-                ...coord,
-                supervisoresList: matchingSups,
+                ...ger,
+                coordenadoresList: matchingCoords,
               };
             }
             return null;
           })
-          .filter(Boolean) as typeof ger.coordenadoresList;
+          .filter(Boolean) as typeof dir.gerenciasList;
 
-        if (gerMatches) return ger;
-        if (matchingCoords.length > 0) {
+        if (dirMatches) return dir;
+        if (matchingGerencias.length > 0) {
           return {
-            ...ger,
-            coordenadoresList: matchingCoords,
+            ...dir,
+            gerenciasList: matchingGerencias,
           };
         }
         return null;
@@ -272,35 +546,36 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
       .filter(Boolean) as typeof hierarchyTree;
   }, [hierarchyTree, searchTerm]);
 
-  // Contagens para o cabeçalho
+  // Contagens consolidadas para os cards do topo
+  const totalDiretorias = hierarchyTree.length;
   const totalGerentes = useMemo(() => {
-    const gSet = new Set<string>();
-    hierarchyTree.forEach(g => {
-      if (g.gerente && !g.gerente.includes('GERÊNCIA GERAL')) gSet.add(g.gerente);
-    });
-    return gSet.size || hierarchyTree.length;
+    const set = new Set<string>();
+    hierarchyTree.forEach(d => d.gerenciasList.forEach(g => {
+      if (g.gerente && !g.gerente.includes('GERÊNCIA GERAL')) set.add(g.gerente);
+    }));
+    return set.size;
   }, [hierarchyTree]);
 
   const totalCoordenadores = useMemo(() => {
-    const coords = new Set<string>();
-    hierarchyTree.forEach(g => {
+    const set = new Set<string>();
+    hierarchyTree.forEach(d => d.gerenciasList.forEach(g => {
       g.coordenadoresList.forEach(c => {
-        if (c.coordenador && !c.coordenador.includes('DIRETA')) coords.add(c.coordenador);
+        if (c.coordenador && !c.coordenador.includes('DIRETA')) set.add(c.coordenador);
       });
-    });
-    return coords.size;
+    }));
+    return set.size;
   }, [hierarchyTree]);
 
   const totalSupervisores = useMemo(() => {
-    const sups = new Set<string>();
-    hierarchyTree.forEach(g => {
+    const set = new Set<string>();
+    hierarchyTree.forEach(d => d.gerenciasList.forEach(g => {
       g.coordenadoresList.forEach(c => {
         c.supervisoresList.forEach(s => {
-          if (s.supervisor) sups.add(s.supervisor);
+          if (s.supervisor) set.add(s.supervisor);
         });
       });
-    });
-    return sups.size;
+    }));
+    return set.size;
   }, [hierarchyTree]);
 
   const totalColaboradores = rankAgg.length;
@@ -308,10 +583,17 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
   const totalSemApr = rankAgg.filter(i => i.count === 0).length;
   const totalAprs = rankAgg.reduce((acc, i) => acc + i.count, 0);
 
-  const toggleGerente = (gerName: string) => {
+  const toggleDiretoria = (dirKey: string) => {
+    setExpandedDiretorias(prev => ({
+      ...prev,
+      [dirKey]: prev[dirKey] === undefined ? false : !prev[dirKey]
+    }));
+  };
+
+  const toggleGerente = (gerKey: string) => {
     setExpandedGerentes(prev => ({
       ...prev,
-      [gerName]: prev[gerName] === undefined ? false : !prev[gerName]
+      [gerKey]: prev[gerKey] === undefined ? false : !prev[gerKey]
     }));
   };
 
@@ -325,41 +607,51 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
   const toggleSup = (supKey: string) => {
     setExpandedSups(prev => ({
       ...prev,
-      [supKey]: prev[supKey] === undefined ? false : !prev[supKey]
+      [supKey]: prev[supKey] === undefined ? true : !prev[supKey] // Padrão fechado para supervisores
     }));
   };
 
   const expandAll = () => {
+    const allD: Record<string, boolean> = {};
     const allG: Record<string, boolean> = {};
     const allC: Record<string, boolean> = {};
     const allS: Record<string, boolean> = {};
-    hierarchyTree.forEach(g => {
-      allG[g.gerente] = true;
-      g.coordenadoresList.forEach(c => {
-        allC[`${g.gerente}__${c.coordenador}`] = true;
-        c.supervisoresList.forEach(s => {
-          allS[`${g.gerente}__${c.coordenador}__${s.supervisor}`] = true;
+    hierarchyTree.forEach(d => {
+      allD[d.diretoria] = true;
+      d.gerenciasList.forEach(g => {
+        allG[`${d.diretoria}__${g.gerente}`] = true;
+        g.coordenadoresList.forEach(c => {
+          allC[`${d.diretoria}__${g.gerente}__${c.coordenador}`] = true;
+          c.supervisoresList.forEach(s => {
+            allS[`${d.diretoria}__${g.gerente}__${c.coordenador}__${s.supervisor}`] = true;
+          });
         });
       });
     });
+    setExpandedDiretorias(allD);
     setExpandedGerentes(allG);
     setExpandedCoords(allC);
     setExpandedSups(allS);
   };
 
   const collapseAll = () => {
+    const noneD: Record<string, boolean> = {};
     const noneG: Record<string, boolean> = {};
     const noneC: Record<string, boolean> = {};
     const noneS: Record<string, boolean> = {};
-    hierarchyTree.forEach(g => {
-      noneG[g.gerente] = false;
-      g.coordenadoresList.forEach(c => {
-        noneC[`${g.gerente}__${c.coordenador}`] = false;
-        c.supervisoresList.forEach(s => {
-          noneS[`${g.gerente}__${c.coordenador}__${s.supervisor}`] = false;
+    hierarchyTree.forEach(d => {
+      noneD[d.diretoria] = false;
+      d.gerenciasList.forEach(g => {
+        noneG[`${d.diretoria}__${g.gerente}`] = false;
+        g.coordenadoresList.forEach(c => {
+          noneC[`${d.diretoria}__${g.gerente}__${c.coordenador}`] = false;
+          c.supervisoresList.forEach(s => {
+            noneS[`${d.diretoria}__${g.gerente}__${c.coordenador}__${s.supervisor}`] = false;
+          });
         });
       });
     });
+    setExpandedDiretorias(noneD);
     setExpandedGerentes(noneG);
     setExpandedCoords(noneC);
     setExpandedSups(noneS);
@@ -368,6 +660,7 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
   if (!isOpen) return null;
 
   const leaderFiltersActive = [
+    ...selectedDiretorias.map(d => `Diretoria: ${d}`),
     ...selectedGerentes.map(g => `Gerente: ${g}`),
     ...selectedCoordenadores.map(c => `Coord: ${c}`),
     ...selectedSupervisores.map(s => `Sup: ${s}`),
@@ -375,7 +668,7 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
 
   const leaderTitle = leaderFiltersActive.length > 0
     ? leaderFiltersActive.join(' • ')
-    : 'Estrutura Completa de Gestão';
+    : 'Estrutura Completa da Organização';
 
   return (
     <AnimatePresence>
@@ -395,21 +688,21 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
           className="relative w-full max-w-6xl bg-white dark:bg-[#151d2f] rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 flex flex-col max-h-[92vh] z-10 overflow-hidden"
         >
           {/* Header */}
-          <div className="px-6 py-5 border-b border-gray-100 dark:border-gray-800 flex items-start justify-between bg-gradient-to-r from-purple-50/70 via-indigo-50/40 to-white dark:from-[#0f172a] dark:via-[#1e1b4b]/30 dark:to-[#0f172a]">
+          <div className="px-6 py-5 border-b border-gray-100 dark:border-gray-800 flex items-start justify-between bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-white dark:from-[#0f172a] dark:via-[#1e1b4b]/30 dark:to-[#0f172a]">
             <div>
               <div className="flex items-center gap-3">
                 <span className="p-2.5 bg-[#660099] text-white rounded-xl shadow-md">
-                  <Briefcase size={22} />
+                  <Compass size={22} />
                 </span>
                 <div>
                   <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                    Estrutura Hierárquica da Gestão
-                    <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/80 text-[#660099] dark:text-purple-300">
-                      Diretoria &gt; Gerência &gt; Coordenação &gt; Supervisão &gt; Campo
+                    Estrutura Organizacional e Hierarquia
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/80 text-[#660099] dark:text-purple-300">
+                      Diretoria ➔ Gerência ➔ Coordenação ➔ Supervisão ➔ Campo
                     </span>
                   </h2>
                   <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5 flex items-center gap-1.5">
-                    Filtro em Foco: <strong className="text-gray-900 dark:text-white font-semibold">{leaderTitle}</strong>
+                    Foco Ativo: <strong className="text-gray-900 dark:text-white font-semibold">{leaderTitle}</strong>
                   </p>
                 </div>
               </div>
@@ -437,8 +730,12 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
             </button>
           </div>
 
-          {/* Quick Metrics Cards */}
-          <div className="p-6 pb-2 grid grid-cols-2 sm:grid-cols-6 gap-3">
+          {/* Quick Metrics Cards (5 Níveis) */}
+          <div className="p-6 pb-2 grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div className="bg-blue-50/70 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/50 rounded-xl p-3">
+              <span className="text-[10px] font-semibold text-blue-700 dark:text-blue-400 uppercase">Diretorias</span>
+              <div className="text-xl font-bold text-blue-700 dark:text-blue-400 mt-0.5">{totalDiretorias}</div>
+            </div>
             <div className="bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50 rounded-xl p-3">
               <span className="text-[10px] font-semibold text-indigo-700 dark:text-indigo-400 uppercase">Gerências</span>
               <div className="text-xl font-bold text-indigo-700 dark:text-indigo-400 mt-0.5">{totalGerentes}</div>
@@ -451,27 +748,22 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
               <span className="text-[10px] font-semibold text-orange-700 dark:text-orange-400 uppercase">Supervisões</span>
               <div className="text-xl font-bold text-orange-700 dark:text-orange-400 mt-0.5">{totalSupervisores}</div>
             </div>
-            <div className="bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 rounded-xl p-3">
-              <span className="text-[10px] font-semibold text-gray-500 uppercase">Colaboradores</span>
-              <div className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{totalColaboradores}</div>
-            </div>
             <div className="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50 rounded-xl p-3">
-              <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 uppercase">Com APR</span>
-              <div className="text-xl font-bold text-emerald-700 dark:text-emerald-400 mt-0.5">{totalComApr}</div>
-            </div>
-            <div className="bg-amber-50/70 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/50 rounded-xl p-3">
-              <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 uppercase">Sem APR</span>
-              <div className="text-xl font-bold text-amber-700 dark:text-amber-400 mt-0.5">{totalSemApr}</div>
+              <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 uppercase">Colaboradores</span>
+              <div className="text-xl font-bold text-emerald-700 dark:text-emerald-400 mt-0.5 flex items-baseline gap-1.5">
+                <span>{totalColaboradores}</span>
+                <span className="text-[11px] font-normal text-emerald-600">({totalComApr} com APR)</span>
+              </div>
             </div>
           </div>
 
-          {/* Search and Expand/Collapse Bar */}
-          <div className="px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+          {/* Search Bar & Action Buttons */}
+          <div className="px-6 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 dark:border-gray-800">
             <div className="relative flex-1 min-w-[260px]">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Buscar por gerente, coordenador, supervisor, técnico, matrícula ou cidade..."
+                placeholder="Buscar por diretor, gerente, coordenador (ex: Garone), supervisor, técnico, matrícula ou cidade..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-9 pr-3 py-1.5 text-xs bg-gray-50 dark:bg-gray-800/70 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:border-purple-500"
@@ -495,236 +787,299 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
             </div>
           </div>
 
-          {/* Body: Hierarchical Accordion List (Gerente -> Coordenador -> Supervisor -> Colaboradores) */}
+          {/* Body: Hierarchical Accordion List */}
+          {/* NÍVEL 0: DIRETORIA (Diretor) -> NÍVEL 1: GERÊNCIA -> NÍVEL 2: COORDENAÇÃO -> NÍVEL 3: SUPERVISÃO -> NÍVEL 4: COLABORADORES */}
           <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-4">
             {filteredTree.length === 0 ? (
               <div className="py-12 text-center text-gray-400 dark:text-gray-500 text-sm">
                 Nenhum membro da hierarquia encontrado para os critérios selecionados.
               </div>
             ) : (
-              filteredTree.map(ger => {
-                const isGerExpanded = expandedGerentes[ger.gerente] !== false; // Padrão aberto
+              filteredTree.map(dir => {
+                const isDirExpanded = expandedDiretorias[dir.diretoria] !== false; // Padrão aberto
 
                 return (
                   <div
-                    key={ger.gerente}
-                    className="border-2 border-indigo-200 dark:border-indigo-900/60 rounded-2xl overflow-hidden bg-white dark:bg-gray-900/80 shadow-md"
+                    key={dir.diretoria}
+                    className="border-2 border-blue-200 dark:border-blue-900/60 rounded-2xl overflow-hidden bg-white dark:bg-gray-900/80 shadow-md"
                   >
-                    {/* NÍVEL 1: GERÊNCIA HEADER */}
+                    {/* NÍVEL 0: DIRETORIA & DIRETOR HEADER */}
                     <button
                       type="button"
-                      onClick={() => toggleGerente(ger.gerente)}
-                      className="w-full px-5 py-4 bg-gradient-to-r from-indigo-50 via-purple-50/40 to-white dark:from-indigo-950/50 dark:via-purple-950/30 dark:to-gray-900 flex items-center justify-between text-left transition-colors border-b border-indigo-100 dark:border-indigo-900/40"
+                      onClick={() => toggleDiretoria(dir.diretoria)}
+                      className="w-full px-5 py-4 bg-gradient-to-r from-blue-50 via-indigo-50/40 to-white dark:from-blue-950/50 dark:via-indigo-950/30 dark:to-gray-900 flex items-center justify-between text-left transition-colors border-b border-blue-100 dark:border-blue-900/40"
                     >
                       <div className="flex items-center gap-3">
-                        <span className="text-indigo-600 dark:text-indigo-400">
-                          {isGerExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+                        <span className="text-blue-600 dark:text-blue-400">
+                          {isDirExpanded ? <ChevronDown size={22} /> : <ChevronRight size={22} />}
                         </span>
                         <div>
-                          <div className="text-base font-extrabold text-gray-900 dark:text-white flex items-center gap-2">
-                            <span>{ger.gerente}</span>
-                            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-600 text-white shadow-xs tracking-wider">
-                              GERÊNCIA
+                          <div className="text-base font-extrabold text-gray-900 dark:text-white flex flex-wrap items-center gap-2">
+                            <span>Diretoria: {dir.diretoria}</span>
+                            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-700 text-white shadow-xs tracking-wider">
+                              DIRETORIA
                             </span>
-                            {ger.diretor && (
-                              <span className="text-xs text-gray-500 dark:text-gray-400 font-normal">
-                                • Diretor: {ger.diretor}
-                              </span>
-                            )}
+                          </div>
+                          <div className="text-xs text-blue-900 dark:text-blue-300 font-semibold mt-0.5 flex items-center gap-1.5">
+                            <ShieldCheck size={14} className="text-blue-600 dark:text-blue-400" />
+                            Diretor Regional: <strong className="text-gray-900 dark:text-white">{dir.diretor}</strong>
                           </div>
                         </div>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-3 text-xs">
                         <span className="text-gray-700 dark:text-gray-300 font-semibold bg-indigo-100/70 dark:bg-indigo-950/70 px-2 py-0.5 rounded-md">
-                          {ger.totalCoordenadores} {ger.totalCoordenadores === 1 ? 'coordenação' : 'coordenações'}
+                          {dir.totalGerencias} {dir.totalGerencias === 1 ? 'gerência' : 'gerências'}
                         </span>
                         <span className="text-gray-700 dark:text-gray-300 font-semibold bg-purple-100/70 dark:bg-purple-950/70 px-2 py-0.5 rounded-md">
-                          {ger.totalSupervisores} {ger.totalSupervisores === 1 ? 'supervisão' : 'supervisões'}
+                          {dir.totalCoordenadores} {dir.totalCoordenadores === 1 ? 'coordenação' : 'coordenações'}
+                        </span>
+                        <span className="text-gray-700 dark:text-gray-300 font-semibold bg-orange-100/70 dark:bg-orange-950/70 px-2 py-0.5 rounded-md">
+                          {dir.totalSupervisores} {dir.totalSupervisores === 1 ? 'supervisão' : 'supervisões'}
                         </span>
                         <span className="text-gray-700 dark:text-gray-300 font-semibold bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-md">
-                          {ger.totalColaboradores} colaboradores
+                          {dir.totalColaboradores} colaboradores
                         </span>
-                        <span className="text-emerald-700 dark:text-emerald-300 font-semibold bg-emerald-100/80 dark:bg-emerald-950/80 px-2 py-0.5 rounded-md">
-                          {ger.comApr} com APR
-                        </span>
-                        {ger.semApr > 0 && (
-                          <span className="text-amber-700 dark:text-amber-300 font-semibold bg-amber-100/80 dark:bg-amber-950/80 px-2 py-0.5 rounded-md">
-                            {ger.semApr} sem APR
-                          </span>
-                        )}
                         <span className="text-white font-bold bg-[#660099] px-2.5 py-0.5 rounded-md shadow-xs">
-                          {ger.totalAprs} APRs
+                          {dir.totalAprs} APRs
                         </span>
                       </div>
                     </button>
 
-                    {/* NÍVEL 2: COORDENAÇÕES DESTA GERÊNCIA */}
-                    {isGerExpanded && (
-                      <div className="p-4 space-y-3.5 bg-gray-50/50 dark:bg-gray-900/40">
-                        {ger.coordenadoresList.map(coord => {
-                          const coordKey = `${ger.gerente}__${coord.coordenador}`;
-                          const isCoordExpanded = expandedCoords[coordKey] !== false; // Padrão aberto
+                    {/* NÍVEL 1: GERÊNCIAS DESTA DIRETORIA */}
+                    {isDirExpanded && (
+                      <div className="p-4 space-y-4 bg-gray-50/50 dark:bg-gray-900/40">
+                        {dir.gerenciasList.map(ger => {
+                          const gerKey = `${dir.diretoria}__${ger.gerente}`;
+                          const isGerExpanded = expandedGerentes[gerKey] !== false; // Padrão aberto
 
                           return (
                             <div
-                              key={coordKey}
-                              className="border border-purple-200 dark:border-purple-900/60 rounded-xl overflow-hidden bg-white dark:bg-[#151d2f] shadow-xs"
+                              key={gerKey}
+                              className="border border-indigo-200 dark:border-indigo-900/60 rounded-xl overflow-hidden bg-white dark:bg-[#151d2f] shadow-xs"
                             >
-                              {/* COORDENADOR HEADER */}
+                              {/* GERENTE HEADER */}
                               <button
                                 type="button"
-                                onClick={() => toggleCoord(coordKey)}
-                                className="w-full px-4 py-3 bg-gradient-to-r from-purple-50/80 to-indigo-50/30 dark:from-purple-950/40 dark:to-indigo-950/20 hover:from-purple-100/60 dark:hover:from-purple-950/60 flex items-center justify-between text-left transition-colors border-b border-purple-100 dark:border-purple-900/30"
+                                onClick={() => toggleGerente(gerKey)}
+                                className="w-full px-4 py-3.5 bg-gradient-to-r from-indigo-50/80 to-purple-50/30 dark:from-indigo-950/40 dark:to-purple-950/20 hover:from-indigo-100/60 dark:hover:from-indigo-950/60 flex items-center justify-between text-left transition-colors border-b border-indigo-100 dark:border-indigo-900/30"
                               >
                                 <div className="flex items-center gap-2.5">
-                                  <span className="text-purple-600 dark:text-purple-400">
-                                    {isCoordExpanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
+                                  <span className="text-indigo-600 dark:text-indigo-400">
+                                    {isGerExpanded ? <ChevronDown size={19} /> : <ChevronRight size={19} />}
                                   </span>
-                                  <div className="flex items-center gap-2 text-sm font-bold text-gray-900 dark:text-white">
-                                    <span>{coord.coordenador}</span>
-                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-600 text-white shadow-xs">
-                                      COORDENAÇÃO
-                                    </span>
+                                  <div>
+                                    <div className="flex items-center gap-2 text-sm font-bold text-gray-900 dark:text-white">
+                                      <span>{ger.gerente}</span>
+                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-600 text-white shadow-xs">
+                                        GERÊNCIA
+                                      </span>
+                                      {ger.cidade && (
+                                        <span className="text-xs text-gray-500 dark:text-gray-400 font-normal">
+                                          ({ger.cidade})
+                                        </span>
+                                      )}
+                                    </div>
+                                    {ger.cargo && ger.cargo !== 'GERENTE' && (
+                                      <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">{ger.cargo}</p>
+                                    )}
                                   </div>
                                 </div>
 
                                 <div className="flex items-center gap-2.5 text-xs">
                                   <span className="text-gray-600 dark:text-gray-300 font-medium">
-                                    <strong>{coord.supervisoresList.length}</strong> {coord.supervisoresList.length === 1 ? 'supervisão' : 'supervisões'}
+                                    <strong>{ger.totalCoordenadores}</strong> {ger.totalCoordenadores === 1 ? 'coordenação' : 'coordenações'}
                                   </span>
                                   <span className="text-gray-600 dark:text-gray-300 font-medium">
-                                    <strong>{coord.totalColaboradores}</strong> colab.
+                                    <strong>{ger.totalSupervisores}</strong> {ger.totalSupervisores === 1 ? 'supervisão' : 'supervisões'}
+                                  </span>
+                                  <span className="text-gray-600 dark:text-gray-300 font-medium">
+                                    <strong>{ger.totalColaboradores}</strong> colab.
                                   </span>
                                   <span className="text-emerald-700 dark:text-emerald-300 font-semibold bg-emerald-100/80 dark:bg-emerald-950/80 px-2 py-0.5 rounded-md">
-                                    {coord.comApr} com APR
+                                    {ger.comApr} com APR
                                   </span>
-                                  {coord.semApr > 0 && (
-                                    <span className="text-amber-700 dark:text-amber-300 font-semibold bg-amber-100/80 dark:bg-amber-950/80 px-2 py-0.5 rounded-md">
-                                      {coord.semApr} sem APR
-                                    </span>
-                                  )}
-                                  <span className="text-purple-700 dark:text-purple-300 font-bold bg-purple-100 dark:bg-purple-900/60 px-2 py-0.5 rounded-md">
-                                    {coord.totalAprs} APRs
+                                  <span className="text-purple-700 dark:text-purple-300 font-bold bg-purple-100/80 dark:bg-purple-950/80 px-2 py-0.5 rounded-md">
+                                    {ger.totalAprs} APRs
                                   </span>
                                 </div>
                               </button>
 
-                              {/* NÍVEL 3: SUPERVISORES DESTE COORDENADOR */}
-                              {isCoordExpanded && (
+                              {/* NÍVEL 2: COORDENAÇÕES DESTA GERÊNCIA */}
+                              {isGerExpanded && (
                                 <div className="p-3.5 space-y-3 bg-gray-50/30 dark:bg-gray-900/30">
-                                  {coord.supervisoresList.map(sup => {
-                                    const supKey = `${ger.gerente}__${coord.coordenador}__${sup.supervisor}`;
-                                    const isSupExpanded = expandedSups[supKey] !== false; // Padrão aberto
+                                  {ger.coordenadoresList.map(coord => {
+                                    const coordKey = `${dir.diretoria}__${ger.gerente}__${coord.coordenador}`;
+                                    const isCoordExpanded = expandedCoords[coordKey] !== false; // Padrão aberto
+                                    const isGarone = coord.coordenador.includes('GARONE');
 
                                     return (
                                       <div
-                                        key={supKey}
-                                        className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden bg-white dark:bg-[#1a2236] shadow-2xs"
+                                        key={coordKey}
+                                        className={`border rounded-xl overflow-hidden bg-white dark:bg-[#111827] shadow-xs ${
+                                          isGarone ? 'border-purple-400 dark:border-purple-600 ring-2 ring-purple-400/20' : 'border-purple-200 dark:border-purple-900/60'
+                                        }`}
                                       >
-                                        {/* SUPERVISOR HEADER */}
+                                        {/* COORDENADOR HEADER */}
                                         <button
                                           type="button"
-                                          onClick={() => toggleSup(supKey)}
-                                          className="w-full px-3.5 py-2.5 bg-gray-50/80 dark:bg-gray-800/60 hover:bg-gray-100/80 dark:hover:bg-gray-800 flex items-center justify-between text-left transition-colors"
+                                          onClick={() => toggleCoord(coordKey)}
+                                          className="w-full px-4 py-2.5 bg-gradient-to-r from-purple-50/70 to-white dark:from-purple-950/30 dark:to-gray-900 hover:from-purple-100/60 flex items-center justify-between text-left transition-colors border-b border-purple-100 dark:border-purple-900/30"
                                         >
                                           <div className="flex items-center gap-2">
-                                            <span className="text-gray-400">
-                                              {isSupExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                            <span className="text-purple-600 dark:text-purple-400">
+                                              {isCoordExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                                             </span>
-                                            <div className="flex items-center gap-2 text-xs font-bold text-gray-900 dark:text-white">
-                                              <span>{sup.supervisor}</span>
-                                              <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-950/80 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-900">
-                                                SUPERVISÃO
-                                              </span>
-                                              {sup.cidade && (
-                                                <span className="text-[10px] text-gray-500 font-normal">
-                                                  • {sup.cidade}
+                                            <div>
+                                              <div className="flex items-center gap-2 text-xs font-bold text-gray-900 dark:text-white">
+                                                <span>{coord.coordenador}</span>
+                                                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-purple-600 text-white shadow-xs">
+                                                  COORDENAÇÃO
                                                 </span>
+                                                {coord.cidade && (
+                                                  <span className="text-[11px] text-gray-500 dark:text-gray-400 font-normal">
+                                                    ({coord.cidade})
+                                                  </span>
+                                                )}
+                                              </div>
+                                              {coord.cargo && (
+                                                <p className="text-[10px] text-gray-500 dark:text-gray-400">{coord.cargo}</p>
                                               )}
                                             </div>
                                           </div>
 
                                           <div className="flex items-center gap-2 text-xs">
-                                            <span className="text-gray-500 text-[11px]">
-                                              {sup.colaboradores.length} {sup.colaboradores.length === 1 ? 'colaborador' : 'colaboradores'}
+                                            <span className="text-gray-600 dark:text-gray-300 text-[11px]">
+                                              <strong>{coord.supervisoresList.length}</strong> {coord.supervisoresList.length === 1 ? 'supervisão' : 'supervisões'}
                                             </span>
-                                            <span className="text-emerald-600 dark:text-emerald-400 font-medium text-[11px]">
-                                              {sup.comApr} com APR
+                                            <span className="text-gray-600 dark:text-gray-300 text-[11px]">
+                                              <strong>{coord.totalColaboradores}</strong> colab.
                                             </span>
-                                            {sup.semApr > 0 && (
-                                              <span className="text-amber-600 dark:text-amber-400 font-medium text-[11px]">
-                                                {sup.semApr} sem APR
-                                              </span>
-                                            )}
-                                            <span className="text-purple-600 dark:text-purple-400 font-bold bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded text-[11px]">
-                                              {sup.totalAprs} APRs
+                                            <span className="text-emerald-700 dark:text-emerald-300 font-semibold bg-emerald-100/80 dark:bg-emerald-950/80 px-1.5 py-0.5 rounded text-[11px]">
+                                              {coord.comApr} com APR
+                                            </span>
+                                            <span className="text-purple-700 dark:text-purple-300 font-bold bg-purple-100/80 dark:bg-purple-950/80 px-2 py-0.5 rounded text-[11px]">
+                                              {coord.totalAprs} APRs
                                             </span>
                                           </div>
                                         </button>
 
-                                        {/* NÍVEL 4: TABELA DE COLABORADORES */}
-                                        {isSupExpanded && (
-                                          <div className="overflow-x-auto">
-                                            <table className="w-full text-left text-xs">
-                                              <thead className="bg-gray-50/70 dark:bg-gray-800/40 text-gray-500 uppercase text-[10px] border-t border-b border-gray-100 dark:border-gray-800">
-                                                <tr>
-                                                  <th className="px-4 py-2 font-semibold">Colaborador</th>
-                                                  <th className="px-4 py-2 font-semibold">Matrícula</th>
-                                                  <th className="px-4 py-2 font-semibold">Cargo</th>
-                                                  <th className="px-4 py-2 font-semibold">Cidade</th>
-                                                  <th className="px-4 py-2 font-semibold text-center">Status APR</th>
-                                                  <th className="px-4 py-2 font-semibold text-right">APRs Realizadas</th>
-                                                  <th className="px-4 py-2 font-semibold text-right">Duração Média</th>
-                                                </tr>
-                                              </thead>
-                                              <tbody className="divide-y divide-gray-100 dark:divide-gray-800/60">
-                                                {sup.colaboradores.map(c => {
-                                                  const hasApr = c.count > 0;
-                                                  return (
-                                                    <tr
-                                                      key={c.matricula + c.name}
-                                                      className="hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors"
+                                        {/* NÍVEL 3: SUPERVISÕES DESTA COORDENAÇÃO */}
+                                        {isCoordExpanded && (
+                                          <div className="p-3 space-y-2.5 bg-gray-50/50 dark:bg-gray-950/30">
+                                            {coord.supervisoresList.length === 0 ? (
+                                              <div className="py-2.5 px-3 text-xs text-gray-400 dark:text-gray-500 italic bg-gray-100/60 dark:bg-gray-800/40 rounded-lg flex items-center gap-2">
+                                                <User size={13} className="text-gray-400" />
+                                                Coordenação cadastrada sem supervisões diretas / técnicos de campo ativos com emissão no período.
+                                              </div>
+                                            ) : (
+                                              coord.supervisoresList.map(sup => {
+                                                const supKey = `${dir.diretoria}__${ger.gerente}__${coord.coordenador}__${sup.supervisor}`;
+                                                const isSupExpanded = expandedSups[supKey] === true;
+
+                                                return (
+                                                  <div
+                                                    key={supKey}
+                                                    className="border border-orange-200 dark:border-orange-900/50 rounded-lg overflow-hidden bg-white dark:bg-[#1a2333]"
+                                                  >
+                                                    {/* SUPERVISOR HEADER */}
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => toggleSup(supKey)}
+                                                      className="w-full px-3.5 py-2 bg-gradient-to-r from-orange-50/60 to-white dark:from-orange-950/20 dark:to-transparent hover:from-orange-100/50 flex items-center justify-between text-left transition-colors border-b border-orange-100 dark:border-orange-900/20"
                                                     >
-                                                      <td className="px-4 py-2.5 font-medium text-gray-900 dark:text-white flex items-center gap-1.5">
-                                                        {hasApr ? (
-                                                          <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />
-                                                        ) : (
-                                                          <AlertTriangle size={13} className="text-amber-500 shrink-0" />
-                                                        )}
-                                                        <span>{c.name}</span>
-                                                      </td>
-                                                      <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 font-mono text-[11px]">
-                                                        {c.matricula}
-                                                      </td>
-                                                      <td className="px-4 py-2.5 text-gray-600 dark:text-gray-300 text-[11px]">
-                                                        {c.cargo || 'TÉCNICO DE CAMPO'}
-                                                      </td>
-                                                      <td className="px-4 py-2.5 text-gray-600 dark:text-gray-300">
-                                                        {c.cidade || '-'}
-                                                      </td>
-                                                      <td className="px-4 py-2.5 text-center">
-                                                        {hasApr ? (
-                                                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-400">
-                                                            Ativo com APR
+                                                      <div className="flex items-center gap-2">
+                                                        <span className="text-orange-600 dark:text-orange-400">
+                                                          {isSupExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                                                        </span>
+                                                        <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-900 dark:text-white">
+                                                          <span>{sup.supervisor}</span>
+                                                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-orange-500 text-white">
+                                                            SUPERVISÃO
                                                           </span>
-                                                        ) : (
-                                                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 dark:bg-amber-950/70 text-amber-700 dark:text-amber-400">
-                                                            Sem APR
+                                                          {sup.cidade && (
+                                                            <span className="text-[10px] text-gray-500 dark:text-gray-400 font-normal">
+                                                              • {sup.cidade}
+                                                            </span>
+                                                          )}
+                                                        </div>
+                                                      </div>
+
+                                                      <div className="flex items-center gap-2 text-xs">
+                                                        <span className="text-gray-500 dark:text-gray-400 text-[11px]">
+                                                          {sup.colaboradores.length} {sup.colaboradores.length === 1 ? 'técnico' : 'técnicos'}
+                                                        </span>
+                                                        <span className="text-emerald-700 dark:text-emerald-300 font-semibold bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded text-[10px]">
+                                                          {sup.comApr} com APR
+                                                        </span>
+                                                        {sup.semApr > 0 && (
+                                                          <span className="text-amber-700 dark:text-amber-300 font-semibold bg-amber-50 dark:bg-amber-950/50 px-1.5 py-0.5 rounded text-[10px]">
+                                                            {sup.semApr} sem APR
                                                           </span>
                                                         )}
-                                                      </td>
-                                                      <td className="px-4 py-2.5 text-right font-bold text-gray-900 dark:text-white">
-                                                        {c.count}
-                                                      </td>
-                                                      <td className="px-4 py-2.5 text-right text-gray-500 dark:text-gray-400 font-mono text-[11px]">
-                                                        {c.avgDuration}
-                                                      </td>
-                                                    </tr>
-                                                  );
-                                                })}
-                                              </tbody>
-                                            </table>
+                                                        <span className="text-white font-bold bg-[#660099] px-2 py-0.5 rounded text-[10px]">
+                                                          {sup.totalAprs} APRs
+                                                        </span>
+                                                      </div>
+                                                    </button>
+
+                                                    {/* NÍVEL 4: TÉCNICOS / COLABORADORES SOB ESTA SUPERVISÃO */}
+                                                    {isSupExpanded && (
+                                                      <div className="p-2.5 overflow-x-auto">
+                                                        <table className="w-full text-left text-xs">
+                                                          <thead>
+                                                            <tr className="border-b border-gray-100 dark:border-gray-800 text-[10px] uppercase font-bold text-gray-400 tracking-wider">
+                                                              <th className="py-1 px-2">Colaborador</th>
+                                                              <th className="py-1 px-2">Matrícula</th>
+                                                              <th className="py-1 px-2">Cargo</th>
+                                                              <th className="py-1 px-2">Cidade</th>
+                                                              <th className="py-1 px-2 text-center">APRs</th>
+                                                              <th className="py-1 px-2 text-center">Tempo Médio</th>
+                                                              <th className="py-1 px-2 text-right">Status</th>
+                                                            </tr>
+                                                          </thead>
+                                                          <tbody className="divide-y divide-gray-50 dark:divide-gray-800/60">
+                                                            {sup.colaboradores.map(c => (
+                                                              <tr key={c.name + c.matricula} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                                                <td className="py-1.5 px-2 font-medium text-gray-900 dark:text-white">
+                                                                  {c.name}
+                                                                </td>
+                                                                <td className="py-1.5 px-2 text-gray-500 dark:text-gray-400 font-mono text-[11px]">
+                                                                  {c.matricula}
+                                                                </td>
+                                                                <td className="py-1.5 px-2 text-gray-600 dark:text-gray-300 text-[11px]">
+                                                                  {c.cargo}
+                                                                </td>
+                                                                <td className="py-1.5 px-2 text-gray-500 dark:text-gray-400">
+                                                                  {c.cidade}
+                                                                </td>
+                                                                <td className="py-1.5 px-2 text-center font-bold text-gray-900 dark:text-white">
+                                                                  {c.count}
+                                                                </td>
+                                                                <td className="py-1.5 px-2 text-center text-gray-500 dark:text-gray-400">
+                                                                  {c.avgDuration}
+                                                                </td>
+                                                                <td className="py-1.5 px-2 text-right">
+                                                                  {c.count > 0 ? (
+                                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                                                                      <CheckCircle2 size={10} /> Ativo
+                                                                    </span>
+                                                                  ) : (
+                                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300">
+                                                                      <AlertTriangle size={10} /> Sem APR
+                                                                    </span>
+                                                                  )}
+                                                                </td>
+                                                               </tr>
+                                                            ))}
+                                                          </tbody>
+                                                        </table>
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })
+                                            )}
                                           </div>
                                         )}
                                       </div>
@@ -744,13 +1099,13 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
           </div>
 
           {/* Footer */}
-          <div className="px-6 py-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-[#0f172a]/50 text-xs">
-            <span className="text-gray-500">
-              Total listado: <strong>{totalColaboradores} colaboradores</strong> em <strong>{totalGerentes} gerências</strong>, <strong>{totalCoordenadores} coordenações</strong> e <strong>{totalSupervisores} supervisões</strong>
-            </span>
+          <div className="px-6 py-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-[#0f172a] flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+            <div>
+              Total auditado na visualização: <strong>{totalColaboradores}</strong> colaboradores ({totalComApr} ativos / {totalSemApr} sem APR) • <strong>{totalAprs}</strong> APRs consolidadas.
+            </div>
             <button
               onClick={onClose}
-              className="px-4 py-1.5 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium rounded-xl transition-all"
+              className="px-4 py-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-semibold rounded-xl transition-all"
             >
               Fechar
             </button>

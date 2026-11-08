@@ -552,8 +552,11 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       const c = (item.coordenador || '').trim().toUpperCase();
       if (c && isPersonName(c) && !c.includes('DIRETA')) coords.add(c);
     });
+    allCoordenadores.forEach(c => {
+      if (c && isPersonName(c) && !c.includes('DIRETA')) coords.add(c);
+    });
     return Array.from(coords).sort();
-  }, [allRankAgg]);
+  }, [allRankAgg, allCoordenadores]);
 
   const supervisoresNoFiltro = useMemo(() => {
     const sups = new Set<string>();
@@ -561,8 +564,11 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       const s = (item.supervisor || '').trim().toUpperCase();
       if (s && isPersonName(s)) sups.add(s);
     });
+    allSupervisores.forEach(s => {
+      if (s && isPersonName(s)) sups.add(s);
+    });
     return Array.from(sups).sort();
-  }, [allRankAgg]);
+  }, [allRankAgg, allSupervisores]);
 
   const totalColaboradores = allRankAgg.length;
   const comAprCount = useMemo(() => allRankAgg.filter(i => i.count > 0).length, [allRankAgg]);
@@ -1158,6 +1164,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
         selectedDiretorias={selectedDiretorias}
         selectedCities={selectedCities}
         rankAgg={allRankAgg}
+        liderancas={liderancas}
       />
 
     </div>

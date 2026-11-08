@@ -417,17 +417,16 @@ export async function GET(req: NextRequest) {
           return null;
         };
 
+        const DIRECTOR_SPI = 'SAMUEL ROSSI DO NASCIMENTO';
+        const DIRECTOR_SPC = 'ELISEU ROBERTO OLIVEIRA';
+
         const classifyLeaderRole = (cargo: string | null | undefined): 'DIRETOR' | 'GERENTE' | 'COORDENADOR' | 'SUPERVISOR' => {
           const c = cleanStr(cargo);
           if (
             c.startsWith('DIR ') ||
             c.startsWith('DIR.') ||
             c.includes('DIRETOR') ||
-            c.includes('DIRETORIA') ||
-            c.startsWith('VP ') ||
-            c.includes('VICE PRESID') ||
-            c.includes('PRESIDENTE') ||
-            c.includes('CHIEF')
+            c.includes('DIRETORIA')
           ) {
             return 'DIRETOR';
           }
@@ -469,6 +468,7 @@ export async function GET(req: NextRequest) {
           diretoria: string;
           gerente?: string;
           coordenador?: string;
+          diretor?: string;
           cidade: string;
           regional: string;
         }>();
@@ -481,7 +481,7 @@ export async function GET(req: NextRequest) {
           chain: string[];
         }
 
-        // Rastreamento hierárquico completo em subida:
+        // Rastreamento hierárquico rigoroso:
         // Colaborador -> Supervisor -> Coordenador -> Gerente -> Diretor
         const buildHierarquia = (
           initialGestor: string | null | undefined,
@@ -489,8 +489,10 @@ export async function GET(req: NextRequest) {
           colabCidade: string | null | undefined,
           colabRegional: 'SPC' | 'SPI' | null | undefined
         ): HierarquiaChain => {
+          const defaultDirector = (colabDir?.includes('INTERIOR') || colabRegional === 'SPI') ? DIRECTOR_SPI : DIRECTOR_SPC;
+
           const result: HierarquiaChain = {
-            diretor: null,
+            diretor: defaultDirector,
             gerente: null,
             coordenador: null,
             supervisor: null,
@@ -513,7 +515,9 @@ export async function GET(req: NextRequest) {
 
             const personPO = findPoPerson(currentRaw);
             const cargoUpper = cleanStr(personPO?.cargo);
-            const tipo = classifyLeaderRole(cargoUpper);
+
+            const isKnownDirector = cleanName === DIRECTOR_SPI || cleanName === DIRECTOR_SPC || cargoUpper.startsWith('DIR SERVICOS AO CLIENTE');
+            const tipo = isKnownDirector ? 'DIRETOR' : classifyLeaderRole(cargoUpper);
 
             chainNodes.push({
               nome: cleanName,
@@ -523,65 +527,64 @@ export async function GET(req: NextRequest) {
             });
             result.chain.push(cleanName);
 
+            // Se encontrou o Diretor regional de Serviços ao Cliente, INTERROMPE A SUBIDA (não sobe para VP/Presidência!)
+            if (isKnownDirector || tipo === 'DIRETOR') {
+              break;
+            }
+
             currentRaw = personPO?.gestor_atual || personPO?.gestor ? String(personPO.gestor_atual || personPO.gestor).trim() : null;
           }
 
           if (chainNodes.length > 0) {
-            // 1. Identificar Diretor
-            const dirNode = chainNodes.slice().reverse().find(n => n.tipo === 'DIRETOR');
-            if (dirNode) result.diretor = dirNode.nome;
+            // 1. Diretor: busca quem é Diretor na cadeia (ou usa o diretor padrão da regional)
+            const dirNode = chainNodes.find(n => n.tipo === 'DIRETOR' || n.nome === DIRECTOR_SPI || n.nome === DIRECTOR_SPC);
+            if (dirNode) {
+              result.diretor = dirNode.nome;
+            }
 
-            // 2. Identificar Gerente
-            const gerNode = chainNodes.slice().reverse().find(n => n.tipo === 'GERENTE');
-            if (gerNode) result.gerente = gerNode.nome;
+            // 2. Gerente: pessoa estritamente com cargo de gerência
+            const gerNode = chainNodes.find(n => n.tipo === 'GERENTE');
+            if (gerNode) {
+              result.gerente = gerNode.nome;
+            }
 
-            // 3. Identificar Coordenador
+            // 3. Coordenador: pessoa estritamente com cargo de coordenação
             const coordNode = chainNodes.find(n => n.tipo === 'COORDENADOR');
-            if (coordNode) result.coordenador = coordNode.nome;
+            if (coordNode) {
+              result.coordenador = coordNode.nome;
+            }
 
-            // 4. Identificar Supervisor
+            // 4. Supervisor: pessoa com cargo de supervisão
             const supNode = chainNodes.find(n => n.tipo === 'SUPERVISOR');
-            if (supNode) result.supervisor = supNode.nome;
-
-            // Fallbacks inteligentes por profundidade para líderes sem cargo explícito:
-            if (!result.supervisor) {
+            if (supNode) {
+              result.supervisor = supNode.nome;
+            } else if (chainNodes[0] && chainNodes[0].tipo !== 'DIRETOR' && chainNodes[0].tipo !== 'GERENTE' && chainNodes[0].tipo !== 'COORDENADOR') {
+              // Se o líder imediato não for Diretor, Gerente ou Coordenador, é um supervisor de campo
               result.supervisor = chainNodes[0].nome;
             }
-            if (!result.coordenador && chainNodes.length > 1) {
-              const cand = chainNodes.find(n => n.nome !== result.supervisor && n.nome !== result.gerente && n.nome !== result.diretor);
-              if (cand) result.coordenador = cand.nome;
-            }
-            if (!result.gerente && chainNodes.length > 2) {
-              const cand = chainNodes.slice(2).find(n => n.nome !== result.diretor);
-              if (cand) result.gerente = cand.nome;
-            }
-            if (!result.diretor) {
-              if (colabDir?.includes('INTERIOR') || colabRegional === 'SPI') {
-                result.diretor = 'SAMUEL ROSSI DO NASCIMENTO';
-              } else if (colabDir?.includes('CAPITAL') || colabRegional === 'SPC') {
-                result.diretor = 'ELISEU ROBERTO OLIVEIRA';
+
+            // Se não houver supervisor explícito porque o técnico responde direto à coordenação/gerência
+            if (!result.supervisor && chainNodes[0]) {
+              if (chainNodes[0].tipo === 'COORDENADOR') {
+                result.supervisor = `${chainNodes[0].nome} (Coord. Direta)`;
+              } else if (chainNodes[0].tipo === 'GERENTE') {
+                result.supervisor = `${chainNodes[0].nome} (Gerência Direta)`;
               }
             }
 
-            // Registrar cada líder no liderancasMap com seu papel canônico
+            // Registrar cada líder no liderancasMap com seu papel canônico inalterado
             chainNodes.forEach(node => {
               if (colabDir && ALLOWED_DIRETORIAS.includes(colabDir)) {
                 const mapKey = `${node.nome}__${colabDir}__${colabCidade || ''}`;
                 if (!liderancasMap.has(mapKey)) {
-                  const resolvedTipo = (
-                    node.nome === result.diretor ? 'DIRETOR' :
-                    node.nome === result.gerente ? 'GERENTE' :
-                    node.nome === result.coordenador ? 'COORDENADOR' :
-                    node.nome === result.supervisor ? 'SUPERVISOR' : node.tipo
-                  );
-
                   liderancasMap.set(mapKey, {
                     nome: node.nome,
                     cargo: node.cargo,
-                    tipo: resolvedTipo,
+                    tipo: node.tipo,
                     diretoria: colabDir,
-                    gerente: result.gerente || undefined,
-                    coordenador: result.coordenador || undefined,
+                    diretor: result.diretor || defaultDirector,
+                    gerente: node.tipo !== 'DIRETOR' && node.tipo !== 'GERENTE' ? (result.gerente || undefined) : undefined,
+                    coordenador: node.tipo === 'SUPERVISOR' ? (result.coordenador || undefined) : undefined,
                     cidade: colabCidade || cleanCidade(node.personPO?.cidade_comercial) || 'SÃO PAULO',
                     regional: colabRegional || getRegional(cleanCidade(node.personPO?.cidade_comercial)) || (colabDir.includes('INTERIOR') ? 'SPI' : 'SPC')
                   });
@@ -595,6 +598,60 @@ export async function GET(req: NextRequest) {
 
         const INTERIOR = 'DIR SERVICOS AO CLIENTE SP INTERIOR';
         const CAPITAL = 'DIR SERVICOS AO CLIENTE SP CAPITAL';
+
+        // Pré-indexar TODAS as lideranças corporativas do PO (poRes.rows)
+        // Isso garante que líderes como RICARDO ALEXANDRE GARONE HENRIQUES, coordenadores e gerentes
+        // estejam sempre visíveis nos seletores e no modal hierárquico, mesmo sem APR emitida no mês.
+        for (const p of poRes.rows) {
+          const nomeClean = normNome(p.nome);
+          if (!nomeClean || !isPersonName(nomeClean)) continue;
+
+          const cargoClean = cleanStr(p.cargo);
+          const isKnownDirector = nomeClean === DIRECTOR_SPI || nomeClean === DIRECTOR_SPC || cargoClean.startsWith('DIR SERVICOS AO CLIENTE');
+          const role = isKnownDirector ? 'DIRETOR' : classifyLeaderRole(cargoClean);
+          if (role !== 'DIRETOR' && role !== 'GERENTE' && role !== 'COORDENADOR' && role !== 'SUPERVISOR') {
+            continue;
+          }
+
+          const cidade = cleanCidade(p.cidade_comercial) || null;
+          const reg = getRegional(cidade);
+          let rawDir = p.diretoria_3 || null;
+          let dir = normalizeDiretoria(rawDir, reg);
+          if (!dir || !ALLOWED_DIRETORIAS.includes(dir)) {
+            if (reg === 'SPI' || cleanStr(p.diretoria_3).includes('INTERIOR')) {
+              dir = INTERIOR;
+            } else if (reg === 'SPC' || cleanStr(p.diretoria_3).includes('CAPITAL')) {
+              dir = CAPITAL;
+            }
+          }
+          if (!dir || !ALLOWED_DIRETORIAS.includes(dir)) continue;
+
+          const diretor = (dir.includes('INTERIOR') || reg === 'SPI') ? DIRECTOR_SPI : DIRECTOR_SPC;
+          let gerente: string | undefined = undefined;
+          let coordenador: string | undefined = undefined;
+
+          if (role !== 'DIRETOR' && p.gestor) {
+            const hLeader = buildHierarquia(p.gestor, dir, cidade, reg);
+            gerente = hLeader.gerente || (role === 'COORDENADOR' && hLeader.chain[0] ? hLeader.chain[0] : undefined);
+            coordenador = hLeader.coordenador || undefined;
+          }
+
+          const mapKey = `${nomeClean}__${dir}__${cidade || ''}`;
+          if (!liderancasMap.has(mapKey)) {
+            liderancasMap.set(mapKey, {
+              nome: nomeClean,
+              cargo: p.cargo || role,
+              tipo: role,
+              diretoria: dir,
+              diretor,
+              gerente: role === 'DIRETOR' || role === 'GERENTE' ? undefined : gerente,
+              coordenador: role === 'SUPERVISOR' ? coordenador : undefined,
+              cidade: cidade || (dir.includes('INTERIOR') ? 'CAMPINAS' : 'SÃO PAULO'),
+              regional: reg || (dir.includes('INTERIOR') ? 'SPI' : 'SPC'),
+            });
+          }
+        }
+
         const seenNumbers = new Set<string>();
         rows = aprRes.rows
           .filter((a: any) => {
