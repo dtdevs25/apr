@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     const buffer = Buffer.from(arrayBuffer);
 
     const workbook = xlsx.read(buffer, { type: 'buffer' });
-    // Localizar com precisão a aba que contenha os dados operacionais (GESTOR_ATUAL e MATRÍCULA)
+    // Localizar com precisão a aba que contenha os dados operacionais (GESTOR, GESTOR_ATUAL ou GESTOR REVISAO e MATRÍCULA)
     let targetSheetName = workbook.SheetNames[0];
     let foundMatchingSheet = false;
     for (const name of workbook.SheetNames) {
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
       for (const row of (rows || []).slice(0, 10)) {
         if (Array.isArray(row)) {
           const normalized = row.map(c => normalizeKey(String(c || '')));
-          if (normalized.some(k => k.includes('gestoratual')) && normalized.some(k => k.includes('matricula') || k.includes('re'))) {
+          if (normalized.some(k => k.includes('gestor')) && normalized.some(k => k.includes('matricula') || k.includes('re'))) {
             targetSheetName = name;
             foundMatchingSheet = true;
             break;
@@ -82,8 +82,8 @@ export async function POST(req: Request) {
       matricula: findHeader(['MATRÍCULA', 'MATRICULA', 'RE', 'USER ID SSFF']),
       nome: findHeader(['NOME']),
       gestorOriginal: findHeader(['GESTOR']),
-      gestorAtual: findHeader(['GESTOR_ATUAL', 'GESTOR ATUAL', 'SUPERVISOR_ATUAL', 'LIDER_ATUAL']),
-      ativoSet: findHeader(['ATIVO_SET_26', 'ATIVO_SET', 'ATIVO', 'STATUS_ATIVO', 'ATIVO SET 26', 'ATIVO_SET_']),
+      gestorAtual: findHeader(['GESTOR REVISAO', 'GESTOR_REVISAO', 'GESTOR_ATUAL', 'GESTOR ATUAL', 'SUPERVISOR_ATUAL', 'LIDER_ATUAL']),
+      ativoSet: findHeader(['ATIVO_OUT_26', 'ATIVO_OUT', 'ATIVO_SET_26', 'ATIVO_SET', 'ATIVO', 'STATUS_ATIVO', 'ATIVO SET 26', 'ATIVO_SET_']),
       diretoria3: findHeader(['DIRETORIA 3', 'DIRETORIA3']),
       gerencia: findHeader(['GERÊNCIA', 'GERENCIA']),
       cidade: findHeader(['CIDADE COMERCIAL']),
