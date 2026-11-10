@@ -439,22 +439,23 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
     return Object.values(agg);
   }, [filteredData, colaboradoresPO, selectedAuditores, selectedDiretorias, selectedLeaders, selectedCities, onlySpiActive, rankingGroup, getItemCity, matchLeader]);
 
-  // Ranking ordenado e filtrado
+  // Ranking ordenado e filtrado (invertido: do que menos fez para o que mais fez)
   const rankAgg = useMemo(() => {
     let list = [...allRankAgg];
     if (rankingGroup === 'colaborador') {
       if (rankingFilter === 'mais') {
         list = list.filter(i => i.count > 0).sort((a, b) => b.count - a.count);
       } else if (rankingFilter === 'menos') {
-        list = list.filter(i => i.count > 0).sort((a, b) => a.count - b.count);
+        list = list.filter(i => i.count > 0).sort((a, b) => a.count === b.count ? a.name.localeCompare(b.name) : a.count - b.count);
       } else if (rankingFilter === 'sem_apr') {
         list = list.filter(i => i.count === 0).sort((a, b) => a.name.localeCompare(b.name));
       } else {
-        // 'todos': quem mais fez no topo, quem não fez no final
-        list = list.sort((a, b) => b.count - a.count);
+        // Padrão solicitado: quem menos fez no topo (ordem crescente de realizações)
+        list = list.sort((a, b) => a.count === b.count ? a.name.localeCompare(b.name) : a.count - b.count);
       }
     } else {
-      list = list.sort((a, b) => b.count - a.count);
+      // Agrupamento por cidade: quem menos fez no topo (ordem crescente)
+      list = list.sort((a, b) => a.count === b.count ? a.name.localeCompare(b.name) : a.count - b.count);
     }
     return list;
   }, [allRankAgg, rankingFilter, rankingGroup]);
@@ -662,9 +663,8 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
             <div className="w-px h-12 bg-gray-200 dark:bg-gray-800 hidden md:block"></div>
 
             <PremiumMultiSelect label="Diretoria" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-[340px]" />
-            <PremiumMultiSelect label="Gestão" options={allLeaders} selected={selectedLeaders} onChange={handleMultiSelect(setSelectedLeaders)} icon={Users} widthClass="w-[280px]" />
+            <PremiumMultiSelect label="Gestão (Coord / Sup / Ger)" options={allLeaders} selected={selectedLeaders} onChange={handleMultiSelect(setSelectedLeaders)} icon={Users} widthClass="w-[320px]" />
             <PremiumMultiSelect label="Cidade" options={allCities} selected={selectedCities} onChange={handleMultiSelect(setSelectedCities)} icon={MapPin} />
-            <PremiumMultiSelect label="Tipo de Atividade" options={allTipos} selected={selectedTipos} onChange={handleMultiSelect(setSelectedTipos)} icon={FileText} widthClass="w-[220px]" />
 
             {/* Flag Origem da Cidade: Base (PO) vs Execução (APR) */}
             <div className="flex flex-col gap-1.5">
@@ -720,7 +720,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
               </label>
             </div>
 
-            {(selectedMonths.length > 0 || selectedTipos.length > 0 || selectedDiretorias.length > 0 || selectedLeaders.length > 0 || selectedCities.length > 0 || selectedAuditores.length > 0 || !onlySpiActive) && (
+            {(selectedMonths.length > 0 || selectedDiretorias.length > 0 || selectedLeaders.length > 0 || selectedCities.length > 0 || selectedAuditores.length > 0 || !onlySpiActive) && (
               <div className="flex flex-col gap-1.5 ml-auto">
                 <span className="text-[10px] font-semibold opacity-0">Limpar</span>
                 <button
@@ -796,16 +796,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
                     : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
                     }`}
                 >
-                  Todos ({allRankAgg.length})
-                </button>
-                <button
-                  onClick={() => setRankingFilter('mais')}
-                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${rankingFilter === 'mais'
-                    ? 'bg-purple-100 dark:bg-purple-950/60 text-[#660099] dark:text-purple-300 border border-purple-300 dark:border-purple-800'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-                    }`}
-                >
-                  Mais APRs
+                  Menor ➔ Maior ({allRankAgg.length})
                 </button>
                 <button
                   onClick={() => setRankingFilter('menos')}
@@ -815,6 +806,15 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
                     }`}
                 >
                   Menos APRs
+                </button>
+                <button
+                  onClick={() => setRankingFilter('mais')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${rankingFilter === 'mais'
+                    ? 'bg-purple-100 dark:bg-purple-950/60 text-[#660099] dark:text-purple-300 border border-purple-300 dark:border-purple-800'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                >
+                  Mais APRs
                 </button>
                 <button
                   onClick={() => setRankingFilter('sem_apr')}
