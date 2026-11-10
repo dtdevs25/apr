@@ -277,7 +277,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
     setSelectedAuditores([]);
     setRankingGroup('colaborador');
     setRankingFilter('todos');
-    setOnlySpiActive(true);
+    setOnlySpiActive(false);
     setCityMode('base');
   };
 

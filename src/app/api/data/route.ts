@@ -813,60 +813,17 @@ export async function GET(req: NextRequest) {
           };
         });
 
-        // Montar a lista canônica de colaboradores do PO em SP
+        // Montar a lista canônica de colaboradores do PO em SP filtrada estritamente por cargo TÉCNICO
         const colaboradoresPO: any[] = [];
         const seenMatriculas = new Set<string>();
 
-        // 1. Prioridade máxima: Colaboradores cadastrados na planilha oficial do Interior (po_spi_override)
-        for (const s of spiRes.rows) {
-          const mat = normId(s.matricula);
-          if (!mat || seenMatriculas.has(mat)) continue;
-
-          // Filtro por funções com "técnico" / "tecnico" conforme solicitado
-          if (!isTecnico(s.cargo || 'TECNICO SERVICO AO CLIENTE')) continue;
-
-          seenMatriculas.add(mat);
-
-          const cidade = cleanCidade(s.cidade_comercial) || null;
-          const regional = getRegional(cidade) || 'SPI';
-          const fc = getFilialCnpj(cidade);
-          const gestor = (s.gestor_atual || '').toString().trim().toUpperCase() || 'SUPERVISÃO SPI';
-          const filial = fc?.filial || s.gerencia || 'FILIAL SPI';
-          const cnpj = fc?.cnpj || '-';
-          const dir = normalizeDiretoria(s.diretoria_2 || s.diretoria_3 || INTERIOR, regional);
-          const h = buildHierarquia(gestor, dir, cidade, regional);
-          const finalDir = (h.diretor === DIRECTOR_SPI) ? INTERIOR : (dir || INTERIOR);
-
-          colaboradoresPO.push({
-            matricula: mat,
-            nome: (s.nome || mat).toString().trim().toUpperCase(),
-            cargo: (s.cargo || 'TECNICO SERVICO AO CLIENTE').toString().trim().toUpperCase(),
-            diretoria: finalDir,
-            diretoria_2: finalDir,
-            gerencia: (s.gerencia || '').toString().trim().toUpperCase(),
-            filial: filial,
-            cnpj: cnpj,
-            supervisor: h.supervisor || gestor,
-            coordenador: h.coordenador,
-            gerente: h.gerente,
-            diretor: h.diretor,
-            lideres: h.chain,
-            cidade: cidade,
-            regional: 'SPI',
-            ativo_spi: s.ativo, // 1 = Ativo em campo, 0 = Treinamento / afastado
-            is_spi: true
-          });
-        }
-
-        // 2. Colaboradores do PO Geral filtrados estritamente por função "TÉCNICO"
+        // 1. Colaboradores da base PO oficial (fonte primária com os cargos oficiais)
         for (const p of poRes.rows) {
           const mat = normId(p.user_id_ssff);
           if (!mat || seenMatriculas.has(mat)) continue;
 
-          // FILTRO SOLICITADO: Todas as funções que contêm "TÉCNICO" / "TECNICO"
+          // FILTRO ESTRITO: Apenas quem tem a palavra TÉCNICO no cargo!
           if (!isTecnico(p.cargo)) continue;
-
-          seenMatriculas.add(mat);
 
           const spi = spiByMat.get(mat) || (normNome(p.nome) && spiByNome.get(normNome(p.nome)!));
           const cidade = cleanCidade(spi?.cidade_comercial) || cleanCidade(p.cidade_comercial) || null;
@@ -891,6 +848,7 @@ export async function GET(req: NextRequest) {
           const cnpj = (p.cnpj && p.cnpj.trim()) || fc?.cnpj || '-';
 
           if (ALLOWED_DIRETORIAS.includes(finalDir)) {
+            seenMatriculas.add(mat);
             colaboradoresPO.push({
               matricula: mat,
               nome: (p.nome || mat).toString().trim().toUpperCase(),
@@ -911,6 +869,47 @@ export async function GET(req: NextRequest) {
               is_spi: !!spi
             });
           }
+        }
+
+        // 2. Colaboradores adicionais do SPI (se houver algum que não estava no PO principal mas com cargo comprovadamente técnico)
+        for (const s of spiRes.rows) {
+          const mat = normId(s.matricula);
+          if (!mat || seenMatriculas.has(mat)) continue;
+
+          // Se não tem cargo cadastrado ou não contém TECNICO, descarta (não inventa cargo)
+          if (!s.cargo || !isTecnico(s.cargo)) continue;
+
+          seenMatriculas.add(mat);
+
+          const cidade = cleanCidade(s.cidade_comercial) || null;
+          const regional = getRegional(cidade) || 'SPI';
+          const fc = getFilialCnpj(cidade);
+          const gestor = (s.gestor_atual || '').toString().trim().toUpperCase() || 'SUPERVISÃO SPI';
+          const filial = fc?.filial || s.gerencia || 'FILIAL SPI';
+          const cnpj = fc?.cnpj || '-';
+          const dir = normalizeDiretoria(s.diretoria_2 || s.diretoria_3 || INTERIOR, regional);
+          const h = buildHierarquia(gestor, dir, cidade, regional);
+          const finalDir = (h.diretor === DIRECTOR_SPI) ? INTERIOR : (dir || INTERIOR);
+
+          colaboradoresPO.push({
+            matricula: mat,
+            nome: (s.nome || mat).toString().trim().toUpperCase(),
+            cargo: s.cargo.toString().trim().toUpperCase(),
+            diretoria: finalDir,
+            diretoria_2: finalDir,
+            gerencia: (s.gerencia || '').toString().trim().toUpperCase(),
+            filial: filial,
+            cnpj: cnpj,
+            supervisor: h.supervisor || gestor,
+            coordenador: h.coordenador,
+            gerente: h.gerente,
+            diretor: h.diretor,
+            lideres: h.chain,
+            cidade: cidade,
+            regional: 'SPI',
+            ativo_spi: s.ativo,
+            is_spi: true
+          });
         }
 
         const liderancas = Array.from(liderancasMap.values()).sort((a, b) => a.nome.localeCompare(b.nome));
