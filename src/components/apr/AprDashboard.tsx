@@ -662,7 +662,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
 
             <div className="w-px h-10 bg-gray-200 dark:bg-gray-800 hidden md:block"></div>
 
-            <PremiumMultiSelect label="Diretoria" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-64" />
+            <PremiumMultiSelect label="Diretoria" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-[340px]" />
             <PremiumMultiSelect label="Gestão (Coord / Sup / Ger)" options={allLeaders} selected={selectedLeaders} onChange={handleMultiSelect(setSelectedLeaders)} icon={Users} widthClass="w-80" />
             <PremiumMultiSelect label="Cidade" options={allCities} selected={selectedCities} onChange={handleMultiSelect(setSelectedCities)} icon={MapPin} widthClass="w-56" />
 

@@ -789,6 +789,11 @@ export async function GET(req: NextRequest) {
             let rawDir = (spi ? INTERIOR : null) || p?.diretoria_2 || p?.diretoria_3 || a.diretoria_3 || null;
             let diretoria = normalizeDiretoria(rawDir, regional);
 
+            // Regra estrita: se a diretoria for INTERIOR, o colaborador DEVE constar na planilha oficial de correção do Interior (spi)
+            if (diretoria?.includes('INTERIOR') && !spi) {
+              diretoria = 'OUTRAS DIRETORIAS';
+            }
+
             let gestor = spi?.gestor_atual || p?.gestor || a.gestor || a.supervisor || null;
             if (gestor) {
               gestor = gestor.toString().trim().toUpperCase();
@@ -840,104 +845,101 @@ export async function GET(req: NextRequest) {
         const colaboradoresPO: any[] = [];
         const seenMatriculas = new Set<string>();
 
-        // 1. Colaboradores da base PO oficial (fonte primária com os cargos oficiais)
-        for (const p of poRes.rows) {
-          const mat = normId(p.user_id_ssff);
-          if (!mat || seenMatriculas.has(mat)) continue;
-
-          // FILTRO ESTRITO: Apenas quem tem a palavra TÉCNICO no cargo e NÃO for de loja/varejo/comercial!
-          if (!isTecnico(p.cargo)) continue;
-          if (isNonFieldRole(p.cargo)) continue;
-
-          const spi = spiByMat.get(mat) || (normNome(p.nome) && spiByNome.get(normNome(p.nome)!));
-          const cidade = cleanCidade(spi?.cidade_comercial) || cleanCidade(p.cidade_comercial) || null;
-          const regional = getRegional(cidade);
-          const fc = getFilialCnpj(cidade);
-
-          let rawDir = p.diretoria_2 || p.diretoria_3 || null;
-          const rawDirClean = cleanStr(rawDir);
-          if (rawDirClean.includes('LOJA') || rawDirClean.includes('VAREJO') || rawDirClean.includes('COMERCIAL')) {
-            continue;
-          }
-          let diretoria = normalizeDiretoria(rawDir, regional);
-
-          let gestor = spi?.gestor_atual || p.gestor || null;
-          if (gestor) {
-            gestor = gestor.toString().trim().toUpperCase();
-          } else {
-            gestor = regional ? `SUPERVISÃO ${regional}` : 'SUPERVISÃO NÃO IDENTIFICADA';
-          }
-
-          const h = buildHierarquia(gestor, diretoria, cidade, regional);
-          const finalDir = (h.diretor === DIRECTOR_SPI) ? INTERIOR : (h.diretor === DIRECTOR_SPC ? CAPITAL : (diretoria || CAPITAL));
-          const finalReg = (h.diretor === DIRECTOR_SPI) ? 'SPI' : 'SPC';
-
-          const filial = (p.filial && p.filial.trim()) || fc?.filial || (spi?.gerencia || p.gerencia || (finalReg ? `FILIAL ${finalReg}` : 'SÃO PAULO'));
-          const cnpj = (p.cnpj && p.cnpj.trim()) || fc?.cnpj || '-';
-
-          if (ALLOWED_DIRETORIAS.includes(finalDir)) {
-            seenMatriculas.add(mat);
-            colaboradoresPO.push({
-              matricula: mat,
-              nome: (p.nome || mat).toString().trim().toUpperCase(),
-              cargo: (p.cargo || 'TECNICO').toString().trim().toUpperCase(),
-              diretoria: finalDir,
-              diretoria_2: finalDir,
-              gerencia: (spi?.gerencia || p.gerencia || '').toString().trim().toUpperCase(),
-              filial: filial,
-              cnpj: cnpj,
-              supervisor: h.supervisor || gestor,
-              coordenador: h.coordenador,
-              gerente: h.gerente,
-              diretor: h.diretor,
-              lideres: h.chain,
-              cidade: cidade,
-              regional: finalReg,
-              ativo_spi: spi ? spi.ativo : 1,
-              is_spi: !!spi
-            });
-          }
-        }
-
-        // 2. Colaboradores adicionais do SPI (se houver algum que não estava no PO principal mas com cargo comprovadamente técnico)
+        // 1. Colaboradores da Diretoria do Interior (SPI):
+        // Base oficial exclusiva: Planilha de Correção do Interior (po_spi_override)
         for (const s of spiRes.rows) {
           const mat = normId(s.matricula);
           if (!mat || seenMatriculas.has(mat)) continue;
-
-          // Se não tem cargo cadastrado ou não contém TECNICO, descarta (não inventa cargo)
-          if (!s.cargo || !isTecnico(s.cargo)) continue;
-          if (isNonFieldRole(s.cargo)) continue;
-
           seenMatriculas.add(mat);
 
-          const cidade = cleanCidade(s.cidade_comercial) || null;
-          const regional = getRegional(cidade) || 'SPI';
+          const poMatch = poById.get(mat) || (normNome(s.nome) && poByNome.get(normNome(s.nome)!));
+          const cargo = s.cargo || poMatch?.cargo || 'TECNICO SERVICO AO CLIENTE';
+          if (isNonFieldRole(cargo)) continue;
+
+          const cidade = cleanCidade(s.cidade_comercial) || cleanCidade(poMatch?.cidade_comercial) || null;
           const fc = getFilialCnpj(cidade);
           const gestor = (s.gestor_atual || '').toString().trim().toUpperCase() || 'SUPERVISÃO SPI';
-          const filial = fc?.filial || s.gerencia || 'FILIAL SPI';
-          const cnpj = fc?.cnpj || '-';
-          const dir = normalizeDiretoria(s.diretoria_2 || s.diretoria_3 || INTERIOR, regional);
-          const h = buildHierarquia(gestor, dir, cidade, regional);
-          const finalDir = (h.diretor === DIRECTOR_SPI) ? INTERIOR : (dir || INTERIOR);
+          const filial = fc?.filial || s.gerencia || poMatch?.filial || 'FILIAL SPI';
+          const cnpj = fc?.cnpj || poMatch?.cnpj || '-';
+
+          const h = buildHierarquia(gestor, INTERIOR, cidade, 'SPI');
 
           colaboradoresPO.push({
             matricula: mat,
-            nome: (s.nome || mat).toString().trim().toUpperCase(),
-            cargo: s.cargo.toString().trim().toUpperCase(),
-            diretoria: finalDir,
-            diretoria_2: finalDir,
-            gerencia: (s.gerencia || '').toString().trim().toUpperCase(),
+            nome: (s.nome || poMatch?.nome || mat).toString().trim().toUpperCase(),
+            cargo: cargo.toString().trim().toUpperCase(),
+            diretoria: INTERIOR,
+            diretoria_2: INTERIOR,
+            gerencia: (s.gerencia || poMatch?.gerencia || '').toString().trim().toUpperCase(),
             filial: filial,
             cnpj: cnpj,
             supervisor: h.supervisor || gestor,
             coordenador: h.coordenador,
             gerente: h.gerente,
-            diretor: h.diretor,
+            diretor: DIRECTOR_SPI,
             lideres: h.chain,
             cidade: cidade,
             regional: 'SPI',
-            ativo_spi: s.ativo,
+            ativo_spi: s.ativo, // 1 = Ativo em campo (menos de 500!), 0 = Afastado / Treinamento
             is_spi: true
+          });
+        }
+
+        // 2. Colaboradores da Diretoria da Capital (SPC):
+        // Extraídos do PO geral, garantindo que não puxa pessoal do Interior
+        for (const p of poRes.rows) {
+          const mat = normId(p.user_id_ssff);
+          if (!mat || seenMatriculas.has(mat)) continue;
+
+          // Se for do Interior, ignora (já tratado com precisão absoluta via planilha de correção SPI)
+          const rawDir = p.diretoria_2 || p.diretoria_3 || null;
+          const rawDirClean = cleanStr(rawDir);
+          if (rawDirClean.includes('INTERIOR') || rawDirClean.includes('SPI')) {
+            continue;
+          }
+
+          // Apenas técnicos de campo da Capital
+          if (!isTecnico(p.cargo)) continue;
+          if (isNonFieldRole(p.cargo)) continue;
+          if (rawDirClean.includes('LOJA') || rawDirClean.includes('VAREJO') || rawDirClean.includes('COMERCIAL')) {
+            continue;
+          }
+
+          const cidade = cleanCidade(p.cidade_comercial) || null;
+          const regional = getRegional(cidade);
+          if (regional === 'SPI') continue; // Lotação Interior não entra na Capital
+
+          const fc = getFilialCnpj(cidade);
+          let diretoria = CAPITAL;
+
+          let gestor = p.gestor ? p.gestor.toString().trim().toUpperCase() : 'SUPERVISÃO SPC';
+          const h = buildHierarquia(gestor, diretoria, cidade, 'SPC');
+
+          // Se a hierarquia chegar em Samuel Rossi, era Interior
+          if (h.diretor === DIRECTOR_SPI) continue;
+
+          const filial = (p.filial && p.filial.trim()) || fc?.filial || p.gerencia || 'FILIAL SPC';
+          const cnpj = (p.cnpj && p.cnpj.trim()) || fc?.cnpj || '-';
+
+          seenMatriculas.add(mat);
+          colaboradoresPO.push({
+            matricula: mat,
+            nome: (p.nome || mat).toString().trim().toUpperCase(),
+            cargo: (p.cargo || 'TECNICO').toString().trim().toUpperCase(),
+            diretoria: CAPITAL,
+            diretoria_2: CAPITAL,
+            gerencia: (p.gerencia || '').toString().trim().toUpperCase(),
+            filial: filial,
+            cnpj: cnpj,
+            supervisor: h.supervisor || gestor,
+            coordenador: h.coordenador,
+            gerente: h.gerente,
+            diretor: DIRECTOR_SPC,
+            lideres: h.chain,
+            cidade: cidade,
+            regional: 'SPC',
+            ativo_spi: 1,
+            is_spi: false
           });
         }
 
