@@ -157,9 +157,11 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
 
   const allMonths = useMemo(() => Array.from(new Set(data.map(i => String(i['Mês'])))).filter(Boolean).sort((a, b) => parseInt(a, 10) - parseInt(b, 10)), [data]);
 
+  const getItemDiretoria = (i: any): string => i['DIRETORIA 2'] || i['DIRETORIA 3'] || '';
+
   const matchSpiFilter = (i: any) => {
     if (!onlySpiActive) return true;
-    if (i['DIRETORIA 3'] === 'DIR SERVICOS AO CLIENTE SP INTERIOR') {
+    if (getItemDiretoria(i) === 'DIR SERVICOS AO CLIENTE SP INTERIOR') {
       return i['ATIVO_SPI'] !== 0;
     }
     return true;
@@ -170,7 +172,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
     const base = data.filter(i =>
       matchSpiFilter(i) &&
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
-      (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
+      (selectedDiretorias.length === 0 || selectedDiretorias.includes(getItemDiretoria(i))) &&
       matchLeader(i, selectedLeaders) &&
       (selectedCities.length === 0 || selectedCities.includes(getItemCity(i)))
     );
@@ -185,7 +187,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       matchLeader(i, selectedLeaders) &&
       (selectedCities.length === 0 || selectedCities.includes(getItemCity(i)))
     );
-    return Array.from(new Set(base.map(i => i['DIRETORIA 3']))).filter(Boolean).sort();
+    return Array.from(new Set(base.map(i => getItemDiretoria(i)))).filter(Boolean).sort();
   }, [data, selectedMonths, selectedTipos, selectedLeaders, selectedCities, onlySpiActive, getItemCity, matchLeader]);
 
   // Seletor único de Gestão (todas as lideranças: Gerentes, Coordenadores, Supervisores)
@@ -200,7 +202,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       matchSpiFilter(i) &&
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
-      (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
+      (selectedDiretorias.length === 0 || selectedDiretorias.includes(getItemDiretoria(i))) &&
       (selectedCities.length === 0 || selectedCities.includes(getItemCity(i)))
     ).flatMap(i => [i['DIRETOR'], i['GERENTE'], i['COORDENADOR'], i['Supervisor'], i['GESTOR']]).filter(Boolean);
 
@@ -220,7 +222,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       matchSpiFilter(i) &&
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
-      (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
+      (selectedDiretorias.length === 0 || selectedDiretorias.includes(getItemDiretoria(i))) &&
       matchLeader(i, selectedLeaders)
     );
     const dataCities = base.map(i => getItemCity(i)).filter(Boolean);
@@ -239,7 +241,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       matchSpiFilter(i) &&
       (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
       (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
-      (selectedDiretorias.length === 0 || selectedDiretorias.includes(i['DIRETORIA 3'])) &&
+      (selectedDiretorias.length === 0 || selectedDiretorias.includes(getItemDiretoria(i))) &&
       matchLeader(i, selectedLeaders) &&
       (selectedCities.length === 0 || selectedCities.includes(getItemCity(i)))
     ).map(i => i['Nome Auditor'] || i['Matrícula Auditor']);
@@ -288,7 +290,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
         matchAuditor &&
         (selectedMonths.length === 0 || selectedMonths.includes(String(item['Mês']))) &&
         (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(item['Questionário']))) &&
-        (selectedDiretorias.length === 0 || selectedDiretorias.includes(item['DIRETORIA 3'])) &&
+        (selectedDiretorias.length === 0 || selectedDiretorias.includes(getItemDiretoria(item))) &&
         matchLeader(item, selectedLeaders) &&
         (selectedCities.length === 0 || selectedCities.includes(getItemCity(item)));
     });
@@ -296,7 +298,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
 
   // KPIs base
   const totalAprs = filteredData.length;
-  const diretoriasUnicas = new Set(filteredData.map(i => i['DIRETORIA 3']).filter(Boolean)).size;
+  const diretoriasUnicas = new Set(filteredData.map(i => getItemDiretoria(i)).filter(Boolean)).size;
   const cidadesUnicas = new Set(filteredData.map(i => getItemCity(i)).filter(Boolean)).size;
 
   const getAvgTimeStr = (totalSecs: number, validCount: number) => {
@@ -541,7 +543,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       return matchSpiFilter(item) &&
         matchAuditor &&
         (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(item['Questionário']))) &&
-        (selectedDiretorias.length === 0 || selectedDiretorias.includes(item['DIRETORIA 3'])) &&
+        (selectedDiretorias.length === 0 || selectedDiretorias.includes(getItemDiretoria(item))) &&
         matchLeader(item, selectedLeaders) &&
         (selectedCities.length === 0 || selectedCities.includes(getItemCity(item)));
     });
@@ -659,7 +661,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
 
             <div className="w-px h-12 bg-gray-200 dark:bg-gray-800 hidden md:block"></div>
 
-            <PremiumMultiSelect label="Diretoria 3" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-[340px]" />
+            <PremiumMultiSelect label="Diretoria" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-[340px]" />
             <PremiumMultiSelect label="Gestão" options={allLeaders} selected={selectedLeaders} onChange={handleMultiSelect(setSelectedLeaders)} icon={Users} widthClass="w-[280px]" />
             <PremiumMultiSelect label="Cidade" options={allCities} selected={selectedCities} onChange={handleMultiSelect(setSelectedCities)} icon={MapPin} />
             <PremiumMultiSelect label="Tipo de Atividade" options={allTipos} selected={selectedTipos} onChange={handleMultiSelect(setSelectedTipos)} icon={FileText} widthClass="w-[220px]" />

@@ -352,18 +352,24 @@ export async function GET(req: NextRequest) {
           return s || null;
         };
 
+        const isTecnico = (cargo: string | null | undefined): boolean => {
+          if (!cargo) return false;
+          return cleanStr(cargo).includes('TECNICO');
+        };
+
         const [aprRes, poRes, spiRes] = await Promise.all([
           pool.query(`SELECT * FROM aprs ORDER BY data_inicio DESC`),
           pool.query(`
             SELECT user_id_ssff, nome, cargo,
                    COALESCE(to_jsonb(po)->>'categoria', '') AS categoria,
                    COALESCE(to_jsonb(po)->>'subgrupo', '') AS subgrupo,
+                   COALESCE(to_jsonb(po)->>'diretoria_2', po.diretoria_3, '') AS diretoria_2,
                    diretoria_3, gerencia, gestor, cidade_comercial, uf_comercial,
                    COALESCE(to_jsonb(po)->>'cnpj', '') AS cnpj,
                    COALESCE(to_jsonb(po)->>'filial', '') AS filial
             FROM po ORDER BY id ASC
           `).catch(() => ({ rows: [] as any[] })),
-          pool.query(`SELECT matricula, nome, gestor_atual, gerencia, cidade_comercial, ativo, cargo FROM po_spi_override ORDER BY id ASC`).catch(() => ({ rows: [] as any[] })),
+          pool.query(`SELECT matricula, nome, gestor_atual, gerencia, cidade_comercial, ativo, cargo, COALESCE(to_jsonb(po_spi_override)->>'diretoria_2', 'DIR SERVICOS AO CLIENTE SP INTERIOR') AS diretoria_2 FROM po_spi_override ORDER BY id ASC`).catch(() => ({ rows: [] as any[] })),
         ]);
 
         // Ordem ASC por id: o último sobrescreve -> fica o registro mais recente
@@ -503,7 +509,7 @@ export async function GET(req: NextRequest) {
           colabCidade: string | null | undefined,
           colabRegional: 'SPC' | 'SPI' | null | undefined
         ): HierarquiaChain => {
-          const defaultDirector = (colabDir?.includes('INTERIOR') || colabRegional === 'SPI') ? DIRECTOR_SPI : DIRECTOR_SPC;
+          let defaultDirector = (colabDir?.includes('INTERIOR') || colabRegional === 'SPI') ? DIRECTOR_SPI : DIRECTOR_SPC;
 
           const result: HierarquiaChain = {
             diretor: defaultDirector,
@@ -522,7 +528,7 @@ export async function GET(req: NextRequest) {
             personPO: any;
           }> = [];
 
-          while (currentRaw && visited.size < 6) {
+          while (currentRaw && visited.size < 7) {
             const cleanName = normNome(currentRaw);
             if (!cleanName || !isPersonName(cleanName) || visited.has(cleanName)) break;
             visited.add(cleanName);
@@ -530,19 +536,23 @@ export async function GET(req: NextRequest) {
             const personPO = findPoPerson(currentRaw);
             const cargoUpper = cleanStr(personPO?.cargo);
 
-            const isKnownDirector = cleanName === DIRECTOR_SPI || cleanName === DIRECTOR_SPC || cargoUpper.startsWith('DIR SERVICOS AO CLIENTE');
+            const isSamuel = isDirectorSpi(cleanName) || (cargoUpper.includes('INTERIOR') && (cargoUpper.startsWith('DIR ') || cargoUpper.includes('DIRETOR')));
+            const isEliseu = isDirectorSpc(cleanName) || (cargoUpper.includes('CAPITAL') && (cargoUpper.startsWith('DIR ') || cargoUpper.includes('DIRETOR')));
+            const isKnownDirector = isSamuel || isEliseu;
             const tipo = isKnownDirector ? 'DIRETOR' : classifyLeaderRole(cargoUpper);
 
             chainNodes.push({
               nome: cleanName,
-              cargo: personPO?.cargo || tipo,
+              cargo: personPO?.cargo || (isKnownDirector ? (isSamuel ? 'DIR SERVICOS AO CLIENTE SP INTERIOR' : 'DIR SERVICOS AO CLIENTE SP CAPITAL') : tipo),
               tipo,
               personPO
             });
             result.chain.push(cleanName);
 
-            // Se encontrou o Diretor regional de Serviços ao Cliente, INTERROMPE A SUBIDA (não sobe para VP/Presidência!)
+            // PARADA ESTRITA NO DIRETOR: Não sobe para VP/Presidência!
             if (isKnownDirector || tipo === 'DIRETOR') {
+              if (isSamuel) result.diretor = DIRECTOR_SPI;
+              if (isEliseu) result.diretor = DIRECTOR_SPC;
               break;
             }
 
@@ -550,33 +560,37 @@ export async function GET(req: NextRequest) {
           }
 
           if (chainNodes.length > 0) {
-            // 1. Diretor: fixo e canônico por regional
-            // SP INTERIOR (SPI) -> SAMUEL ROSSI DO NASCIMENTO
-            // SP CAPITAL (SPC) -> ELISEU ROBERTO OLIVEIRA
-            result.diretor = defaultDirector;
+            // Se algum nó da cadeia for o diretor, fixa o diretor correto
+            const samuelFound = chainNodes.some(n => isDirectorSpi(n.nome));
+            const eliseuFound = chainNodes.some(n => isDirectorSpc(n.nome));
+            if (samuelFound) {
+              result.diretor = DIRECTOR_SPI;
+            } else if (eliseuFound) {
+              result.diretor = DIRECTOR_SPC;
+            } else {
+              result.diretor = defaultDirector;
+            }
 
-            // 2. Gerente: pessoa estritamente com cargo de gerência
+            // Gerente: pessoa estritamente com cargo de gerência
             const gerNode = chainNodes.find(n => n.tipo === 'GERENTE');
             if (gerNode) {
               result.gerente = gerNode.nome;
             }
 
-            // 3. Coordenador: pessoa estritamente com cargo de coordenação
+            // Coordenador: pessoa estritamente com cargo de coordenação
             const coordNode = chainNodes.find(n => n.tipo === 'COORDENADOR');
             if (coordNode) {
               result.coordenador = coordNode.nome;
             }
 
-            // 4. Supervisor: pessoa com cargo de supervisão
+            // Supervisor: pessoa com cargo de supervisão
             const supNode = chainNodes.find(n => n.tipo === 'SUPERVISOR');
             if (supNode) {
               result.supervisor = supNode.nome;
             } else if (chainNodes[0] && chainNodes[0].tipo !== 'DIRETOR' && chainNodes[0].tipo !== 'GERENTE' && chainNodes[0].tipo !== 'COORDENADOR') {
-              // Se o líder imediato não for Diretor, Gerente ou Coordenador, é um supervisor de campo
               result.supervisor = chainNodes[0].nome;
             }
 
-            // Se não houver supervisor explícito porque o técnico responde direto à coordenação/gerência
             if (!result.supervisor && chainNodes[0]) {
               if (chainNodes[0].tipo === 'COORDENADOR') {
                 result.supervisor = `${chainNodes[0].nome} (Coord. Direta)`;
@@ -585,14 +599,17 @@ export async function GET(req: NextRequest) {
               }
             }
 
-            // Registrar cada líder no liderancasMap com seu papel canônico inalterado
+            const targetDir = (result.diretor === DIRECTOR_SPI) ? INTERIOR : CAPITAL;
+            const targetReg = (result.diretor === DIRECTOR_SPI) ? 'SPI' : 'SPC';
+
+            // Registrar cada líder no liderancasMap associado à sua regional correta
             chainNodes.forEach(node => {
               const nodeIsSamuel = isDirectorSpi(node.nome);
               const nodeIsEliseu = isDirectorSpc(node.nome);
 
-              let nodeDir = colabDir;
-              let nodeReg = colabRegional;
-              let nodeDiretor = defaultDirector;
+              let nodeDir = targetDir;
+              let nodeReg = targetReg;
+              let nodeDiretor = result.diretor || (targetReg === 'SPI' ? DIRECTOR_SPI : DIRECTOR_SPC);
 
               if (nodeIsSamuel) {
                 nodeDir = INTERIOR;
@@ -604,21 +621,19 @@ export async function GET(req: NextRequest) {
                 nodeDiretor = DIRECTOR_SPC;
               }
 
-              if (nodeDir && ALLOWED_DIRETORIAS.includes(nodeDir)) {
-                const mapKey = `${node.nome}__${nodeDir}`;
-                if (!liderancasMap.has(mapKey)) {
-                  liderancasMap.set(mapKey, {
-                    nome: node.nome,
-                    cargo: (nodeIsSamuel || nodeIsEliseu) ? `DIRETOR REGIONAL ${nodeReg}` : node.cargo,
-                    tipo: (nodeIsSamuel || nodeIsEliseu) ? 'DIRETOR' : node.tipo,
-                    diretoria: nodeDir,
-                    diretor: nodeDiretor,
-                    gerente: node.tipo !== 'DIRETOR' && node.tipo !== 'GERENTE' ? (result.gerente || undefined) : undefined,
-                    coordenador: node.tipo === 'SUPERVISOR' ? (result.coordenador || undefined) : undefined,
-                    cidade: colabCidade || cleanCidade(node.personPO?.cidade_comercial) || (nodeDir.includes('INTERIOR') ? 'CAMPINAS' : 'SÃO PAULO'),
-                    regional: nodeReg || (nodeDir.includes('INTERIOR') ? 'SPI' : 'SPC')
-                  });
-                }
+              const mapKey = `${node.nome}__${nodeDir}`;
+              if (!liderancasMap.has(mapKey)) {
+                liderancasMap.set(mapKey, {
+                  nome: node.nome,
+                  cargo: (nodeIsSamuel || nodeIsEliseu) ? `DIRETOR REGIONAL ${nodeReg}` : node.cargo,
+                  tipo: (nodeIsSamuel || nodeIsEliseu) ? 'DIRETOR' : node.tipo,
+                  diretoria: nodeDir,
+                  diretor: nodeDiretor,
+                  gerente: node.tipo !== 'DIRETOR' && node.tipo !== 'GERENTE' ? (result.gerente || undefined) : undefined,
+                  coordenador: node.tipo === 'SUPERVISOR' ? (result.coordenador || undefined) : undefined,
+                  cidade: colabCidade || cleanCidade(node.personPO?.cidade_comercial) || (nodeDir.includes('INTERIOR') ? 'CAMPINAS' : 'SÃO PAULO'),
+                  regional: nodeReg
+                });
               }
             });
           }
@@ -661,8 +676,8 @@ export async function GET(req: NextRequest) {
             diretor = DIRECTOR_SPC;
             cidade = cidade || 'SÃO PAULO';
           } else {
-            reg = getRegional(cidade) || (cleanStr(p.diretoria_3).includes('INTERIOR') ? 'SPI' : 'SPC');
-            let rawDir = p.diretoria_3 || null;
+            const rawDir = p.diretoria_2 || p.diretoria_3 || null;
+            reg = getRegional(cidade) || (cleanStr(rawDir).includes('INTERIOR') ? 'SPI' : 'SPC');
             dir = normalizeDiretoria(rawDir, reg);
             if (!dir || !ALLOWED_DIRETORIAS.includes(dir)) {
               dir = reg === 'SPI' ? INTERIOR : CAPITAL;
@@ -679,6 +694,7 @@ export async function GET(req: NextRequest) {
             const hLeader = buildHierarquia(p.gestor, dir, cidade, reg);
             gerente = hLeader.gerente || (role === 'COORDENADOR' && hLeader.chain[0] ? hLeader.chain[0] : undefined);
             coordenador = hLeader.coordenador || undefined;
+            if (hLeader.diretor) diretor = hLeader.diretor;
           }
 
           const mapKey = `${nomeClean}__${dir}`;
@@ -740,7 +756,7 @@ export async function GET(req: NextRequest) {
           const regional = getRegional(cidadePrincipal);
           const fc = getFilialCnpj(cidadePrincipal);
 
-          let rawDir = (spi ? INTERIOR : null) || p?.diretoria_3 || a.diretoria_3 || null;
+          let rawDir = (spi ? INTERIOR : null) || p?.diretoria_2 || p?.diretoria_3 || a.diretoria_3 || null;
           let diretoria = normalizeDiretoria(rawDir, regional);
 
           let gestor = spi?.gestor_atual || p?.gestor || a.gestor || a.supervisor || null;
@@ -772,6 +788,7 @@ export async function GET(req: NextRequest) {
             "CIDADE_EXECUCAO": cidadeExecucao,
             "REGIONAL": regional || (diretoria?.includes('INTERIOR') ? 'SPI' : 'SPC'),
             "UF COMERCIAL": p?.uf_comercial || a.uf_comercial || null,
+            "DIRETORIA 2": diretoria,
             "DIRETORIA 3": diretoria,
             "GERÊNCIA": spi?.gerencia || p?.gerencia || a.gerencia || null,
             "FILIAL": filial,
@@ -797,6 +814,10 @@ export async function GET(req: NextRequest) {
         for (const s of spiRes.rows) {
           const mat = normId(s.matricula);
           if (!mat || seenMatriculas.has(mat)) continue;
+
+          // Filtro por funções com "técnico" / "tecnico" conforme solicitado
+          if (!isTecnico(s.cargo || 'TECNICO SERVICO AO CLIENTE')) continue;
+
           seenMatriculas.add(mat);
 
           const cidade = cleanCidade(s.cidade_comercial) || null;
@@ -805,14 +826,16 @@ export async function GET(req: NextRequest) {
           const gestor = (s.gestor_atual || '').toString().trim().toUpperCase() || 'SUPERVISÃO SPI';
           const filial = fc?.filial || s.gerencia || 'FILIAL SPI';
           const cnpj = fc?.cnpj || '-';
-          const dir = normalizeDiretoria(s.diretoria_3 || INTERIOR, regional);
+          const dir = normalizeDiretoria(s.diretoria_2 || s.diretoria_3 || INTERIOR, regional);
           const h = buildHierarquia(gestor, dir, cidade, regional);
+          const finalDir = (h.diretor === DIRECTOR_SPI) ? INTERIOR : (dir || INTERIOR);
 
           colaboradoresPO.push({
             matricula: mat,
             nome: (s.nome || mat).toString().trim().toUpperCase(),
             cargo: (s.cargo || 'TECNICO SERVICO AO CLIENTE').toString().trim().toUpperCase(),
-            diretoria: dir,
+            diretoria: finalDir,
+            diretoria_2: finalDir,
             gerencia: (s.gerencia || '').toString().trim().toUpperCase(),
             filial: filial,
             cnpj: cnpj,
@@ -828,24 +851,13 @@ export async function GET(req: NextRequest) {
           });
         }
 
-        // 2. Colaboradores do PO Geral
+        // 2. Colaboradores do PO Geral filtrados estritamente por função "TÉCNICO"
         for (const p of poRes.rows) {
           const mat = normId(p.user_id_ssff);
           if (!mat || seenMatriculas.has(mat)) continue;
 
-          // REGRA DE CAMPO: Categoria/Subgrupo contendo CAMPO ou OPERACIONAL
-          // ou cargos operacionais de campo (com cleanStr para ignorar acentos e maiúsculas)
-          const cat = cleanStr(p.categoria);
-          const sub = cleanStr(p.subgrupo);
-          const cargo = cleanStr(p.cargo);
-          const isCampo = cat === 'CAMPO' || sub === 'CAMPO' || cat.includes('CAMPO') || sub.includes('CAMPO') ||
-            cat.includes('OPERAC') || sub.includes('OPERAC') ||
-            cargo.includes('TECNICO') || cargo.includes('CABISTA') || cargo.includes('LIGADOR') ||
-            cargo.includes('OFICIAL') || cargo.includes('EMENDADOR') || cargo.includes('INSTALADOR') ||
-            cargo.includes('REPARADOR') || cargo.includes('OPERADOR') || cargo.includes('AUXILIAR') ||
-            cargo.includes('ELETRICISTA') || cargo.includes('ASSISTENTE') || cargo.includes('INSPETOR') ||
-            cargo.includes('FISCAL') || cargo.includes('CONSULTOR') || cargo.includes('AGENTE');
-          if (!isCampo) continue;
+          // FILTRO SOLICITADO: Todas as funções que contêm "TÉCNICO" / "TECNICO"
+          if (!isTecnico(p.cargo)) continue;
 
           seenMatriculas.add(mat);
 
@@ -854,7 +866,7 @@ export async function GET(req: NextRequest) {
           const regional = getRegional(cidade);
           const fc = getFilialCnpj(cidade);
 
-          let rawDir = p.diretoria_3 || null;
+          let rawDir = p.diretoria_2 || p.diretoria_3 || null;
           let diretoria = normalizeDiretoria(rawDir, regional);
 
           let gestor = spi?.gestor_atual || p.gestor || null;
@@ -864,17 +876,20 @@ export async function GET(req: NextRequest) {
             gestor = regional ? `SUPERVISÃO ${regional}` : 'SUPERVISÃO NÃO IDENTIFICADA';
           }
 
-          const dirUpper = (diretoria || '').toString().trim().toUpperCase();
-          const filial = (p.filial && p.filial.trim()) || fc?.filial || (spi?.gerencia || p.gerencia || (regional ? `FILIAL ${regional}` : 'SÃO PAULO'));
-          const cnpj = (p.cnpj && p.cnpj.trim()) || fc?.cnpj || '-';
-          const h = buildHierarquia(gestor, dirUpper, cidade, regional);
+          const h = buildHierarquia(gestor, diretoria, cidade, regional);
+          const finalDir = (h.diretor === DIRECTOR_SPI) ? INTERIOR : (h.diretor === DIRECTOR_SPC ? CAPITAL : (diretoria || CAPITAL));
+          const finalReg = (h.diretor === DIRECTOR_SPI) ? 'SPI' : 'SPC';
 
-          if (ALLOWED_DIRETORIAS.includes(dirUpper)) {
+          const filial = (p.filial && p.filial.trim()) || fc?.filial || (spi?.gerencia || p.gerencia || (finalReg ? `FILIAL ${finalReg}` : 'SÃO PAULO'));
+          const cnpj = (p.cnpj && p.cnpj.trim()) || fc?.cnpj || '-';
+
+          if (ALLOWED_DIRETORIAS.includes(finalDir)) {
             colaboradoresPO.push({
               matricula: mat,
               nome: (p.nome || mat).toString().trim().toUpperCase(),
-              cargo: (p.cargo || 'COLABORADOR').toString().trim().toUpperCase(),
-              diretoria: dirUpper,
+              cargo: (p.cargo || 'TECNICO').toString().trim().toUpperCase(),
+              diretoria: finalDir,
+              diretoria_2: finalDir,
               gerencia: (spi?.gerencia || p.gerencia || '').toString().trim().toUpperCase(),
               filial: filial,
               cnpj: cnpj,
@@ -884,7 +899,7 @@ export async function GET(req: NextRequest) {
               diretor: h.diretor,
               lideres: h.chain,
               cidade: cidade,
-              regional: regional || (dirUpper.includes('INTERIOR') ? 'SPI' : 'SPC'),
+              regional: finalReg,
               ativo_spi: spi ? spi.ativo : 1,
               is_spi: !!spi
             });
@@ -957,7 +972,7 @@ export async function GET(req: NextRequest) {
     });
 
     const finalData = formattedData.filter(r => {
-      const dir = (r["DIRETORIA 3"] || '').toString().trim().toUpperCase();
+      const dir = (r["DIRETORIA 2"] || r["DIRETORIA 3"] || '').toString().trim().toUpperCase();
       return ALLOWED_DIRETORIAS.includes(dir);
     });
 

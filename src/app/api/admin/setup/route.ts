@@ -27,6 +27,7 @@ export async function GET() {
 
     console.log("Criando tabela po_spi_override...");
     await pool.query(`
+      ALTER TABLE po ADD COLUMN IF NOT EXISTS diretoria_2 VARCHAR(255);
       CREATE TABLE IF NOT EXISTS po_spi_override (
         id SERIAL PRIMARY KEY,
         ano INT,
@@ -36,6 +37,7 @@ export async function GET() {
         gestor_original VARCHAR(255),
         gestor_atual VARCHAR(255) NOT NULL,
         ativo INT DEFAULT 1,
+        diretoria_2 VARCHAR(255) DEFAULT 'DIR SERVICOS AO CLIENTE SP INTERIOR',
         diretoria_3 VARCHAR(255) DEFAULT 'DIR SERVICOS AO CLIENTE SP INTERIOR',
         gerencia VARCHAR(255),
         cidade_comercial VARCHAR(255),
@@ -43,6 +45,7 @@ export async function GET() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT po_spi_override_uniq UNIQUE (ano, mes, matricula)
       );
+      ALTER TABLE po_spi_override ADD COLUMN IF NOT EXISTS diretoria_2 VARCHAR(255) DEFAULT 'DIR SERVICOS AO CLIENTE SP INTERIOR';
     `);
 
     console.log("Criando índices de alta performance...");
