@@ -848,6 +848,11 @@ export async function GET(req: NextRequest) {
           const cnpj = (p.cnpj && p.cnpj.trim()) || fc?.cnpj || '-';
 
           if (ALLOWED_DIRETORIAS.includes(finalDir)) {
+            // Fator de Correção SP Interior: abater técnicos em treinamento/afastamento (ativo === 0)
+            if (finalDir === INTERIOR && spi && spi.ativo === 0) {
+              continue;
+            }
+
             seenMatriculas.add(mat);
             colaboradoresPO.push({
               matricula: mat,
@@ -878,6 +883,9 @@ export async function GET(req: NextRequest) {
 
           // Se não tem cargo cadastrado ou não contém TECNICO, descarta (não inventa cargo)
           if (!s.cargo || !isTecnico(s.cargo)) continue;
+
+          // Fator de Correção SP Interior: descarta se não estiver ativo em campo
+          if (s.ativo === 0) continue;
 
           seenMatriculas.add(mat);
 

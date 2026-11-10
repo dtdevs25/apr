@@ -97,7 +97,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
   const [selectedLeaders, setSelectedLeaders] = useState<string[]>([]);
   const [selectedCities, setSelectedCities] = useState<string[]>([]);
   const [selectedAuditores, setSelectedAuditores] = useState<string[]>([]);
-  const [onlySpiActive, setOnlySpiActive] = useState<boolean>(false);
+  const [onlySpiActive, setOnlySpiActive] = useState<boolean>(true);
   // Flag de Origem da Cidade: 'base' (Lotação oficial PO) ou 'execucao' (Local da APR)
   const [cityMode, setCityMode] = useState<'base' | 'execucao'>('base');
   const [liderancas, setLiderancas] = useState<any[]>([]);
@@ -277,7 +277,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
     setSelectedAuditores([]);
     setRankingGroup('colaborador');
     setRankingFilter('todos');
-    setOnlySpiActive(false);
+    setOnlySpiActive(true);
     setCityMode('base');
   };
 
