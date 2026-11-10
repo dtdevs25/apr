@@ -236,7 +236,7 @@ function normalizeDiretoria(dir: string | null, regional: 'SPC' | 'SPI' | null):
 export async function GET(req: NextRequest) {
   try {
     const type = req.nextUrl.searchParams.get('type') || 'APR';
-    
+
     if (dataCache[type] && (Date.now() - dataCache[type].timestamp < CACHE_TTL_MS)) {
       return NextResponse.json(dataCache[type].data);
     }
@@ -246,7 +246,7 @@ export async function GET(req: NextRequest) {
     if (type === 'DSS') {
       try {
         const ACC_FROM = 'ÁÀÂÃÄáàâãäÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÕÖóòôõöÚÙÛÜúùûüÇçÑñ';
-        const ACC_TO   = 'AAAAAaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuCcNn';
+        const ACC_TO = 'AAAAAaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuCcNn';
         const normNome = (col: string) =>
           `NULLIF(UPPER(TRIM(REGEXP_REPLACE(TRANSLATE(${col}::text, '${ACC_FROM}', '${ACC_TO}'), '\\s+', ' ', 'g'))), '')`;
 
@@ -361,9 +361,9 @@ export async function GET(req: NextRequest) {
           if (!cargo) return false;
           const c = cleanStr(cargo);
           return c.includes('LOJA') || c.includes('LOJAS') || c.includes('VAREJO') ||
-                 c.includes('COMERCIAL') || c.includes('VENDAS') || c.includes('CALL CENTER') ||
-                 c.includes('TELEVENDAS') || c.includes('SAC') || c.includes('FINANCEIRO') ||
-                 c.includes('JURIDICO') || c.includes('RECURSOS HUMANOS') || c.includes('RH');
+            c.includes('COMERCIAL') || c.includes('VENDAS') || c.includes('CALL CENTER') ||
+            c.includes('TELEVENDAS') || c.includes('SAC') || c.includes('FINANCEIRO') ||
+            c.includes('JURIDICO') || c.includes('RECURSOS HUMANOS') || c.includes('RH');
         };
 
         const [aprRes, poRes, spiRes] = await Promise.all([
@@ -687,7 +687,7 @@ export async function GET(req: NextRequest) {
 
           const rawDir = p.diretoria_2 || p.diretoria_3 || null;
           const rawDirClean = cleanStr(rawDir);
-          
+
           // ESTRITO: apenas quem pertence à Diretoria de Serviços ao Cliente!
           if (!rawDirClean.includes('SERVICOS AO CLIENTE') && !isSamuel && !isEliseu) {
             continue;
@@ -772,69 +772,69 @@ export async function GET(req: NextRequest) {
             return true;
           })
           .map((a: any) => {
-          const idMat = normId(a.matricula_auditor);
-          const idRe = normId(a.re);
-          const p = (idMat && poById.get(idMat)) || (idRe && poById.get(idRe)) || poByNome.get(normNome(a.nome_auditor) || '') || null;
-          const spi = (idMat && spiByMat.get(idMat)) || (idRe && spiByMat.get(idRe)) || (normNome(a.nome_auditor) && spiByNome.get(normNome(a.nome_auditor)!)) || null;
+            const idMat = normId(a.matricula_auditor);
+            const idRe = normId(a.re);
+            const p = (idMat && poById.get(idMat)) || (idRe && poById.get(idRe)) || poByNome.get(normNome(a.nome_auditor) || '') || null;
+            const spi = (idMat && spiByMat.get(idMat)) || (idRe && spiByMat.get(idRe)) || (normNome(a.nome_auditor) && spiByNome.get(normNome(a.nome_auditor)!)) || null;
 
-          // Cidade Base (Lotação oficial conforme PO / SPI) vs Cidade de Execução (Local onde o checklist foi preenchido)
-          const cidadeBase = cleanCidade(spi?.cidade_comercial) || cleanCidade(p?.cidade_comercial) || cleanCidade(a.cidade_comercial) || null;
-          const cidadeExecucao = cleanCidade(a.localidade_objeto) || cleanCidade(a.cidade_comercial) || cidadeBase || null;
-          const cidadePrincipal = cidadeBase || cidadeExecucao;
+            // Cidade Base (Lotação oficial conforme PO / SPI) vs Cidade de Execução (Local onde o checklist foi preenchido)
+            const cidadeBase = cleanCidade(spi?.cidade_comercial) || cleanCidade(p?.cidade_comercial) || cleanCidade(a.cidade_comercial) || null;
+            const cidadeExecucao = cleanCidade(a.localidade_objeto) || cleanCidade(a.cidade_comercial) || cidadeBase || null;
+            const cidadePrincipal = cidadeBase || cidadeExecucao;
 
-          // Regional e Diretoria são determinadas pela Cidade Base (Lotação do Colaborador) para não distorcer equipe/liderança em mutirões
-          const regional = getRegional(cidadePrincipal);
-          const fc = getFilialCnpj(cidadePrincipal);
+            // Regional e Diretoria são determinadas pela Cidade Base (Lotação do Colaborador) para não distorcer equipe/liderança em mutirões
+            const regional = getRegional(cidadePrincipal);
+            const fc = getFilialCnpj(cidadePrincipal);
 
-          let rawDir = (spi ? INTERIOR : null) || p?.diretoria_2 || p?.diretoria_3 || a.diretoria_3 || null;
-          let diretoria = normalizeDiretoria(rawDir, regional);
+            let rawDir = (spi ? INTERIOR : null) || p?.diretoria_2 || p?.diretoria_3 || a.diretoria_3 || null;
+            let diretoria = normalizeDiretoria(rawDir, regional);
 
-          let gestor = spi?.gestor_atual || p?.gestor || a.gestor || a.supervisor || null;
-          if (gestor) {
-            gestor = gestor.toString().trim().toUpperCase();
-          } else {
-            gestor = regional ? `SUPERVISÃO ${regional}` : 'SUPERVISÃO NÃO IDENTIFICADA';
-          }
+            let gestor = spi?.gestor_atual || p?.gestor || a.gestor || a.supervisor || null;
+            if (gestor) {
+              gestor = gestor.toString().trim().toUpperCase();
+            } else {
+              gestor = regional ? `SUPERVISÃO ${regional}` : 'SUPERVISÃO NÃO IDENTIFICADA';
+            }
 
-          const filial = (p?.filial && p.filial.trim()) || fc?.filial || spi?.gerencia || p?.gerencia || a.gerencia || (regional ? `FILIAL ${regional}` : 'SÃO PAULO');
-          const cnpj = (p?.cnpj && p.cnpj.trim()) || fc?.cnpj || '-';
-          const h = buildHierarquia(gestor, diretoria, cidadePrincipal, regional);
+            const filial = (p?.filial && p.filial.trim()) || fc?.filial || spi?.gerencia || p?.gerencia || a.gerencia || (regional ? `FILIAL ${regional}` : 'SÃO PAULO');
+            const cnpj = (p?.cnpj && p.cnpj.trim()) || fc?.cnpj || '-';
+            const h = buildHierarquia(gestor, diretoria, cidadePrincipal, regional);
 
-          return {
-            "Número": a.numero,
-            "Data Checklist": a.data_checklist,
-            "Data Início": a.data_inicio,
-            "Data Fim": a.data_fim,
-            "Duração": a.duracao,
-            "Situação": a.situacao,
-            "Matrícula Auditor": a.matricula_auditor,
-            "Nome Auditor": a.nome_auditor,
-            "Localidade Objeto": a.localidade_objeto,
-            "Questionário": a.questionario,
-            "CARGO": (spi?.cargo || p?.cargo || null)?.toString()?.trim()?.toUpperCase() || null,
-            "RE": a.re,
-            "CIDADE COMERCIAL": cidadePrincipal,
-            "CIDADE_BASE": cidadeBase || cidadePrincipal,
-            "CIDADE_EXECUCAO": cidadeExecucao,
-            "REGIONAL": regional || (diretoria?.includes('INTERIOR') ? 'SPI' : 'SPC'),
-            "UF COMERCIAL": p?.uf_comercial || a.uf_comercial || null,
-            "DIRETORIA 2": diretoria,
-            "DIRETORIA 3": diretoria,
-            "GERÊNCIA": spi?.gerencia || p?.gerencia || a.gerencia || null,
-            "FILIAL": filial,
-            "CNPJ": cnpj,
-            "GESTOR": gestor,
-            "Supervisor": h.supervisor || gestor,
-            "COORDENADOR": h.coordenador,
-            "GERENTE": h.gerente,
-            "DIRETOR": h.diretor,
-            "LIDERES": h.chain,
-            "Mês": a.mes,
-            "Ano": a.ano,
-            "ATIVO_SPI": spi ? spi.ativo : (regional === 'SPI' || diretoria?.includes('INTERIOR') ? 0 : null),
-            "IS_SPI": !!spi,
-          };
-        });
+            return {
+              "Número": a.numero,
+              "Data Checklist": a.data_checklist,
+              "Data Início": a.data_inicio,
+              "Data Fim": a.data_fim,
+              "Duração": a.duracao,
+              "Situação": a.situacao,
+              "Matrícula Auditor": a.matricula_auditor,
+              "Nome Auditor": a.nome_auditor,
+              "Localidade Objeto": a.localidade_objeto,
+              "Questionário": a.questionario,
+              "CARGO": (spi?.cargo || p?.cargo || null)?.toString()?.trim()?.toUpperCase() || null,
+              "RE": a.re,
+              "CIDADE COMERCIAL": cidadePrincipal,
+              "CIDADE_BASE": cidadeBase || cidadePrincipal,
+              "CIDADE_EXECUCAO": cidadeExecucao,
+              "REGIONAL": regional || (diretoria?.includes('INTERIOR') ? 'SPI' : 'SPC'),
+              "UF COMERCIAL": p?.uf_comercial || a.uf_comercial || null,
+              "DIRETORIA 2": diretoria,
+              "DIRETORIA 3": diretoria,
+              "GERÊNCIA": spi?.gerencia || p?.gerencia || a.gerencia || null,
+              "FILIAL": filial,
+              "CNPJ": cnpj,
+              "GESTOR": gestor,
+              "Supervisor": h.supervisor || gestor,
+              "COORDENADOR": h.coordenador,
+              "GERENTE": h.gerente,
+              "DIRETOR": h.diretor,
+              "LIDERES": h.chain,
+              "Mês": a.mes,
+              "Ano": a.ano,
+              "ATIVO_SPI": spi ? spi.ativo : (regional === 'SPI' || diretoria?.includes('INTERIOR') ? 0 : null),
+              "IS_SPI": !!spi,
+            };
+          });
 
         // Montar a lista canônica de colaboradores do PO em SP filtrada estritamente por cargo TÉCNICO
         const colaboradoresPO: any[] = [];
@@ -968,11 +968,11 @@ export async function GET(req: NextRequest) {
         }
         if (d instanceof Date && !isNaN(d.getTime())) {
           const p = (n: number) => n.toString().padStart(2, '0');
-          return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+          return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
         }
         return s;
       };
-      
+
       if (type === 'DSS') {
         const cid = cleanCidade(r["CIDADE COMERCIAL"]);
         const reg = getRegional(cid);
