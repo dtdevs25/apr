@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx-js-style';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Download, ChevronDown, Building, Users, MapPin,
+  Download, ChevronDown, Building, Users, MapPin, CheckSquare,
   FileText, UserCheck, Clock, X, Settings, ArrowLeft, Sun, Moon, HelpCircle
 } from 'lucide-react';
 import { PremiumMultiSelect } from '@/components/common/PremiumMultiSelect';
@@ -650,7 +650,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
                   <select
                     value={rankingGroup}
                     onChange={(e) => setRankingGroup(e.target.value as any)}
-                    className="appearance-none flex items-center justify-between px-3 py-1.5 w-36 bg-white dark:bg-[#1e293b] border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm text-xs font-medium text-gray-700 dark:text-gray-200 outline-none focus:border-purple-300 dark:focus:border-purple-500 cursor-pointer pr-8"
+                    className="appearance-none flex items-center justify-between px-3 py-1.5 w-44 bg-white dark:bg-[#1e293b] border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm text-xs font-medium text-gray-700 dark:text-gray-200 outline-none focus:border-purple-300 dark:focus:border-purple-500 cursor-pointer pr-8"
                   >
                     <option value="colaborador">Por Colaborador</option>
                     <option value="cidade">Por Cidade</option>
@@ -662,9 +662,33 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
 
             <div className="w-px h-10 bg-gray-200 dark:bg-gray-800 hidden md:block"></div>
 
-            <PremiumMultiSelect label="Diretoria" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-[200px]" />
-            <PremiumMultiSelect label="Gestão (Coord / Sup / Ger)" options={allLeaders} selected={selectedLeaders} onChange={handleMultiSelect(setSelectedLeaders)} icon={Users} widthClass="w-[210px]" />
-            <PremiumMultiSelect label="Cidade" options={allCities} selected={selectedCities} onChange={handleMultiSelect(setSelectedCities)} icon={MapPin} widthClass="w-[150px]" />
+            <PremiumMultiSelect label="Diretoria" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-64" />
+            <PremiumMultiSelect label="Gestão (Coord / Sup / Ger)" options={allLeaders} selected={selectedLeaders} onChange={handleMultiSelect(setSelectedLeaders)} icon={Users} widthClass="w-80" />
+            <PremiumMultiSelect label="Cidade" options={allCities} selected={selectedCities} onChange={handleMultiSelect(setSelectedCities)} icon={MapPin} widthClass="w-56" />
+
+            {/* Fator de Correção SPI (Ativos em Campo) */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Correção SPI</span>
+              <button
+                type="button"
+                onClick={() => setOnlySpiActive(prev => !prev)}
+                className={`flex items-center gap-2 px-3 py-1.5 h-[34px] rounded-xl border shadow-sm transition-all focus:outline-none ${
+                  onlySpiActive
+                    ? 'bg-purple-50 dark:bg-purple-950/40 border-purple-400 dark:border-purple-500 text-purple-900 dark:text-purple-200'
+                    : 'bg-white dark:bg-[#1e293b] border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300'
+                }`}
+                title="Fator de Correção do Interior: filtra estritamente colaboradores com ATIVO = 1 na planilha de correção do SPI (exclui treinamento e afastados)"
+              >
+                <div className={`w-3.5 h-3.5 rounded flex items-center justify-center transition-colors ${
+                  onlySpiActive ? 'bg-[#660099] dark:bg-purple-500 text-white' : 'border border-gray-400 dark:border-gray-500'
+                }`}>
+                  {onlySpiActive && <CheckSquare size={12} />}
+                </div>
+                <span className="text-xs font-semibold whitespace-nowrap">
+                  {onlySpiActive ? 'SPI Campo Ativo' : 'SPI Todos'}
+                </span>
+              </button>
+            </div>
 
             {/* Flag Origem da Cidade: Base (PO) vs Execução (APR) */}
             <div className="flex flex-col gap-1.5">
@@ -695,7 +719,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
               </div>
             </div>
 
-            {(selectedMonths.length > 0 || selectedDiretorias.length > 0 || selectedLeaders.length > 0 || selectedCities.length > 0 || selectedAuditores.length > 0) && (
+            {(selectedMonths.length > 0 || selectedDiretorias.length > 0 || selectedLeaders.length > 0 || selectedCities.length > 0 || selectedAuditores.length > 0 || !onlySpiActive) && (
               <div className="flex flex-col gap-1.5 ml-auto">
                 <span className="text-[10px] font-semibold opacity-0">Limpar</span>
                 <button

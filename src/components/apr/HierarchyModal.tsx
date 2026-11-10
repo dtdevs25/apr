@@ -202,6 +202,12 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
     // Isso garante que coordenadores (como Ricardo Garone) e supervisores estejam sempre visíveis na gestão,
     // mesmo quando não tiverem subordinados com APR emitida no mês selecionado.
     liderancas.forEach(l => {
+      // Proteção estrita: Ignora líderes de lojas, varejo ou de outras diretorias
+      const cargoUpper = (l.cargo || '').toUpperCase();
+      if (cargoUpper.includes('LOJA') || cargoUpper.includes('VAREJO') || cargoUpper.includes('COMERCIAL') || cargoUpper.includes('VENDAS')) {
+        return;
+      }
+
       const isSamuel = l.nome.includes('SAMUEL') || l.nome.includes('ROSSI');
       const isEliseu = l.nome.includes('ELISEU') || l.nome.includes('OLIVEIRA');
 
