@@ -97,7 +97,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
   const [selectedLeaders, setSelectedLeaders] = useState<string[]>([]);
   const [selectedCities, setSelectedCities] = useState<string[]>([]);
   const [selectedAuditores, setSelectedAuditores] = useState<string[]>([]);
-  const [onlySpiActive, setOnlySpiActive] = useState<boolean>(true);
+  const [onlySpiActive, setOnlySpiActive] = useState<boolean>(false);
   // Flag de Origem da Cidade: 'base' (Lotação oficial PO) ou 'execucao' (Local da APR)
   const [cityMode, setCityMode] = useState<'base' | 'execucao'>('base');
   const [liderancas, setLiderancas] = useState<any[]>([]);
@@ -641,7 +641,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
 
         {/* Filter Bar */}
         <div className="bg-gray-50/50 dark:bg-[#0f172a]/70 backdrop-blur-md border-t border-gray-100 dark:border-gray-800/80">
-          <div className="max-w-[1600px] mx-auto px-6 py-2 flex flex-wrap items-center gap-4">
+          <div className="max-w-[1600px] mx-auto px-6 py-2 flex flex-wrap items-center gap-3">
 
             <div className="relative">
               <div className="flex flex-col gap-1.5">
@@ -650,7 +650,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
                   <select
                     value={rankingGroup}
                     onChange={(e) => setRankingGroup(e.target.value as any)}
-                    className="appearance-none flex items-center justify-between px-3 py-1.5 w-44 bg-white dark:bg-[#1e293b] border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm text-xs font-medium text-gray-700 dark:text-gray-200 outline-none focus:border-purple-300 dark:focus:border-purple-500 cursor-pointer pr-8"
+                    className="appearance-none flex items-center justify-between px-3 py-1.5 w-36 bg-white dark:bg-[#1e293b] border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm text-xs font-medium text-gray-700 dark:text-gray-200 outline-none focus:border-purple-300 dark:focus:border-purple-500 cursor-pointer pr-8"
                   >
                     <option value="colaborador">Por Colaborador</option>
                     <option value="cidade">Por Cidade</option>
@@ -660,11 +660,11 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
               </div>
             </div>
 
-            <div className="w-px h-12 bg-gray-200 dark:bg-gray-800 hidden md:block"></div>
+            <div className="w-px h-10 bg-gray-200 dark:bg-gray-800 hidden md:block"></div>
 
-            <PremiumMultiSelect label="Diretoria" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-[340px]" />
-            <PremiumMultiSelect label="Gestão (Coord / Sup / Ger)" options={allLeaders} selected={selectedLeaders} onChange={handleMultiSelect(setSelectedLeaders)} icon={Users} widthClass="w-[320px]" />
-            <PremiumMultiSelect label="Cidade" options={allCities} selected={selectedCities} onChange={handleMultiSelect(setSelectedCities)} icon={MapPin} />
+            <PremiumMultiSelect label="Diretoria" options={allDiretorias} selected={selectedDiretorias} onChange={handleMultiSelect(setSelectedDiretorias)} icon={Building} widthClass="w-[200px]" />
+            <PremiumMultiSelect label="Gestão (Coord / Sup / Ger)" options={allLeaders} selected={selectedLeaders} onChange={handleMultiSelect(setSelectedLeaders)} icon={Users} widthClass="w-[210px]" />
+            <PremiumMultiSelect label="Cidade" options={allCities} selected={selectedCities} onChange={handleMultiSelect(setSelectedCities)} icon={MapPin} widthClass="w-[150px]" />
 
             {/* Flag Origem da Cidade: Base (PO) vs Execução (APR) */}
             <div className="flex flex-col gap-1.5">
@@ -695,37 +695,12 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
               </div>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Interior (SPI)</span>
-              <label
-                className={`flex items-center gap-2 px-3 py-1.5 h-[34px] rounded-xl border text-xs font-semibold cursor-pointer transition-all shadow-sm select-none ${onlySpiActive
-                  ? 'bg-purple-50 dark:bg-purple-950/40 border-purple-300 dark:border-purple-700 text-[#660099] dark:text-purple-300'
-                  : 'bg-white dark:bg-[#1e293b] border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300'
-                  }`}
-                title="Quando ativo, considera apenas colaboradores ativos em campo da DIR Interior (desconsidera treinamento e administrativo)"
-              >
-                <input
-                  type="checkbox"
-                  checked={onlySpiActive}
-                  onChange={e => setOnlySpiActive(e.target.checked)}
-                  className="w-4 h-4 text-[#660099] rounded border-gray-300 dark:border-gray-600 focus:ring-[#660099] cursor-pointer"
-                />
-                <span className="whitespace-nowrap">Ativos em Campo</span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${onlySpiActive
-                  ? 'bg-[#660099] text-white dark:bg-purple-600'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
-                  }`}>
-                  {onlySpiActive ? 'SPI' : 'Todos'}
-                </span>
-              </label>
-            </div>
-
-            {(selectedMonths.length > 0 || selectedDiretorias.length > 0 || selectedLeaders.length > 0 || selectedCities.length > 0 || selectedAuditores.length > 0 || !onlySpiActive) && (
+            {(selectedMonths.length > 0 || selectedDiretorias.length > 0 || selectedLeaders.length > 0 || selectedCities.length > 0 || selectedAuditores.length > 0) && (
               <div className="flex flex-col gap-1.5 ml-auto">
                 <span className="text-[10px] font-semibold opacity-0">Limpar</span>
                 <button
                   onClick={clearFilters}
-                  className="flex items-center justify-center gap-1.5 px-4 py-1.5 h-[34px] text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-900/50 border border-red-100 dark:border-red-900/50 rounded-xl transition-all shadow-sm"
+                  className="flex items-center justify-center gap-1.5 px-3 py-1.5 h-[34px] text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-900/50 border border-red-100 dark:border-red-900/50 rounded-xl transition-all shadow-sm"
                 >
                   <X size={14} strokeWidth={2.5} /> Limpar Filtros
                 </button>

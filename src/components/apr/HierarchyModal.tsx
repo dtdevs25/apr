@@ -365,10 +365,10 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
         const colabName = item.name.trim().toUpperCase();
 
         const matches = (itemDir && activeLeaderSet.has(itemDir)) ||
-                        (itemGer && activeLeaderSet.has(itemGer)) ||
-                        (itemCoord && activeLeaderSet.has(itemCoord)) ||
-                        (itemSup && activeLeaderSet.has(itemSup)) ||
-                        activeLeaderSet.has(colabName);
+          (itemGer && activeLeaderSet.has(itemGer)) ||
+          (itemCoord && activeLeaderSet.has(itemCoord)) ||
+          (itemSup && activeLeaderSet.has(itemSup)) ||
+          activeLeaderSet.has(colabName);
 
         if (!matches) return;
       }
@@ -644,7 +644,7 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
     const set = new Set<string>();
     hierarchyTree.forEach(d => d.gerenciasList.forEach(g => {
       g.coordenadoresList.forEach(c => {
-        if (c.coordenador && !c.coordenador.includes('DIRETA')) set.add(c.coordenador);
+        if (c.coordenador && !c.coordenador.includes('DIRETA') && !c.coordenador.includes('COORDENAÇÃO GERAL')) set.add(c.coordenador);
       });
     }));
     return set.size;
@@ -655,7 +655,7 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
     hierarchyTree.forEach(d => d.gerenciasList.forEach(g => {
       g.coordenadoresList.forEach(c => {
         c.supervisoresList.forEach(s => {
-          if (s.supervisor) set.add(s.supervisor);
+          if (s.supervisor && !s.supervisor.includes('SUPERVISÃO OPERACIONAL')) set.add(s.supervisor);
         });
       });
     }));
@@ -783,7 +783,7 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
                   <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                     Estrutura Organizacional e Hierarquia
                     <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/80 text-[#660099] dark:text-purple-300">
-                      Diretoria ➔ Gerência ➔ Coordenação ➔ Supervisão ➔ Campo
+                      Diretoria ➔ Gerência ➔ Coordenação ➔ Supervisão ➔ Técnicos
                     </span>
                   </h2>
                   <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5 flex items-center gap-1.5">
@@ -834,7 +834,7 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
               <div className="text-xl font-bold text-orange-700 dark:text-orange-400 mt-0.5">{totalSupervisores}</div>
             </div>
             <div className="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50 rounded-xl p-3">
-              <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 uppercase">Colaboradores</span>
+              <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 uppercase">Técnicos</span>
               <div className="text-xl font-bold text-emerald-700 dark:text-emerald-400 mt-0.5 flex items-baseline gap-1.5">
                 <span>{totalColaboradores}</span>
                 <span className="text-[11px] font-normal text-emerald-600">({totalComApr} com APR)</span>
@@ -1001,9 +1001,8 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
                                     return (
                                       <div
                                         key={coordKey}
-                                        className={`border rounded-xl overflow-hidden bg-white dark:bg-[#111827] shadow-xs ${
-                                          isGarone ? 'border-purple-400 dark:border-purple-600 ring-2 ring-purple-400/20' : 'border-purple-200 dark:border-purple-900/60'
-                                        }`}
+                                        className={`border rounded-xl overflow-hidden bg-white dark:bg-[#111827] shadow-xs ${isGarone ? 'border-purple-400 dark:border-purple-600 ring-2 ring-purple-400/20' : 'border-purple-200 dark:border-purple-900/60'
+                                          }`}
                                       >
                                         {/* COORDENADOR HEADER */}
                                         <button
@@ -1155,7 +1154,7 @@ export const HierarchyModal: React.FC<HierarchyModalProps> = ({
                                                                     </span>
                                                                   )}
                                                                 </td>
-                                                               </tr>
+                                                              </tr>
                                                             ))}
                                                           </tbody>
                                                         </table>

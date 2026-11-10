@@ -440,7 +440,8 @@ export async function GET(req: NextRequest) {
           return (n.includes('ELISEU') && n.includes('OLIVEIRA')) || n === DIRECTOR_SPC;
         };
 
-        const classifyLeaderRole = (cargo: string | null | undefined): 'DIRETOR' | 'GERENTE' | 'COORDENADOR' | 'SUPERVISOR' => {
+        const classifyLeaderRole = (cargo: string | null | undefined): 'DIRETOR' | 'GERENTE' | 'COORDENADOR' | 'SUPERVISOR' | null => {
+          if (!cargo) return null;
           const c = cleanStr(cargo);
           if (
             c.startsWith('DIR ') ||
@@ -478,7 +479,7 @@ export async function GET(req: NextRequest) {
           ) {
             return 'SUPERVISOR';
           }
-          return 'SUPERVISOR';
+          return null;
         };
 
         const liderancasMap = new Map<string, {
@@ -539,7 +540,8 @@ export async function GET(req: NextRequest) {
             const isSamuel = isDirectorSpi(cleanName) || (cargoUpper.includes('INTERIOR') && (cargoUpper.startsWith('DIR ') || cargoUpper.includes('DIRETOR')));
             const isEliseu = isDirectorSpc(cleanName) || (cargoUpper.includes('CAPITAL') && (cargoUpper.startsWith('DIR ') || cargoUpper.includes('DIRETOR')));
             const isKnownDirector = isSamuel || isEliseu;
-            const tipo = isKnownDirector ? 'DIRETOR' : classifyLeaderRole(cargoUpper);
+            const detected = classifyLeaderRole(cargoUpper);
+            const tipo: 'DIRETOR' | 'GERENTE' | 'COORDENADOR' | 'SUPERVISOR' = isKnownDirector ? 'DIRETOR' : (detected || 'SUPERVISOR');
 
             chainNodes.push({
               nome: cleanName,
@@ -656,7 +658,13 @@ export async function GET(req: NextRequest) {
           const isEliseu = isDirectorSpc(nomeClean);
           const isKnownDirector = isSamuel || isEliseu || cargoClean.startsWith('DIR SERVICOS AO CLIENTE');
           const role = isKnownDirector ? 'DIRETOR' : classifyLeaderRole(cargoClean);
-          if (role !== 'DIRETOR' && role !== 'GERENTE' && role !== 'COORDENADOR' && role !== 'SUPERVISOR') {
+          if (!role || (role !== 'DIRETOR' && role !== 'GERENTE' && role !== 'COORDENADOR' && role !== 'SUPERVISOR')) {
+            continue;
+          }
+
+          const rawDir = p.diretoria_2 || p.diretoria_3 || null;
+          const rawDirClean = cleanStr(rawDir);
+          if (!rawDirClean.includes('SERVICOS AO CLIENTE') && !rawDirClean.includes('INTERIOR') && !rawDirClean.includes('CAPITAL')) {
             continue;
           }
 
@@ -676,8 +684,7 @@ export async function GET(req: NextRequest) {
             diretor = DIRECTOR_SPC;
             cidade = cidade || 'SÃO PAULO';
           } else {
-            const rawDir = p.diretoria_2 || p.diretoria_3 || null;
-            reg = getRegional(cidade) || (cleanStr(rawDir).includes('INTERIOR') ? 'SPI' : 'SPC');
+            reg = getRegional(cidade) || (rawDirClean.includes('INTERIOR') ? 'SPI' : 'SPC');
             dir = normalizeDiretoria(rawDir, reg);
             if (!dir || !ALLOWED_DIRETORIAS.includes(dir)) {
               dir = reg === 'SPI' ? INTERIOR : CAPITAL;
