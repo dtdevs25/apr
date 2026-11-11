@@ -341,11 +341,150 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       cidadesExecucao: Set<string>
     }> = {};
 
-    filteredData.forEach(item => {
-      const name = rankingGroup === 'cidade'
-        ? (getItemCity(item) || 'Não Identificada')
-        : (item['Nome Auditor'] || item['Matrícula Auditor'] || 'Não Identificado');
+    // Se o agrupamento for por cidade: agrega diretamente pelas ocorrências de APR
+    if (rankingGroup === 'cidade') {
+      filteredData.forEach(item => {
+        const name = getItemCity(item) || 'Não Identificada';
+        const mat = item['Matrícula Auditor'] || 'N/A';
+        const auditorName = item['Nome Auditor'] || mat;
 
+        if (selectedAuditores.length > 0 && !selectedAuditores.includes(auditorName) && !selectedAuditores.includes(mat)) return;
+
+        const cidBase = item['CIDADE_BASE'] || item['CIDADE COMERCIAL'];
+        const cidExec = item['CIDADE_EXECUCAO'] || item['Localidade Objeto'] || item['CIDADE COMERCIAL'];
+
+        if (!agg[name]) {
+          agg[name] = {
+            count: 0,
+            name,
+            data: [],
+            totalSecs: 0,
+            validCount: 0,
+            uniquePeople: new Set(),
+            semApr: false,
+            supervisor: item['Supervisor'] || item['GESTOR'],
+            coordenador: item['COORDENADOR'] || null,
+            gerente: item['GERENTE'] || null,
+            diretor: item['DIRETOR'] || null,
+            cargo: item['CARGO'] || null,
+            cidade: getItemCity(item),
+            cidadeBase: cidBase,
+            cidadesExecucao: new Set()
+          };
+        }
+        if (cidExec) agg[name].cidadesExecucao.add(cidExec);
+        agg[name].count += 1;
+        agg[name].data.push(item);
+        agg[name].uniquePeople.add(mat);
+
+        const durKey = Object.keys(item).find(k => k.toLowerCase().includes('dura') && k.toLowerCase().includes('o'));
+        if (durKey && typeof item[durKey] === 'string') {
+          const parts = item[durKey].split(':');
+          if (parts.length === 3) {
+            const h = parseInt(parts[0], 10); const m = parseInt(parts[1], 10); const s = parseInt(parts[2], 10);
+            if (!isNaN(h) && !isNaN(m) && !isNaN(s)) {
+              const secs = h * 3600 + m * 60 + s;
+              if (secs > 0 && secs <= 600) {
+                agg[name].totalSecs += secs;
+                agg[name].validCount++;
+              }
+            }
+          }
+        }
+      });
+      return Object.values(agg);
+    }
+
+    // Se o agrupamento for por colaborador e houver colaboradores oficiais no PO:
+    // A base canônica do quadro de colaboradores é estritamente o PO de campo
+    if (colaboradoresPO.length > 0) {
+      const poColabMapByMat = new Map<string, any>();
+      const poColabMapByNome = new Map<string, any>();
+
+      colaboradoresPO.forEach(p => {
+        if (onlySpiActive && p.diretoria === 'DIR SERVICOS AO CLIENTE SP INTERIOR' && p.ativo_spi === 0) return;
+        if (selectedDiretorias.length > 0 && !selectedDiretorias.includes(p.diretoria)) return;
+        if (!matchLeader(p, selectedLeaders)) return;
+        if (selectedCities.length > 0 && !selectedCities.includes(p.cidade)) return;
+        if (selectedAuditores.length > 0 && !selectedAuditores.includes(p.nome) && !selectedAuditores.includes(p.matricula)) return;
+
+        const pMat = String(p.matricula || '').trim().replace(/^0+/, '');
+        const pNome = String(p.nome || pMat).trim();
+
+        const entry = {
+          count: 0,
+          name: pNome,
+          data: [] as any[],
+          totalSecs: 0,
+          validCount: 0,
+          uniquePeople: new Set<string>([pMat]),
+          semApr: true,
+          supervisor: p.supervisor,
+          coordenador: p.coordenador || null,
+          gerente: p.gerente || null,
+          diretor: p.diretor || null,
+          cargo: p.cargo || null,
+          cidade: p.cidade,
+          cidadeBase: p.cidade,
+          cidadesExecucao: new Set<string>()
+        };
+
+        agg[pNome] = entry;
+        if (pMat) poColabMapByMat.set(pMat, entry);
+        poColabMapByNome.set(pNome, entry);
+      });
+
+      // Associa as APRs emitidas aos seus respectivos colaboradores
+      filteredData.forEach(item => {
+        const mat = String(item['Matrícula Auditor'] || item['RE'] || '').trim().replace(/^0+/, '');
+        const auditorName = String(item['Nome Auditor'] || '').trim();
+
+        if (selectedAuditores.length > 0 && !selectedAuditores.includes(auditorName) && !selectedAuditores.includes(mat)) return;
+
+        let target = (mat && poColabMapByMat.get(mat)) || (auditorName && poColabMapByNome.get(auditorName)) || null;
+
+        if (!target && auditorName) {
+          const cleanAuditor = auditorName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+          for (const [key, val] of poColabMapByNome.entries()) {
+            const cleanKey = key.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+            if (cleanKey === cleanAuditor || cleanKey.includes(cleanAuditor) || cleanAuditor.includes(cleanKey)) {
+              target = val;
+              break;
+            }
+          }
+        }
+
+        if (target) {
+          const cidExec = item['CIDADE_EXECUCAO'] || item['Localidade Objeto'] || item['CIDADE COMERCIAL'];
+          if (cidExec) target.cidadesExecucao.add(cidExec);
+          target.count += 1;
+          target.data.push(item);
+          target.semApr = false;
+          if (mat) target.uniquePeople.add(mat);
+
+          const durKey = Object.keys(item).find(k => k.toLowerCase().includes('dura') && k.toLowerCase().includes('o'));
+          if (durKey && typeof item[durKey] === 'string') {
+            const parts = item[durKey].split(':');
+            if (parts.length === 3) {
+              const h = parseInt(parts[0], 10); const m = parseInt(parts[1], 10); const s = parseInt(parts[2], 10);
+              if (!isNaN(h) && !isNaN(m) && !isNaN(s)) {
+                const secs = h * 3600 + m * 60 + s;
+                if (secs > 0 && secs <= 600) {
+                  target.totalSecs += secs;
+                  target.validCount++;
+                }
+              }
+            }
+          }
+        }
+      });
+
+      return Object.values(agg);
+    }
+
+    // Fallback: se colaboradoresPO estiver vazio
+    filteredData.forEach(item => {
+      const name = item['Nome Auditor'] || item['Matrícula Auditor'] || 'Não Identificado';
       const mat = item['Matrícula Auditor'] || 'N/A';
       const auditorName = item['Nome Auditor'] || mat;
 
@@ -385,7 +524,6 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
           const h = parseInt(parts[0], 10); const m = parseInt(parts[1], 10); const s = parseInt(parts[2], 10);
           if (!isNaN(h) && !isNaN(m) && !isNaN(s)) {
             const secs = h * 3600 + m * 60 + s;
-            // Regra de Negócio: Desconsidera durações maiores que 10 minutos (600s) para o cálculo da média
             if (secs > 0 && secs <= 600) {
               agg[name].totalSecs += secs;
               agg[name].validCount++;
@@ -394,47 +532,6 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
         }
       }
     });
-
-    // Se o agrupamento for por colaborador, cruzamos com os colaboradores ativos do PO para identificar quem NÃO fez APR
-    if (rankingGroup === 'colaborador' && colaboradoresPO.length > 0) {
-      const seenNames = new Set(Object.keys(agg));
-      const seenMats = new Set<string>();
-      filteredData.forEach(i => {
-        if (i['Matrícula Auditor']) seenMats.add(String(i['Matrícula Auditor']).trim());
-        if (i['RE']) seenMats.add(String(i['RE']).trim());
-      });
-
-      colaboradoresPO.forEach(p => {
-        if (onlySpiActive && p.diretoria === 'DIR SERVICOS AO CLIENTE SP INTERIOR' && p.ativo_spi === 0) return;
-        if (selectedDiretorias.length > 0 && !selectedDiretorias.includes(p.diretoria)) return;
-        if (!matchLeader(p, selectedLeaders)) return;
-        if (selectedCities.length > 0 && !selectedCities.includes(p.cidade)) return;
-        if (selectedAuditores.length > 0 && !selectedAuditores.includes(p.nome) && !selectedAuditores.includes(p.matricula)) return;
-
-        const pMat = String(p.matricula || '').trim();
-        const pNome = String(p.nome || pMat).trim();
-
-        if (seenNames.has(pNome) || (pMat && seenMats.has(pMat))) return;
-
-        agg[pNome] = {
-          count: 0,
-          name: pNome,
-          data: [],
-          totalSecs: 0,
-          validCount: 0,
-          uniquePeople: new Set([pMat]),
-          semApr: true,
-          supervisor: p.supervisor,
-          coordenador: p.coordenador || null,
-          gerente: p.gerente || null,
-          diretor: p.diretor || null,
-          cargo: p.cargo || null,
-          cidade: p.cidade,
-          cidadeBase: p.cidade,
-          cidadesExecucao: new Set()
-        };
-      });
-    }
 
     return Object.values(agg);
   }, [filteredData, colaboradoresPO, selectedAuditores, selectedDiretorias, selectedLeaders, selectedCities, onlySpiActive, rankingGroup, getItemCity, matchLeader]);

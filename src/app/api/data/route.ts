@@ -357,6 +357,12 @@ export async function GET(req: NextRequest) {
           return cleanStr(cargo).includes('TECNICO');
         };
 
+        const isCampoRole = (grupo2: string | null | undefined): boolean => {
+          if (!grupo2) return false;
+          const g = cleanStr(grupo2);
+          return g.includes('CAMPO');
+        };
+
         const isNonFieldRole = (cargo: string | null | undefined): boolean => {
           if (!cargo) return false;
           const c = cleanStr(cargo);
@@ -370,6 +376,7 @@ export async function GET(req: NextRequest) {
           pool.query(`SELECT * FROM aprs ORDER BY data_inicio DESC`),
           pool.query(`
             SELECT user_id_ssff, nome, cargo,
+                   COALESCE(to_jsonb(po)->>'grupo_2', to_jsonb(po)->>'grupo 2', to_jsonb(po)->>'GRUPO 2', to_jsonb(po)->>'GRUPO_2', '') AS grupo_2,
                    COALESCE(to_jsonb(po)->>'categoria', '') AS categoria,
                    COALESCE(to_jsonb(po)->>'subgrupo', '') AS subgrupo,
                    COALESCE(to_jsonb(po)->>'diretoria_2', po.diretoria_3, '') AS diretoria_2,
@@ -894,7 +901,7 @@ export async function GET(req: NextRequest) {
           // Se for do Interior, ignora (já tratado com precisão absoluta via planilha de correção SPI)
           const rawDir = p.diretoria_2 || p.diretoria_3 || null;
           const rawDirClean = cleanStr(rawDir);
-          if (rawDirClean.includes('INTERIOR') || rawDirClean.includes('SPI')) {
+          if (!rawDirClean.includes('CAPITAL') || rawDirClean.includes('INTERIOR') || rawDirClean.includes('SPI')) {
             continue;
           }
 
@@ -902,6 +909,11 @@ export async function GET(req: NextRequest) {
           if (!isTecnico(p.cargo)) continue;
           if (isNonFieldRole(p.cargo)) continue;
           if (rawDirClean.includes('LOJA') || rawDirClean.includes('VAREJO') || rawDirClean.includes('COMERCIAL')) {
+            continue;
+          }
+
+          // FILTRO DA COLUNA GRUPO 2: Exclusivo pessoal de Campo (elimina Administrativo e Callcenter)
+          if (p.grupo_2 && !isCampoRole(p.grupo_2)) {
             continue;
           }
 
