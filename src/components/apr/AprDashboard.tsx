@@ -713,6 +713,16 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
             </h1>
           </div>
           <div className="flex items-center gap-3">
+            {/* Ações Rápidas */}
+            {(selectedMonths.length > 0 || selectedDiretorias.length > 0 || selectedLeaders.length > 0 || selectedCities.length > 0 || selectedAuditores.length > 0) && (
+              <button
+                onClick={clearFilters}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-100 rounded-lg transition-all font-medium text-xs shadow-sm"
+                title="Limpar todos os filtros selecionados"
+              >
+                <X size={13} strokeWidth={2.5} /> Limpar Filtros
+              </button>
+            )}
             <button
               onClick={toggleTheme}
               className="flex items-center justify-center w-8 h-8 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-gray-400 dark:hover:border-gray-500 text-gray-600 dark:text-amber-400 transition-all shadow-sm"
@@ -815,18 +825,6 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
                 </button>
               </div>
             </div>
-
-            {(selectedMonths.length > 0 || selectedDiretorias.length > 0 || selectedLeaders.length > 0 || selectedCities.length > 0 || selectedAuditores.length > 0 || !onlySpiActive) && (
-              <div className="flex flex-col gap-1.5 ml-auto">
-                <span className="text-[10px] font-semibold opacity-0">Limpar</span>
-                <button
-                  onClick={clearFilters}
-                  className="flex items-center justify-center gap-1.5 px-3 py-1.5 h-[34px] text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-900/50 border border-red-100 dark:border-red-900/50 rounded-xl transition-all shadow-sm"
-                >
-                  <X size={14} strokeWidth={2.5} /> Limpar Filtros
-                </button>
-              </div>
-            )}
 
           </div>
         </div>

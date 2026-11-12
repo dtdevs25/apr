@@ -796,9 +796,10 @@ export async function GET(req: NextRequest) {
             let rawDir = (spi ? INTERIOR : null) || p?.diretoria_2 || p?.diretoria_3 || a.diretoria_3 || null;
             let diretoria = normalizeDiretoria(rawDir, regional);
 
-            // Regra estrita: se a diretoria for INTERIOR, o colaborador DEVE constar na planilha oficial de correção do Interior (spi)
-            if (diretoria?.includes('INTERIOR') && !spi) {
-              diretoria = 'OUTRAS DIRETORIAS';
+            if (regional === 'SPI' || rawDir?.toUpperCase().includes('INTERIOR')) {
+              diretoria = INTERIOR;
+            } else if (regional === 'SPC' || rawDir?.toUpperCase().includes('CAPITAL')) {
+              diretoria = CAPITAL;
             }
 
             let gestor = spi?.gestor_atual || p?.gestor || a.gestor || a.supervisor || null;
@@ -844,7 +845,7 @@ export async function GET(req: NextRequest) {
               "LIDERES": h.chain,
               "Mês": a.mes,
               "Ano": a.ano,
-              "ATIVO_SPI": spi ? spi.ativo : (regional === 'SPI' || diretoria?.includes('INTERIOR') ? 0 : null),
+              "ATIVO_SPI": spi ? spi.ativo : 1,
               "IS_SPI": !!spi,
             };
           });
