@@ -238,7 +238,11 @@ export async function GET(req: NextRequest) {
     const type = req.nextUrl.searchParams.get('type') || 'APR';
 
     if (dataCache[type] && (Date.now() - dataCache[type].timestamp < CACHE_TTL_MS)) {
-      return NextResponse.json(dataCache[type].data);
+      return NextResponse.json(dataCache[type].data, {
+        headers: {
+          'Cache-Control': 'public, max-age=900, stale-while-revalidate=3600',
+        }
+      });
     }
 
     let rows;
@@ -373,7 +377,12 @@ export async function GET(req: NextRequest) {
         };
 
         const [aprRes, poRes, spiRes] = await Promise.all([
-          pool.query(`SELECT * FROM aprs ORDER BY COALESCE(data_fim, data_inicio) DESC`),
+          pool.query(`
+            SELECT numero, data_fim, data_inicio, duracao, matricula_auditor, nome_auditor,
+                   localidade_objeto, questionario, re, cidade_comercial, diretoria_3,
+                   gestor, supervisor, mes
+            FROM aprs
+          `),
           pool.query(`
             SELECT user_id_ssff, nome, cargo,
                    COALESCE(to_jsonb(po)->>'grupo_2', to_jsonb(po)->>'grupo 2', to_jsonb(po)->>'GRUPO 2', to_jsonb(po)->>'GRUPO_2', '') AS grupo_2,
@@ -842,39 +851,28 @@ export async function GET(req: NextRequest) {
           const filial = (p?.filial && p.filial.trim()) || fc?.filial || spi?.gerencia || p?.gerencia || a.gerencia || (regional ? `FILIAL ${regional}` : 'SÃO PAULO');
           const cnpj = (p?.cnpj && p.cnpj.trim()) || fc?.cnpj || '-';
           const h = getHierarquiaCached(gestor, diretoria, cidadePrincipal, regional);
+          const dataFmt = formatDataFast(a.data_fim || a.data_inicio);
 
           formattedAprs.push({
             "Número": a.numero,
-            "Data Checklist": formatDataFast(a.data_fim || a.data_checklist || a.data_inicio),
-            "Data Fechamento": formatDataFast(a.data_fim),
-            "Data Início": formatDataFast(a.data_inicio),
-            "Data Fim": formatDataFast(a.data_fim),
+            "Data Fechamento": dataFmt,
+            "Data Checklist": dataFmt,
             "Duração": a.duracao,
-            "Situação": a.situacao,
             "Matrícula Auditor": a.matricula_auditor,
             "Nome Auditor": a.nome_auditor,
             "Localidade Objeto": a.localidade_objeto,
             "Questionário": a.questionario,
-            "CARGO": (spi?.cargo || p?.cargo || null)?.toString()?.trim()?.toUpperCase() || null,
-            "RE": a.re,
             "CIDADE COMERCIAL": cidadePrincipal,
             "CIDADE_BASE": cidadeBase || cidadePrincipal,
             "CIDADE_EXECUCAO": cidadeExecucao,
-            "REGIONAL": regional || (diretoria?.includes('INTERIOR') ? 'SPI' : 'SPC'),
-            "UF COMERCIAL": p?.uf_comercial || a.uf_comercial || null,
             "DIRETORIA 2": diretoria,
             "DIRETORIA 3": diretoria,
-            "GERÊNCIA": spi?.gerencia || p?.gerencia || a.gerencia || null,
-            "FILIAL": filial,
-            "CNPJ": cnpj,
-            "GESTOR": gestor,
             "Supervisor": h.supervisor || gestor,
             "COORDENADOR": h.coordenador,
             "GERENTE": h.gerente,
             "DIRETOR": h.diretor,
             "LIDERES": h.chain,
             "Mês": a.mes,
-            "Ano": a.ano,
             "ATIVO_SPI": spi ? spi.ativo : 1,
             "IS_SPI": !!spi,
           });
@@ -1019,7 +1017,11 @@ export async function GET(req: NextRequest) {
         liderancas: (rows as any)._liderancas || []
       };
       dataCache[type] = { data: payload, timestamp: Date.now() };
-      return NextResponse.json(payload);
+      return NextResponse.json(payload, {
+        headers: {
+          'Cache-Control': 'public, max-age=900, stale-while-revalidate=3600',
+        }
+      });
     }
 
     // Converte datas para string no formato padrão brasileiro DD/MM/AAAA HH:mm:ss sem desvio de fuso (para outros tipos como DSS)
