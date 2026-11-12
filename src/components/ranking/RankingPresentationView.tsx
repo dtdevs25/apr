@@ -50,6 +50,16 @@ const formatDuration = (avgSecs: number) => {
 const META_APR_MES = 22 * 2; // 44 APRs no mês
 const META_DSS_MES = 4;      // 4 Diálogos no mês (1 por semana)
 
+const isOutubro = (mesVal: any, dataVal?: any): boolean => {
+  const m = String(mesVal || '').trim().toLowerCase();
+  if (m === '10' || m === '010' || m === 'out' || m.includes('outub')) return true;
+  if (dataVal) {
+    const s = String(dataVal).trim();
+    if (s.includes('/10/2026') || s.includes('-10-') || s.includes('/10/')) return true;
+  }
+  return false;
+};
+
 export const RankingPresentationView: React.FC<RankingPresentationViewProps> = ({
   initialView = 'apr-interior',
   onBack,
@@ -199,9 +209,7 @@ export const RankingPresentationView: React.FC<RankingPresentationViewProps> = (
     // 2. Associa APRs de Outubro (Mês 10)
     for (let i = 0; i < aprData.length; i++) {
       const item = aprData[i];
-      // Apenas Outubro (Mês 10 ou 'Out')
-      const mesStr = String(item['Mês'] || '').trim();
-      if (mesStr !== '10' && mesStr.toLowerCase() !== 'out') continue;
+      if (!isOutubro(item['Mês'], item['Data Fechamento'] || item['Data Checklist'])) continue;
 
       const itemDir = item['DIRETORIA 2'] || item['DIRETORIA 3'] || '';
       if (itemDir !== targetDiretoria) continue;
@@ -267,8 +275,7 @@ export const RankingPresentationView: React.FC<RankingPresentationViewProps> = (
 
     for (let i = 0; i < dssData.length; i++) {
       const item = dssData[i];
-      const mesStr = String(item['Mês'] || '').trim();
-      if (mesStr !== '10' && mesStr.toLowerCase() !== 'out') continue;
+      if (!isOutubro(item['Mês'], item['Data Fechamento'])) continue;
 
       const itemDir = item['DIRETORIA 3'] || '';
       if (itemDir !== targetDiretoria) continue;
@@ -768,3 +775,4 @@ export const RankingPresentationView: React.FC<RankingPresentationViewProps> = (
     </div>
   );
 };
+
