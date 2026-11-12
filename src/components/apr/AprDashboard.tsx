@@ -104,7 +104,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
   const [selectedAuditores, setSelectedAuditores] = useState<string[]>([]);
   const [onlySpiActive, setOnlySpiActive] = useState<boolean>(true);
   // Flag de Origem da Cidade: 'base' (Lotação oficial PO) ou 'execucao' (Local da APR)
-  const [cityMode, setCityMode] = useState<'base' | 'execucao'>('base');
+  const [cityMode, setCityMode] = useState<'base' | 'execucao'>('execucao');
   const [liderancas, setLiderancas] = useState<any[]>([]);
   const [visibleRankCount, setVisibleRankCount] = useState<number>(50);
 
@@ -213,18 +213,25 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
 
   const allCities = useMemo(() => {
     const s = new Set<string>();
-    colaboradoresPO.forEach(p => {
-      if (selectedDiretorias.length === 0 || selectedDiretorias.includes(p.diretoria)) {
-        if (p.cidade) s.add(p.cidade);
+    if (cityMode === 'execucao') {
+      for (let i = 0; i < data.length; i++) {
+        const c = data[i]['CIDADE_EXECUCAO'] || data[i]['Localidade Objeto'] || data[i]['CIDADE COMERCIAL'];
+        if (c) s.add(c);
       }
-    });
-    liderancas.forEach(l => {
-      if (selectedDiretorias.length === 0 || selectedDiretorias.includes(l.diretoria)) {
-        if (l.cidade) s.add(l.cidade);
-      }
-    });
-    return Array.from(s).sort();
-  }, [colaboradoresPO, liderancas, selectedDiretorias]);
+    } else {
+      colaboradoresPO.forEach(p => {
+        if (selectedDiretorias.length === 0 || selectedDiretorias.includes(p.diretoria)) {
+          if (p.cidade) s.add(p.cidade);
+        }
+      });
+      liderancas.forEach(l => {
+        if (selectedDiretorias.length === 0 || selectedDiretorias.includes(l.diretoria)) {
+          if (l.cidade) s.add(l.cidade);
+        }
+      });
+    }
+    return Array.from(s).filter(Boolean).sort();
+  }, [data, colaboradoresPO, liderancas, selectedDiretorias, cityMode]);
 
   const allAuditores = useMemo(() => {
     const s = new Set<string>();
@@ -255,7 +262,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
     setRankingGroup('colaborador');
     setRankingFilter('todos');
     setOnlySpiActive(true);
-    setCityMode('base');
+    setCityMode('execucao');
   };
 
   const filteredData = useMemo(() => {
@@ -421,7 +428,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
         if (onlySpiActive && p.diretoria === 'DIR SERVICOS AO CLIENTE SP INTERIOR' && p.ativo_spi === 0) return;
         if (selectedDiretorias.length > 0 && !selectedDiretorias.includes(p.diretoria)) return;
         if (!matchLeader(p, selectedLeaders)) return;
-        if (selectedCities.length > 0 && !selectedCities.includes(p.cidade)) return;
+        if (selectedCities.length > 0 && cityMode === 'base' && !selectedCities.includes(p.cidade)) return;
         if (selectedAuditores.length > 0 && !selectedAuditores.includes(p.nome) && !selectedAuditores.includes(p.matricula)) return;
 
         const pMat = String(p.matricula || '').trim().replace(/^0+/, '');
@@ -446,7 +453,9 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
           cidadesExecucao: new Set<string>()
         };
 
-        agg[pNome] = entry;
+        if (selectedCities.length === 0 || cityMode === 'base' || selectedCities.includes(p.cidade)) {
+          agg[pNome] = entry;
+        }
         if (pMat) poColabMapByMat.set(pMat, entry);
         poColabMapByNome.set(pNome, entry);
         if (pNorm) poColabMapByNormNome.set(pNorm, entry);
@@ -468,6 +477,9 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
         }
 
         if (target) {
+          if (!agg[target.name]) {
+            agg[target.name] = target;
+          }
           const cidExec = item['CIDADE_EXECUCAO'] || item['Localidade Objeto'] || item['CIDADE COMERCIAL'];
           if (cidExec) target.cidadesExecucao.add(cidExec);
           target.count += 1;
@@ -530,7 +542,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
     }
 
     return Object.values(agg);
-  }, [filteredData, colaboradoresPO, selectedAuditores, selectedDiretorias, selectedLeaders, selectedCities, onlySpiActive, rankingGroup, getItemCity, matchLeader]);
+  }, [filteredData, colaboradoresPO, selectedAuditores, selectedDiretorias, selectedLeaders, selectedCities, onlySpiActive, rankingGroup, getItemCity, matchLeader, cityMode]);
 
   // Ranking ordenado e filtrado (invertido: do que menos fez para o que mais fez)
   const rankAgg = useMemo(() => {
