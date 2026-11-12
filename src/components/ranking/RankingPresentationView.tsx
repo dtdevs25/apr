@@ -60,6 +60,16 @@ const isOutubro = (mesVal: any, dataVal?: any): boolean => {
   return false;
 };
 
+const matchDiretoria = (dir: string | null | undefined, wantInterior: boolean): boolean => {
+  if (!dir) return false;
+  const d = String(dir).toUpperCase();
+  if (wantInterior) {
+    return d.includes('INTERIOR') || d === 'SPI';
+  } else {
+    return (d.includes('CAPITAL') || d === 'SPC') && !d.includes('INTERIOR');
+  }
+};
+
 export const RankingPresentationView: React.FC<RankingPresentationViewProps> = ({
   initialView = 'apr-interior',
   onBack,
@@ -182,7 +192,7 @@ export const RankingPresentationView: React.FC<RankingPresentationViewProps> = (
 
     // 1. Popula quadro oficial da diretoria
     colaboradoresPO.forEach(p => {
-      if (p.diretoria !== targetDiretoria) return;
+      if (!matchDiretoria(p.diretoria, isInterior)) return;
       if (isInterior && p.ativo_spi === 0) return; // Regra SPI Ativo em Campo
 
       const pMat = String(p.matricula || '').trim().replace(/^0+/, '');
@@ -212,7 +222,7 @@ export const RankingPresentationView: React.FC<RankingPresentationViewProps> = (
       if (!isOutubro(item['Mês'], item['Data Fechamento'] || item['Data Checklist'])) continue;
 
       const itemDir = item['DIRETORIA 2'] || item['DIRETORIA 3'] || '';
-      if (itemDir !== targetDiretoria) continue;
+      if (!matchDiretoria(itemDir, isInterior)) continue;
       if (isInterior && item['ATIVO_SPI'] === 0) continue;
 
       const mat = String(item['Matrícula Auditor'] || item['RE'] || '').trim().replace(/^0+/, '');
@@ -278,7 +288,7 @@ export const RankingPresentationView: React.FC<RankingPresentationViewProps> = (
       if (!isOutubro(item['Mês'], item['Data Fechamento'])) continue;
 
       const itemDir = item['DIRETORIA 3'] || '';
-      if (itemDir !== targetDiretoria) continue;
+      if (!matchDiretoria(itemDir, isInterior)) continue;
 
       const dssId = item['Número do Diálogo'] || item['numero_dialogo'] || `dss_${i}`;
       
@@ -391,253 +401,185 @@ export const RankingPresentationView: React.FC<RankingPresentationViewProps> = (
   return (
     <div className="min-h-screen bg-[#f8f9fa] dark:bg-[#0b0f19] text-gray-900 dark:text-gray-100 flex flex-col font-sans transition-colors duration-200">
       
-      {/* Header Executivo de Apresentação */}
-      <header className="sticky top-0 z-40 bg-white/90 dark:bg-[#111827]/90 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 shadow-sm px-4 lg:px-8 py-3.5">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* Barra de Navegação Compacta */}
+      <header className="sticky top-0 z-40 bg-white/95 dark:bg-[#111827]/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 shadow-xs px-3 sm:px-6 py-2">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-2.5">
           
-          {/* Logo e Título */}
-          <div className="flex items-center gap-3">
+          {/* Links de Navegação Rápidos */}
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
             {onBack ? (
               <button 
                 onClick={onBack} 
-                className="p-2 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-gray-600 dark:text-gray-300 transition-colors"
+                className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-gray-600 dark:text-gray-300 transition-colors mr-1"
                 title="Voltar ao Painel Geral"
               >
-                <ArrowLeft size={18} />
+                <ArrowLeft size={16} />
               </button>
             ) : (
               <a 
                 href="/" 
-                className="p-2 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-gray-600 dark:text-gray-300 transition-colors"
+                className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-gray-600 dark:text-gray-300 transition-colors mr-1"
                 title="Voltar ao Início"
               >
-                <ArrowLeft size={18} />
+                <ArrowLeft size={16} />
               </a>
             )}
 
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black uppercase tracking-wider px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-950 text-[#660099] dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                  Apresentação Executiva
-                </span>
-                <span className="text-xs font-bold text-gray-500 dark:text-gray-400">
-                  Mês de Referência: <strong className="text-purple-700 dark:text-purple-400">Outubro / 2026</strong>
-                </span>
-              </div>
-              <h1 className="text-xl font-extrabold text-gray-900 dark:text-white tracking-tight flex items-center gap-2 mt-0.5">
-                Ranking {isApr ? 'APR' : 'DSS'} — {diretoriaLabel}
-              </h1>
-            </div>
-          </div>
-
-          {/* Botões de Ação Rápida */}
-          <div className="flex items-center gap-2 self-end md:self-auto">
             <button
-              onClick={handleCopyLink}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-purple-300 shadow-sm transition-all"
-              title="Copiar link exato desta tela para a apresentação"
+              onClick={() => setActiveTab('apr-interior')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                activeTab === 'apr-interior'
+                  ? 'bg-[#660099] text-white shadow-sm'
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+              }`}
             >
-              {copiedLink ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-              <span>{copiedLink ? 'Link Copiado!' : 'Copiar Link'}</span>
+              <FileText size={14} />
+              <span>APR • Interior</span>
             </button>
 
             <button
-              onClick={handleExportXlsx}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-[#660099] hover:bg-[#52007a] text-white shadow-sm transition-all"
-              title="Exportar Ranking para XLSX"
+              onClick={() => setActiveTab('dss-interior')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                activeTab === 'dss-interior'
+                  ? 'bg-[#660099] text-white shadow-sm'
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+              }`}
             >
-              <Download size={14} />
-              <span>Exportar</span>
+              <ShieldAlert size={14} />
+              <span>DSS • Interior</span>
             </button>
 
             <button
-              onClick={toggleTheme}
-              className="p-2 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-amber-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-              title={isDark ? "Modo Claro" : "Modo Escuro"}
+              onClick={() => setActiveTab('apr-capital')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                activeTab === 'apr-capital'
+                  ? 'bg-[#660099] text-white shadow-sm'
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+              }`}
             >
-              {isDark ? <Sun size={16} /> : <Moon size={16} />}
+              <FileText size={14} />
+              <span>APR • Capital</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('dss-capital')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                activeTab === 'dss-capital'
+                  ? 'bg-[#660099] text-white shadow-sm'
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+              }`}
+            >
+              <ShieldAlert size={14} />
+              <span>DSS • Capital</span>
             </button>
           </div>
-        </div>
 
-        {/* 4 Abas Principais de Navegação com 1 clique */}
-        <div className="max-w-7xl mx-auto mt-4 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-          <button
-            onClick={() => setActiveTab('apr-interior')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeTab === 'apr-interior'
-                ? 'bg-[#660099] text-white shadow-md shadow-purple-600/20'
-                : 'bg-white dark:bg-gray-800/80 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-purple-300'
-            }`}
-          >
-            <FileText size={15} />
-            <span>APR • Interior</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('dss-interior')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeTab === 'dss-interior'
-                ? 'bg-[#660099] text-white shadow-md shadow-purple-600/20'
-                : 'bg-white dark:bg-gray-800/80 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-purple-300'
-            }`}
-          >
-            <ShieldAlert size={15} />
-            <span>DSS • Interior</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('apr-capital')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeTab === 'apr-capital'
-                ? 'bg-[#660099] text-white shadow-md shadow-purple-600/20'
-                : 'bg-white dark:bg-gray-800/80 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-purple-300'
-            }`}
-          >
-            <FileText size={15} />
-            <span>APR • Capital</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('dss-capital')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeTab === 'dss-capital'
-                ? 'bg-[#660099] text-white shadow-md shadow-purple-600/20'
-                : 'bg-white dark:bg-gray-800/80 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-purple-300'
-            }`}
-          >
-            <ShieldAlert size={15} />
-            <span>DSS • Capital</span>
-          </button>
-        </div>
-      </header>
-
-      {/* Conteúdo Principal */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-8 flex flex-col gap-6">
-
-        {/* Resumo Executivo em 4 Cards Mínimos (Sem gráficos pesados) */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white dark:bg-[#131c2e] p-4 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-purple-50 dark:bg-purple-950 text-[#660099] dark:text-purple-400 flex items-center justify-center shrink-0">
-              <Award size={22} />
+          {/* Ações: Busca, Ordenação e Controles */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Campo de Busca Rápida */}
+            <div className="relative">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-7 pr-3 py-1 text-xs rounded-lg bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 w-32 sm:w-44"
+              />
             </div>
-            <div>
-              <div className="text-xl font-black text-gray-900 dark:text-white">{formatNum(totalRealizadoMes)}</div>
-              <div className="text-xs font-medium text-gray-500 dark:text-gray-400">Realizações em Outubro</div>
-            </div>
-          </div>
 
-          <div className="bg-white dark:bg-[#131c2e] p-4 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-              <Users size={22} />
-            </div>
-            <div>
-              <div className="text-xl font-black text-gray-900 dark:text-white">{formatNum(totalPessoas)}</div>
-              <div className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                {comRealizacao} ativos • {semRealizacao} zerados
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-[#131c2e] p-4 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-              <UserCheck size={22} />
-            </div>
-            <div>
-              <div className="text-xl font-black text-gray-900 dark:text-white">{currentMeta} / colab</div>
-              <div className="text-xs font-medium text-gray-500 dark:text-gray-400">Meta Mensal Esperada</div>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-[#131c2e] p-4 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm flex items-center gap-3">
-            <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
-              pctGeralMeta >= 100 
-                ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400' 
-                : pctGeralMeta >= 50 
-                ? 'bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400'
-                : 'bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400'
-            }`}>
-              <AlertTriangle size={22} />
-            </div>
-            <div>
-              <div className="text-xl font-black text-gray-900 dark:text-white">{pctGeralMeta}%</div>
-              <div className="text-xs font-medium text-gray-500 dark:text-gray-400">Atingimento da Meta Geral</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Barra de Filtros e Busca Rápida */}
-        <div className="bg-white dark:bg-[#131c2e] p-4 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3">
-          
-          {/* Campo de Busca Rápida */}
-          <div className="relative w-full md:w-80">
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar colaborador, matrícula ou supervisor..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-xs rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500"
-            />
-          </div>
-
-          {/* Opções de Ordenação e Agrupamento */}
-          <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end flex-wrap">
+            {/* Seletor Líder/Colaborador (se DSS) */}
             {!isApr && (
-              <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-1 rounded-xl text-xs font-semibold">
+              <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-0.5 rounded-lg text-xs font-semibold">
                 <button
                   onClick={() => setDssGrouping('lider')}
-                  className={`px-3 py-1 rounded-lg transition-all ${
-                    dssGrouping === 'lider' ? 'bg-white dark:bg-gray-700 text-[#660099] dark:text-purple-400 shadow-sm' : 'text-gray-500'
+                  className={`px-2 py-1 rounded text-[11px] transition-all ${
+                    dssGrouping === 'lider' ? 'bg-white dark:bg-gray-700 text-[#660099] dark:text-purple-400 shadow-xs' : 'text-gray-500'
                   }`}
                 >
-                  Por Líder
+                  Líder
                 </button>
                 <button
                   onClick={() => setDssGrouping('colaborador')}
-                  className={`px-3 py-1 rounded-lg transition-all ${
-                    dssGrouping === 'colaborador' ? 'bg-white dark:bg-gray-700 text-[#660099] dark:text-purple-400 shadow-sm' : 'text-gray-500'
+                  className={`px-2 py-1 rounded text-[11px] transition-all ${
+                    dssGrouping === 'colaborador' ? 'bg-white dark:bg-gray-700 text-[#660099] dark:text-purple-400 shadow-xs' : 'text-gray-500'
                   }`}
                 >
-                  Por Colaborador
+                  Colaborador
                 </button>
               </div>
             )}
 
-            <div className="flex items-center gap-1.5 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl text-xs font-semibold">
+            {/* Ordenação */}
+            <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-0.5 rounded-lg text-xs font-semibold">
               <button
                 onClick={() => setSortOrder('mais')}
-                className={`px-3 py-1 rounded-lg transition-all ${
-                  sortOrder === 'mais' ? 'bg-white dark:bg-gray-700 text-[#660099] dark:text-purple-400 shadow-sm' : 'text-gray-500'
+                className={`px-2 py-1 rounded text-[11px] transition-all ${
+                  sortOrder === 'mais' ? 'bg-white dark:bg-gray-700 text-[#660099] dark:text-purple-400 shadow-xs' : 'text-gray-500'
                 }`}
+                title="Mais realizados no topo"
               >
-                Mais Realizados
+                Mais
               </button>
               <button
                 onClick={() => setSortOrder('menos')}
-                className={`px-3 py-1 rounded-lg transition-all ${
-                  sortOrder === 'menos' ? 'bg-white dark:bg-gray-700 text-[#660099] dark:text-purple-400 shadow-sm' : 'text-gray-500'
+                className={`px-2 py-1 rounded text-[11px] transition-all ${
+                  sortOrder === 'menos' ? 'bg-white dark:bg-gray-700 text-[#660099] dark:text-purple-400 shadow-xs' : 'text-gray-500'
                 }`}
+                title="Menos realizados no topo"
               >
-                Menos Realizados
+                Menos
               </button>
               <button
                 onClick={() => setSortOrder('zerados')}
-                className={`px-3 py-1 rounded-lg transition-all ${
-                  sortOrder === 'zerados' ? 'bg-red-500 text-white shadow-sm' : 'text-gray-500'
+                className={`px-2 py-1 rounded text-[11px] transition-all ${
+                  sortOrder === 'zerados' ? 'bg-red-500 text-white shadow-xs' : 'text-gray-500'
                 }`}
+                title="Apenas zerados"
               >
-                Zerados ({semRealizacao})
+                0
               </button>
             </div>
+
+            {/* Copiar Link */}
+            <button
+              onClick={handleCopyLink}
+              className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-purple-300 shadow-xs transition-all"
+              title="Copiar link exato desta tela"
+            >
+              {copiedLink ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
+              <span className="hidden sm:inline">{copiedLink ? 'Copiado!' : 'Copiar Link'}</span>
+            </button>
+
+            {/* Exportar */}
+            <button
+              onClick={handleExportXlsx}
+              className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors"
+              title="Exportar XLSX"
+            >
+              <Download size={14} />
+            </button>
+
+            {/* Tema */}
+            <button
+              onClick={toggleTheme}
+              className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-amber-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              title={isDark ? "Modo Claro" : "Modo Escuro"}
+            >
+              {isDark ? <Sun size={14} /> : <Moon size={14} />}
+            </button>
           </div>
         </div>
+      </header>
+
+      {/* Conteúdo Principal: APENAS O RANKING */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4 flex flex-col">
 
         {/* Tabela de Ranking Ultra Limpa */}
-        <div className="bg-white dark:bg-[#131c2e] rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden flex flex-col">
+        <div className="bg-white dark:bg-[#131c2e] rounded-xl border border-gray-200 dark:border-gray-800 shadow-xs overflow-hidden flex flex-col flex-1">
           
           {/* Cabeçalho da Tabela */}
-          <div className="grid grid-cols-[50px_1fr_90px_90px_110px_90px] items-center gap-3 px-5 py-3.5 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-800 text-[11px] font-black uppercase text-gray-500 dark:text-gray-400 tracking-wider">
+          <div className="grid grid-cols-[50px_1fr_90px_90px_110px_90px] items-center gap-3 px-5 py-3 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-800 text-[11px] font-black uppercase text-gray-500 dark:text-gray-400 tracking-wider">
             <div>#</div>
             <div>{isApr || dssGrouping === 'colaborador' ? 'Colaborador / Equipe' : 'Líder / Supervisão'}</div>
             <div className="text-center">Realizado</div>
@@ -647,7 +589,7 @@ export const RankingPresentationView: React.FC<RankingPresentationViewProps> = (
           </div>
 
           {/* Linhas do Ranking */}
-          <div className="divide-y divide-gray-100 dark:divide-gray-800/50 max-h-[680px] overflow-y-auto scrollbar-thin">
+          <div className="divide-y divide-gray-100 dark:divide-gray-800/50 overflow-y-auto scrollbar-thin">
             {isLoading ? (
               <div className="p-16 text-center text-gray-400 flex flex-col items-center justify-center gap-3">
                 <div className="w-8 h-8 border-3 border-purple-500 border-t-transparent rounded-full animate-spin" />
