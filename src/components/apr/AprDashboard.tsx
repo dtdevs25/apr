@@ -39,6 +39,11 @@ const formatDate = (dateStr: string) => {
   }
 };
 
+const normNome = (str: any): string => {
+  if (!str) return '';
+  return String(str).trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+};
+
 const cleanTipo = (str: string) => {
   if (!str) return 'Não Identificado';
   const parts = String(str).split('|');
@@ -794,16 +799,14 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
               <button
                 type="button"
                 onClick={() => setOnlySpiActive(prev => !prev)}
-                className={`flex items-center gap-2 px-3 py-1.5 h-[34px] rounded-xl border shadow-sm transition-all focus:outline-none ${
-                  onlySpiActive
+                className={`flex items-center gap-2 px-3 py-1.5 h-[34px] rounded-xl border shadow-sm transition-all focus:outline-none ${onlySpiActive
                     ? 'bg-purple-50 dark:bg-purple-950/40 border-purple-400 dark:border-purple-500 text-purple-900 dark:text-purple-200'
                     : 'bg-white dark:bg-[#1e293b] border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300'
-                }`}
+                  }`}
                 title="Fator de Correção do Interior: filtra estritamente colaboradores com ATIVO = 1 na planilha de correção do SPI (exclui treinamento e afastados)"
               >
-                <div className={`w-3.5 h-3.5 rounded flex items-center justify-center transition-colors ${
-                  onlySpiActive ? 'bg-[#660099] dark:bg-purple-500 text-white' : 'border border-gray-400 dark:border-gray-500'
-                }`}>
+                <div className={`w-3.5 h-3.5 rounded flex items-center justify-center transition-colors ${onlySpiActive ? 'bg-[#660099] dark:bg-purple-500 text-white' : 'border border-gray-400 dark:border-gray-500'
+                  }`}>
                   {onlySpiActive && <CheckSquare size={12} />}
                 </div>
                 <span className="text-xs font-semibold whitespace-nowrap">
@@ -822,7 +825,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
                   className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${cityMode === 'base'
                     ? 'bg-[#660099] text-white shadow-sm'
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                  }`}
+                    }`}
                   title="Cidade Base oficial do colaborador no Plano de Ocupações (PO)"
                 >
                   Base (PO)
@@ -833,7 +836,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
                   className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${cityMode === 'execucao'
                     ? 'bg-[#660099] text-white shadow-sm'
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                  }`}
+                    }`}
                   title="Localidade onde a APR foi efetivamente realizada"
                 >
                   Local APR
