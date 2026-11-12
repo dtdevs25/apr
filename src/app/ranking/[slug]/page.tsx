@@ -29,3 +29,4 @@ export default function RankingSlugPage({ params }: SlugPageProps) {
 
   return <RankingPresentationView initialView={viewKey} />;
 }
+

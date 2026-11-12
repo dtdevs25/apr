@@ -4,10 +4,11 @@ import { motion } from 'framer-motion';
 import { FileText, ShieldAlert, Sun, Moon, Award, ExternalLink } from 'lucide-react';
 import { AprDashboard } from '@/components/apr/AprDashboard';
 import { DssDashboard } from '@/components/dss/DssDashboard';
-import { RankingPresentationView } from '@/components/ranking/RankingPresentationView';
+import { RankingPresentationView, RankingViewKey } from '@/components/ranking/RankingPresentationView';
 
 export default function Home() {
-  const [selectedModule, setSelectedModule] = useState<'APR' | 'DSS' | 'RANKING' | null>(null);
+  const [selectedModule, setSelectedModule] = useState<'APR' | 'DSS' | null>(null);
+  const [selectedRanking, setSelectedRanking] = useState<RankingViewKey | null>(null);
   const [isDark, setIsDark] = useState<boolean>(false);
 
   useEffect(() => {
@@ -35,16 +36,23 @@ export default function Home() {
     });
   };
 
+  if (selectedRanking) {
+    return (
+      <RankingPresentationView 
+        initialView={selectedRanking} 
+        onBack={() => setSelectedRanking(null)} 
+        isDark={isDark} 
+        toggleTheme={toggleTheme} 
+      />
+    );
+  }
+
   if (selectedModule === 'APR') {
     return <AprDashboard onBack={() => setSelectedModule(null)} isDark={isDark} toggleTheme={toggleTheme} />;
   }
 
   if (selectedModule === 'DSS') {
     return <DssDashboard onBack={() => setSelectedModule(null)} isDark={isDark} toggleTheme={toggleTheme} />;
-  }
-
-  if (selectedModule === 'RANKING') {
-    return <RankingPresentationView onBack={() => setSelectedModule(null)} isDark={isDark} toggleTheme={toggleTheme} />;
   }
 
   return (
@@ -101,38 +109,58 @@ export default function Home() {
         </motion.div>
       </div>
 
-      {/* Card Destaque: Apresentação Executiva - Rankings Outubro */}
+      {/* Links Individuais para Apresentações Executivas */}
       <motion.div
         initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
-        whileHover={{ scale: 1.01 }}
-        className="w-full max-w-2xl bg-gradient-to-r from-purple-900/90 via-[#660099]/90 to-purple-800/90 text-white p-6 rounded-3xl shadow-xl shadow-purple-950/20 z-10 border border-purple-500/30 flex flex-col md:flex-row items-center justify-between gap-4 cursor-pointer"
-        onClick={() => setSelectedModule('RANKING')}
+        className="w-full max-w-2xl bg-white/80 dark:bg-[#151d2f]/80 backdrop-blur-xl p-5 rounded-3xl shadow-md border border-gray-200 dark:border-gray-800 z-10 flex flex-col gap-3"
       >
-        <div className="flex items-center gap-4 text-left">
-          <div className="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center shrink-0 border border-white/20">
-            <Award size={28} className="text-amber-300" />
+        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800/80 pb-2.5">
+          <div className="flex items-center gap-2">
+            <Award size={18} className="text-[#660099] dark:text-purple-400" />
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">
+              Páginas de Apresentação Direta • Outubro/2026
+            </h3>
           </div>
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-400 text-gray-950 font-sans">
-                Apresentação Direta
-              </span>
-              <span className="text-xs text-purple-200 font-medium">Outubro / 2026</span>
-            </div>
-            <h3 className="text-lg font-bold text-white tracking-tight">Rankings Rápidos (Sem Gráficos)</h3>
-            <p className="text-xs text-purple-200">
-              Visualização limpa focada em APR e DSS (Interior e Capital)
-            </p>
-          </div>
+          <span className="text-[11px] text-gray-400 font-medium">1 página e link para cada</span>
         </div>
 
-        <button 
-          onClick={(e) => { e.stopPropagation(); setSelectedModule('RANKING'); }}
-          className="px-4 py-2.5 rounded-xl bg-white text-[#660099] font-bold text-xs shadow-md hover:bg-purple-50 transition-colors shrink-0 flex items-center gap-1.5"
-        >
-          <span>Abrir Rankings</span>
-          <ExternalLink size={14} />
-        </button>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <button
+            onClick={() => setSelectedRanking('apr-interior')}
+            className="flex flex-col items-center justify-center p-3 rounded-2xl bg-purple-50/60 dark:bg-purple-950/30 hover:bg-purple-100 dark:hover:bg-purple-900/50 border border-purple-200/60 dark:border-purple-800/40 text-[#660099] dark:text-purple-300 transition-all group"
+          >
+            <FileText size={18} className="mb-1 text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform" />
+            <span className="text-xs font-black">APR Interior</span>
+            <span className="text-[10px] text-gray-400 font-normal">Link exclusivo</span>
+          </button>
+
+          <button
+            onClick={() => setSelectedRanking('dss-interior')}
+            className="flex flex-col items-center justify-center p-3 rounded-2xl bg-purple-50/60 dark:bg-purple-950/30 hover:bg-purple-100 dark:hover:bg-purple-900/50 border border-purple-200/60 dark:border-purple-800/40 text-[#660099] dark:text-purple-300 transition-all group"
+          >
+            <ShieldAlert size={18} className="mb-1 text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform" />
+            <span className="text-xs font-black">DSS Interior</span>
+            <span className="text-[10px] text-gray-400 font-normal">Link exclusivo</span>
+          </button>
+
+          <button
+            onClick={() => setSelectedRanking('apr-capital')}
+            className="flex flex-col items-center justify-center p-3 rounded-2xl bg-purple-50/60 dark:bg-purple-950/30 hover:bg-purple-100 dark:hover:bg-purple-900/50 border border-purple-200/60 dark:border-purple-800/40 text-[#660099] dark:text-purple-300 transition-all group"
+          >
+            <FileText size={18} className="mb-1 text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform" />
+            <span className="text-xs font-black">APR Capital</span>
+            <span className="text-[10px] text-gray-400 font-normal">Link exclusivo</span>
+          </button>
+
+          <button
+            onClick={() => setSelectedRanking('dss-capital')}
+            className="flex flex-col items-center justify-center p-3 rounded-2xl bg-purple-50/60 dark:bg-purple-950/30 hover:bg-purple-100 dark:hover:bg-purple-900/50 border border-purple-200/60 dark:border-purple-800/40 text-[#660099] dark:text-purple-300 transition-all group"
+          >
+            <ShieldAlert size={18} className="mb-1 text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform" />
+            <span className="text-xs font-black">DSS Capital</span>
+            <span className="text-[10px] text-gray-400 font-normal">Link exclusivo</span>
+          </button>
+        </div>
       </motion.div>
     </div>
   );

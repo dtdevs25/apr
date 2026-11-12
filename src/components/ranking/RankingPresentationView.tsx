@@ -121,48 +121,6 @@ export const RankingPresentationView: React.FC<RankingPresentationViewProps> = (
     if (initialView) setActiveTab(initialView);
   }, [initialView]);
 
-  // Carrega dados de APR
-  useEffect(() => {
-    setLoadingApr(true);
-    fetch('/api/data?type=APR')
-      .then(res => res.json())
-      .then(json => {
-        const rows = Array.isArray(json) ? json : (json.data || []);
-        const poList = Array.isArray(json) ? [] : (json.colaboradoresPO || []);
-        setAprData(rows);
-        setColaboradoresPO(poList);
-        setLoadingApr(false);
-      })
-      .catch(err => {
-        console.error("Erro ao carregar APR:", err);
-        setLoadingApr(false);
-      });
-  }, []);
-
-  // Carrega dados de DSS
-  useEffect(() => {
-    setLoadingDss(true);
-    fetch('/api/data?type=DSS')
-      .then(res => res.json())
-      .then(json => {
-        const rows = Array.isArray(json) ? json : [];
-        setDssData(rows);
-        setLoadingDss(false);
-      })
-      .catch(err => {
-        console.error("Erro ao carregar DSS:", err);
-        setLoadingDss(false);
-      });
-  }, []);
-
-  // Copia o link direto desta aba
-  const handleCopyLink = () => {
-    const url = `${window.location.origin}/ranking/${activeTab}`;
-    navigator.clipboard.writeText(url);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2500);
-  };
-
   // Identificação do tipo atual e diretoria atual
   const isApr = activeTab.startsWith('apr');
   const isInterior = activeTab.endsWith('interior');
@@ -170,6 +128,47 @@ export const RankingPresentationView: React.FC<RankingPresentationViewProps> = (
     ? 'DIR SERVICOS AO CLIENTE SP INTERIOR' 
     : 'DIR SERVICOS AO CLIENTE SP CAPITAL';
   const diretoriaLabel = isInterior ? 'Serviços ao Cliente Interior' : 'Serviços ao Cliente Capital';
+
+  // Carrega dados exclusivamente do módulo necessário
+  useEffect(() => {
+    if (isApr) {
+      setLoadingApr(true);
+      fetch('/api/data?type=APR')
+        .then(res => res.json())
+        .then(json => {
+          const rows = Array.isArray(json) ? json : (json.data || []);
+          const poList = Array.isArray(json) ? [] : (json.colaboradoresPO || []);
+          setAprData(rows);
+          setColaboradoresPO(poList);
+          setLoadingApr(false);
+        })
+        .catch(err => {
+          console.error("Erro ao carregar APR:", err);
+          setLoadingApr(false);
+        });
+    } else {
+      setLoadingDss(true);
+      fetch('/api/data?type=DSS')
+        .then(res => res.json())
+        .then(json => {
+          const rows = Array.isArray(json) ? json : [];
+          setDssData(rows);
+          setLoadingDss(false);
+        })
+        .catch(err => {
+          console.error("Erro ao carregar DSS:", err);
+          setLoadingDss(false);
+        });
+    }
+  }, [isApr]);
+
+  // Copia o link direto desta página
+  const handleCopyLink = () => {
+    const url = `${window.location.origin}/ranking/${activeTab}`;
+    navigator.clipboard.writeText(url);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
+  };
 
   // Processamento do Ranking APR (Fixo em Outubro = '10')
   const rankingApr = useMemo(() => {
@@ -401,77 +400,43 @@ export const RankingPresentationView: React.FC<RankingPresentationViewProps> = (
   return (
     <div className="min-h-screen bg-[#f8f9fa] dark:bg-[#0b0f19] text-gray-900 dark:text-gray-100 flex flex-col font-sans transition-colors duration-200">
       
-      {/* Barra de Navegação Compacta */}
-      <header className="sticky top-0 z-40 bg-white/95 dark:bg-[#111827]/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 shadow-xs px-3 sm:px-6 py-2">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+      {/* Barra Superior Discreta e Exclusiva */}
+      <header className="sticky top-0 z-40 bg-white/95 dark:bg-[#111827]/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 shadow-xs px-3 sm:px-6 py-2.5">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           
-          {/* Links de Navegação Rápidos */}
-          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
+          {/* Identificação Exclusiva da Página (Totalmente isolada, sem links para os outros módulos) */}
+          <div className="flex items-center gap-2.5">
             {onBack ? (
               <button 
                 onClick={onBack} 
-                className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-gray-600 dark:text-gray-300 transition-colors mr-1"
-                title="Voltar ao Painel Geral"
+                className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-gray-600 dark:text-gray-300 transition-colors"
+                title="Voltar"
               >
                 <ArrowLeft size={16} />
               </button>
             ) : (
               <a 
                 href="/" 
-                className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-gray-600 dark:text-gray-300 transition-colors mr-1"
+                className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-gray-600 dark:text-gray-300 transition-colors"
                 title="Voltar ao Início"
               >
                 <ArrowLeft size={16} />
               </a>
             )}
 
-            <button
-              onClick={() => setActiveTab('apr-interior')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                activeTab === 'apr-interior'
-                  ? 'bg-[#660099] text-white shadow-sm'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-              }`}
-            >
-              <FileText size={14} />
-              <span>APR • Interior</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('dss-interior')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                activeTab === 'dss-interior'
-                  ? 'bg-[#660099] text-white shadow-sm'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-              }`}
-            >
-              <ShieldAlert size={14} />
-              <span>DSS • Interior</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('apr-capital')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                activeTab === 'apr-capital'
-                  ? 'bg-[#660099] text-white shadow-sm'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-              }`}
-            >
-              <FileText size={14} />
-              <span>APR • Capital</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('dss-capital')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                activeTab === 'dss-capital'
-                  ? 'bg-[#660099] text-white shadow-sm'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-              }`}
-            >
-              <ShieldAlert size={14} />
-              <span>DSS • Capital</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-purple-100 dark:bg-purple-950 text-[#660099] dark:text-purple-300 flex items-center justify-center font-bold">
+                {isApr ? <FileText size={15} /> : <ShieldAlert size={15} />}
+              </div>
+              <div>
+                <h1 className="text-sm font-extrabold text-gray-900 dark:text-white leading-tight">
+                  Ranking {isApr ? 'APR' : 'DSS'} — {diretoriaLabel}
+                </h1>
+                <span className="text-[11px] font-semibold text-purple-700 dark:text-purple-400">
+                  Mês de Outubro / 2026
+                </span>
+              </div>
+            </div>
           </div>
 
           {/* Ações: Busca, Ordenação e Controles */}
@@ -481,10 +446,10 @@ export const RankingPresentationView: React.FC<RankingPresentationViewProps> = (
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Buscar..."
+                placeholder="Buscar colaborador..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-7 pr-3 py-1 text-xs rounded-lg bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 w-32 sm:w-44"
+                className="pl-7 pr-3 py-1 text-xs rounded-lg bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 w-36 sm:w-48"
               />
             </div>
 
@@ -537,7 +502,7 @@ export const RankingPresentationView: React.FC<RankingPresentationViewProps> = (
                 }`}
                 title="Apenas zerados"
               >
-                0
+                0 ({semRealizacao})
               </button>
             </div>
 
