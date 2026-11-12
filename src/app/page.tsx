@@ -1,12 +1,13 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { FileText, ShieldAlert, Sun, Moon } from 'lucide-react';
+import { FileText, ShieldAlert, Sun, Moon, Award, ExternalLink } from 'lucide-react';
 import { AprDashboard } from '@/components/apr/AprDashboard';
 import { DssDashboard } from '@/components/dss/DssDashboard';
+import { RankingPresentationView } from '@/components/ranking/RankingPresentationView';
 
 export default function Home() {
-  const [selectedModule, setSelectedModule] = useState<'APR' | 'DSS' | null>(null);
+  const [selectedModule, setSelectedModule] = useState<'APR' | 'DSS' | 'RANKING' | null>(null);
   const [isDark, setIsDark] = useState<boolean>(false);
 
   useEffect(() => {
@@ -42,6 +43,10 @@ export default function Home() {
     return <DssDashboard onBack={() => setSelectedModule(null)} isDark={isDark} toggleTheme={toggleTheme} />;
   }
 
+  if (selectedModule === 'RANKING') {
+    return <RankingPresentationView onBack={() => setSelectedModule(null)} isDark={isDark} toggleTheme={toggleTheme} />;
+  }
+
   return (
     <div className="min-h-screen bg-[#f8f9fa] dark:bg-[#0b0f19] flex flex-col items-center justify-center p-6 relative overflow-hidden transition-colors duration-200">
       {/* Botão de Tema no Splash */}
@@ -68,7 +73,7 @@ export default function Home() {
         <p className="text-gray-500 dark:text-gray-400 font-medium">Selecione o módulo que deseja visualizar e gerenciar</p>
       </motion.div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-2xl z-10">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-2xl z-10 mb-6">
         <motion.div 
           initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}
           whileHover={{ scale: 1.03, y: -5 }} whileTap={{ scale: 0.98 }}
@@ -95,6 +100,40 @@ export default function Home() {
           <p className="text-sm text-gray-500 dark:text-gray-400">Diálogo Semanal de Segurança</p>
         </motion.div>
       </div>
+
+      {/* Card Destaque: Apresentação Executiva - Rankings Outubro */}
+      <motion.div
+        initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+        whileHover={{ scale: 1.01 }}
+        className="w-full max-w-2xl bg-gradient-to-r from-purple-900/90 via-[#660099]/90 to-purple-800/90 text-white p-6 rounded-3xl shadow-xl shadow-purple-950/20 z-10 border border-purple-500/30 flex flex-col md:flex-row items-center justify-between gap-4 cursor-pointer"
+        onClick={() => setSelectedModule('RANKING')}
+      >
+        <div className="flex items-center gap-4 text-left">
+          <div className="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center shrink-0 border border-white/20">
+            <Award size={28} className="text-amber-300" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-400 text-gray-950 font-sans">
+                Apresentação Direta
+              </span>
+              <span className="text-xs text-purple-200 font-medium">Outubro / 2026</span>
+            </div>
+            <h3 className="text-lg font-bold text-white tracking-tight">Rankings Rápidos (Sem Gráficos)</h3>
+            <p className="text-xs text-purple-200">
+              Visualização limpa focada em APR e DSS (Interior e Capital)
+            </p>
+          </div>
+        </div>
+
+        <button 
+          onClick={(e) => { e.stopPropagation(); setSelectedModule('RANKING'); }}
+          className="px-4 py-2.5 rounded-xl bg-white text-[#660099] font-bold text-xs shadow-md hover:bg-purple-50 transition-colors shrink-0 flex items-center gap-1.5"
+        >
+          <span>Abrir Rankings</span>
+          <ExternalLink size={14} />
+        </button>
+      </motion.div>
     </div>
   );
 }
