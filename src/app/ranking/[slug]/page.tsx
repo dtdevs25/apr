@@ -27,6 +27,6 @@ export default function RankingSlugPage({ params }: SlugPageProps) {
     notFound();
   }
 
-  return <RankingPresentationView initialView={viewKey} />;
+  return <RankingPresentationView initialView={viewKey} isIsolated={true} />;
 }
 

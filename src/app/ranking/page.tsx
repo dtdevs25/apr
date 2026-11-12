@@ -6,11 +6,12 @@ import { RankingPresentationView, RankingViewKey } from '@/components/ranking/Ra
 function RankingContent() {
   const searchParams = useSearchParams();
   const viewParam = searchParams.get('view') as RankingViewKey;
+  const isIsolated = searchParams.get('isolated') === 'true';
   const initialView = (
     viewParam && ['apr-interior', 'dss-interior', 'apr-capital', 'dss-capital'].includes(viewParam)
   ) ? viewParam : 'apr-interior';
 
-  return <RankingPresentationView initialView={initialView} />;
+  return <RankingPresentationView initialView={initialView} isIsolated={isIsolated} />;
 }
 
 export default function RankingPage() {
