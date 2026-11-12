@@ -101,6 +101,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
   // Flag de Origem da Cidade: 'base' (Lotação oficial PO) ou 'execucao' (Local da APR)
   const [cityMode, setCityMode] = useState<'base' | 'execucao'>('base');
   const [liderancas, setLiderancas] = useState<any[]>([]);
+  const [visibleRankCount, setVisibleRankCount] = useState<number>(50);
 
   const getItemCity = useCallback((item: any) => {
     if (!item) return '';
@@ -155,6 +156,13 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
     loadData();
   }, []);
 
+  const OFFICIAL_DIRETORIAS = [
+    'DIR SERVICOS AO CLIENTE SP CAPITAL',
+    'DIR SERVICOS AO CLIENTE SP INTERIOR',
+    'DIR ENGENHARIA TRANSPORTE E INFRA - CAPITAL',
+    'DIR ENGENHARIA TRANSPORTE E INFRA - INTERIOR'
+  ];
+
   const allMonths = useMemo(() => Array.from(new Set(data.map(i => String(i['Mês'])))).filter(Boolean).sort((a, b) => parseInt(a, 10) - parseInt(b, 10)), [data]);
 
   const getItemDiretoria = (i: any): string => i['DIRETORIA 2'] || i['DIRETORIA 3'] || '';
@@ -167,30 +175,19 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
     return true;
   };
 
-  // Filtros Cruzados (Cross-filtering)
+  // Filtros Cruzados (Cross-filtering) otimizados de alta performance
   const allTipos = useMemo(() => {
-    const base = data.filter(i =>
-      matchSpiFilter(i) &&
-      (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
-      (selectedDiretorias.length === 0 || selectedDiretorias.includes(getItemDiretoria(i))) &&
-      matchLeader(i, selectedLeaders) &&
-      (selectedCities.length === 0 || selectedCities.includes(getItemCity(i)))
-    );
-    return Array.from(new Set(base.map(i => cleanTipo(i['Questionário'])))).filter(Boolean).sort();
-  }, [data, selectedMonths, selectedDiretorias, selectedLeaders, selectedCities, onlySpiActive, getItemCity, matchLeader]);
+    const set = new Set<string>();
+    for (let idx = 0; idx < data.length; idx++) {
+      const q = data[idx]['Questionário'];
+      if (q) set.add(cleanTipo(q));
+    }
+    return Array.from(set).filter(Boolean).sort();
+  }, [data]);
 
-  const allDiretorias = useMemo(() => {
-    const base = data.filter(i =>
-      matchSpiFilter(i) &&
-      (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
-      (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
-      matchLeader(i, selectedLeaders) &&
-      (selectedCities.length === 0 || selectedCities.includes(getItemCity(i)))
-    );
-    return Array.from(new Set(base.map(i => getItemDiretoria(i)))).filter(Boolean).sort();
-  }, [data, selectedMonths, selectedTipos, selectedLeaders, selectedCities, onlySpiActive, getItemCity, matchLeader]);
+  const allDiretorias = OFFICIAL_DIRETORIAS;
 
-  // Seletor único de Gestão (todas as lideranças: Gerentes, Coordenadores, Supervisores)
+  // Seletor único de Gestão (filtrado a partir de liderancas e PO sem varrer 191k APRs repetidas)
   const allLeaders = useMemo(() => {
     const fromLid = liderancas.filter(l => {
       const matchDir = selectedDiretorias.length === 0 || selectedDiretorias.includes(l.diretoria);
@@ -198,68 +195,43 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       return matchDir && matchCity;
     }).map(l => l.nome);
 
-    const fromData = data.filter(i =>
-      matchSpiFilter(i) &&
-      (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
-      (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
-      (selectedDiretorias.length === 0 || selectedDiretorias.includes(getItemDiretoria(i))) &&
-      (selectedCities.length === 0 || selectedCities.includes(getItemCity(i)))
-    ).flatMap(i => [i['DIRETOR'], i['GERENTE'], i['COORDENADOR'], i['Supervisor'], i['GESTOR']]).filter(Boolean);
-
     const fromPO = colaboradoresPO.filter(p =>
       (!onlySpiActive || p.diretoria !== 'DIR SERVICOS AO CLIENTE SP INTERIOR' || p.ativo_spi !== 0) &&
       (selectedDiretorias.length === 0 || selectedDiretorias.includes(p.diretoria)) &&
       (selectedCities.length === 0 || selectedCities.includes(p.cidade))
     ).flatMap(p => [p.diretor, p.gerente, p.coordenador, p.supervisor]).filter(Boolean);
 
-    return Array.from(new Set([...fromLid, ...fromData, ...fromPO]))
+    return Array.from(new Set([...fromLid, ...fromPO]))
       .filter(name => isPersonName(name))
       .sort();
-  }, [liderancas, data, colaboradoresPO, selectedMonths, selectedTipos, selectedDiretorias, selectedCities, onlySpiActive, getItemCity]);
+  }, [liderancas, colaboradoresPO, selectedDiretorias, selectedCities, onlySpiActive]);
 
   const allCities = useMemo(() => {
-    const base = data.filter(i =>
-      matchSpiFilter(i) &&
-      (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
-      (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
-      (selectedDiretorias.length === 0 || selectedDiretorias.includes(getItemDiretoria(i))) &&
-      matchLeader(i, selectedLeaders)
-    );
-    const dataCities = base.map(i => getItemCity(i)).filter(Boolean);
-    const poCities = (cityMode === 'base')
-      ? colaboradoresPO.filter(p =>
-          (!onlySpiActive || p.diretoria !== 'DIR SERVICOS AO CLIENTE SP INTERIOR' || p.ativo_spi !== 0) &&
-          (selectedDiretorias.length === 0 || selectedDiretorias.includes(p.diretoria)) &&
-          matchLeader(p, selectedLeaders)
-        ).map(p => p.cidade).filter(Boolean)
-      : [];
-    return Array.from(new Set([...dataCities, ...poCities])).sort();
-  }, [data, colaboradoresPO, selectedMonths, selectedTipos, selectedDiretorias, selectedLeaders, onlySpiActive, getItemCity, cityMode, matchLeader]);
+    const s = new Set<string>();
+    colaboradoresPO.forEach(p => {
+      if (selectedDiretorias.length === 0 || selectedDiretorias.includes(p.diretoria)) {
+        if (p.cidade) s.add(p.cidade);
+      }
+    });
+    liderancas.forEach(l => {
+      if (selectedDiretorias.length === 0 || selectedDiretorias.includes(l.diretoria)) {
+        if (l.cidade) s.add(l.cidade);
+      }
+    });
+    return Array.from(s).sort();
+  }, [colaboradoresPO, liderancas, selectedDiretorias]);
 
   const allAuditores = useMemo(() => {
-    const fromData = data.filter(i =>
-      matchSpiFilter(i) &&
-      (selectedMonths.length === 0 || selectedMonths.includes(String(i['Mês']))) &&
-      (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(i['Questionário']))) &&
-      (selectedDiretorias.length === 0 || selectedDiretorias.includes(getItemDiretoria(i))) &&
-      matchLeader(i, selectedLeaders) &&
-      (selectedCities.length === 0 || selectedCities.includes(getItemCity(i)))
-    ).map(i => i['Nome Auditor'] || i['Matrícula Auditor']);
-
-    const fromPO = colaboradoresPO.filter(p =>
-      (!onlySpiActive || p.diretoria !== 'DIR SERVICOS AO CLIENTE SP INTERIOR' || p.ativo_spi !== 0) &&
-      (selectedDiretorias.length === 0 || selectedDiretorias.includes(p.diretoria)) &&
-      matchLeader(p, selectedLeaders) &&
-      (selectedCities.length === 0 || selectedCities.includes(p.cidade))
-    ).map(p => p.nome || p.matricula);
-
-    const fromLid = liderancas.filter(l =>
-      (selectedDiretorias.length === 0 || selectedDiretorias.includes(l.diretoria)) &&
-      (selectedCities.length === 0 || selectedCities.includes(l.cidade))
-    ).map(l => l.nome).filter(isPersonName);
-
-    return Array.from(new Set([...fromData, ...fromPO, ...fromLid])).filter(isPersonName).sort();
-  }, [data, colaboradoresPO, liderancas, selectedMonths, selectedTipos, selectedDiretorias, selectedLeaders, selectedCities, onlySpiActive, getItemCity, matchLeader]);
+    const s = new Set<string>();
+    colaboradoresPO.forEach(p => {
+      if (selectedDiretorias.length > 0 && !selectedDiretorias.includes(p.diretoria)) return;
+      if (selectedCities.length > 0 && !selectedCities.includes(p.cidade)) return;
+      if (onlySpiActive && p.diretoria === 'DIR SERVICOS AO CLIENTE SP INTERIOR' && p.ativo_spi === 0) return;
+      if (!matchLeader(p, selectedLeaders)) return;
+      if (p.nome) s.add(p.nome);
+    });
+    return Array.from(s).filter(isPersonName).sort();
+  }, [colaboradoresPO, selectedDiretorias, selectedCities, onlySpiActive, selectedLeaders, matchLeader]);
 
   const toggleMonth = (m: string) => setSelectedMonths(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]);
 
@@ -282,18 +254,49 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
   };
 
   const filteredData = useMemo(() => {
-    return data.filter(item => {
-      const matchAuditor = selectedAuditores.length === 0 ||
-        selectedAuditores.includes(item['Nome Auditor']) ||
-        selectedAuditores.includes(item['Matrícula Auditor']);
-      return matchSpiFilter(item) &&
-        matchAuditor &&
-        (selectedMonths.length === 0 || selectedMonths.includes(String(item['Mês']))) &&
-        (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(item['Questionário']))) &&
-        (selectedDiretorias.length === 0 || selectedDiretorias.includes(getItemDiretoria(item))) &&
-        matchLeader(item, selectedLeaders) &&
-        (selectedCities.length === 0 || selectedCities.includes(getItemCity(item)));
-    });
+    const hasMonths = selectedMonths.length > 0;
+    const monthsSet = hasMonths ? new Set(selectedMonths) : null;
+
+    const hasTipos = selectedTipos.length > 0;
+    const tiposSet = hasTipos ? new Set(selectedTipos) : null;
+
+    const hasDirs = selectedDiretorias.length > 0;
+    const dirsSet = hasDirs ? new Set(selectedDiretorias) : null;
+
+    const hasCities = selectedCities.length > 0;
+    const citiesSet = hasCities ? new Set(selectedCities) : null;
+
+    const hasAud = selectedAuditores.length > 0;
+    const audSet = hasAud ? new Set(selectedAuditores) : null;
+
+    const hasLeaders = selectedLeaders.length > 0;
+
+    const result: any[] = [];
+    for (let i = 0; i < data.length; i++) {
+      const item = data[i];
+
+      if (onlySpiActive && getItemDiretoria(item) === 'DIR SERVICOS AO CLIENTE SP INTERIOR' && item['ATIVO_SPI'] === 0) {
+        continue;
+      }
+
+      if (hasMonths && !monthsSet!.has(String(item['Mês']))) continue;
+      if (hasTipos && !tiposSet!.has(cleanTipo(item['Questionário']))) continue;
+      if (hasDirs && !dirsSet!.has(getItemDiretoria(item))) continue;
+      if (hasCities && !citiesSet!.has(getItemCity(item))) continue;
+
+      if (hasAud) {
+        const nome = item['Nome Auditor'];
+        const mat = item['Matrícula Auditor'];
+        if ((!nome || !audSet!.has(nome)) && (!mat || !audSet!.has(mat))) {
+          continue;
+        }
+      }
+
+      if (hasLeaders && !matchLeader(item, selectedLeaders)) continue;
+
+      result.push(item);
+    }
+    return result;
   }, [data, selectedMonths, selectedTipos, selectedDiretorias, selectedLeaders, selectedCities, selectedAuditores, onlySpiActive, getItemCity, matchLeader]);
 
   // KPIs base
@@ -321,6 +324,21 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
     return totalWd * 2; // ~2 APRs por dia útil por colaborador
   }, [selectedMonths, allMonths]);
 
+  const parseDurationSecs = (dur: any): number => {
+    if (!dur || typeof dur !== 'string') return 0;
+    const parts = dur.split(':');
+    if (parts.length === 3) {
+      const h = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const s = parseInt(parts[2], 10);
+      if (!isNaN(h) && !isNaN(m) && !isNaN(s)) {
+        const secs = h * 3600 + m * 60 + s;
+        return (secs > 0 && secs <= 600) ? secs : 0;
+      }
+    }
+    return 0;
+  };
+
   // Ranking
   const allRankAgg = useMemo(() => {
     const agg: Record<string, {
@@ -343,12 +361,13 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
 
     // Se o agrupamento for por cidade: agrega diretamente pelas ocorrências de APR
     if (rankingGroup === 'cidade') {
-      filteredData.forEach(item => {
+      for (let i = 0; i < filteredData.length; i++) {
+        const item = filteredData[i];
         const name = getItemCity(item) || 'Não Identificada';
         const mat = item['Matrícula Auditor'] || 'N/A';
         const auditorName = item['Nome Auditor'] || mat;
 
-        if (selectedAuditores.length > 0 && !selectedAuditores.includes(auditorName) && !selectedAuditores.includes(mat)) return;
+        if (selectedAuditores.length > 0 && !selectedAuditores.includes(auditorName) && !selectedAuditores.includes(mat)) continue;
 
         const cidBase = item['CIDADE_BASE'] || item['CIDADE COMERCIAL'];
         const cidExec = item['CIDADE_EXECUCAO'] || item['Localidade Objeto'] || item['CIDADE COMERCIAL'];
@@ -377,21 +396,12 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
         agg[name].data.push(item);
         agg[name].uniquePeople.add(mat);
 
-        const durKey = Object.keys(item).find(k => k.toLowerCase().includes('dura') && k.toLowerCase().includes('o'));
-        if (durKey && typeof item[durKey] === 'string') {
-          const parts = item[durKey].split(':');
-          if (parts.length === 3) {
-            const h = parseInt(parts[0], 10); const m = parseInt(parts[1], 10); const s = parseInt(parts[2], 10);
-            if (!isNaN(h) && !isNaN(m) && !isNaN(s)) {
-              const secs = h * 3600 + m * 60 + s;
-              if (secs > 0 && secs <= 600) {
-                agg[name].totalSecs += secs;
-                agg[name].validCount++;
-              }
-            }
-          }
+        const secs = parseDurationSecs(item['Duração'] || item['duracao']);
+        if (secs > 0) {
+          agg[name].totalSecs += secs;
+          agg[name].validCount++;
         }
-      });
+      }
       return Object.values(agg);
     }
 
@@ -400,6 +410,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
     if (colaboradoresPO.length > 0) {
       const poColabMapByMat = new Map<string, any>();
       const poColabMapByNome = new Map<string, any>();
+      const poColabMapByNormNome = new Map<string, any>();
 
       colaboradoresPO.forEach(p => {
         if (onlySpiActive && p.diretoria === 'DIR SERVICOS AO CLIENTE SP INTERIOR' && p.ativo_spi === 0) return;
@@ -410,6 +421,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
 
         const pMat = String(p.matricula || '').trim().replace(/^0+/, '');
         const pNome = String(p.nome || pMat).trim();
+        const pNorm = normNome(pNome);
 
         const entry = {
           count: 0,
@@ -432,26 +444,22 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
         agg[pNome] = entry;
         if (pMat) poColabMapByMat.set(pMat, entry);
         poColabMapByNome.set(pNome, entry);
+        if (pNorm) poColabMapByNormNome.set(pNorm, entry);
       });
 
-      // Associa as APRs emitidas aos seus respectivos colaboradores
-      filteredData.forEach(item => {
+      // Associa as APRs emitidas aos seus respectivos colaboradores via Lookups O(1)
+      for (let i = 0; i < filteredData.length; i++) {
+        const item = filteredData[i];
         const mat = String(item['Matrícula Auditor'] || item['RE'] || '').trim().replace(/^0+/, '');
         const auditorName = String(item['Nome Auditor'] || '').trim();
 
-        if (selectedAuditores.length > 0 && !selectedAuditores.includes(auditorName) && !selectedAuditores.includes(mat)) return;
+        if (selectedAuditores.length > 0 && !selectedAuditores.includes(auditorName) && !selectedAuditores.includes(mat)) continue;
 
-        let target = (mat && poColabMapByMat.get(mat)) || (auditorName && poColabMapByNome.get(auditorName)) || null;
+        let target = (mat ? poColabMapByMat.get(mat) : null) || (auditorName ? poColabMapByNome.get(auditorName) : null);
 
         if (!target && auditorName) {
-          const cleanAuditor = auditorName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
-          for (const [key, val] of poColabMapByNome.entries()) {
-            const cleanKey = key.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
-            if (cleanKey === cleanAuditor || cleanKey.includes(cleanAuditor) || cleanAuditor.includes(cleanKey)) {
-              target = val;
-              break;
-            }
-          }
+          const norm = normNome(auditorName);
+          if (norm) target = poColabMapByNormNome.get(norm) || null;
         }
 
         if (target) {
@@ -462,33 +470,25 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
           target.semApr = false;
           if (mat) target.uniquePeople.add(mat);
 
-          const durKey = Object.keys(item).find(k => k.toLowerCase().includes('dura') && k.toLowerCase().includes('o'));
-          if (durKey && typeof item[durKey] === 'string') {
-            const parts = item[durKey].split(':');
-            if (parts.length === 3) {
-              const h = parseInt(parts[0], 10); const m = parseInt(parts[1], 10); const s = parseInt(parts[2], 10);
-              if (!isNaN(h) && !isNaN(m) && !isNaN(s)) {
-                const secs = h * 3600 + m * 60 + s;
-                if (secs > 0 && secs <= 600) {
-                  target.totalSecs += secs;
-                  target.validCount++;
-                }
-              }
-            }
+          const secs = parseDurationSecs(item['Duração'] || item['duracao']);
+          if (secs > 0) {
+            target.totalSecs += secs;
+            target.validCount++;
           }
         }
-      });
+      }
 
       return Object.values(agg);
     }
 
     // Fallback: se colaboradoresPO estiver vazio
-    filteredData.forEach(item => {
+    for (let i = 0; i < filteredData.length; i++) {
+      const item = filteredData[i];
       const name = item['Nome Auditor'] || item['Matrícula Auditor'] || 'Não Identificado';
       const mat = item['Matrícula Auditor'] || 'N/A';
       const auditorName = item['Nome Auditor'] || mat;
 
-      if (selectedAuditores.length > 0 && !selectedAuditores.includes(auditorName) && !selectedAuditores.includes(mat)) return;
+      if (selectedAuditores.length > 0 && !selectedAuditores.includes(auditorName) && !selectedAuditores.includes(mat)) continue;
 
       const cidBase = item['CIDADE_BASE'] || item['CIDADE COMERCIAL'];
       const cidExec = item['CIDADE_EXECUCAO'] || item['Localidade Objeto'] || item['CIDADE COMERCIAL'];
@@ -517,21 +517,12 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       agg[name].data.push(item);
       agg[name].uniquePeople.add(mat);
 
-      const durKey = Object.keys(item).find(k => k.toLowerCase().includes('dura') && k.toLowerCase().includes('o'));
-      if (durKey && typeof item[durKey] === 'string') {
-        const parts = item[durKey].split(':');
-        if (parts.length === 3) {
-          const h = parseInt(parts[0], 10); const m = parseInt(parts[1], 10); const s = parseInt(parts[2], 10);
-          if (!isNaN(h) && !isNaN(m) && !isNaN(s)) {
-            const secs = h * 3600 + m * 60 + s;
-            if (secs > 0 && secs <= 600) {
-              agg[name].totalSecs += secs;
-              agg[name].validCount++;
-            }
-          }
-        }
+      const secs = parseDurationSecs(item['Duração'] || item['duracao']);
+      if (secs > 0) {
+        agg[name].totalSecs += secs;
+        agg[name].validCount++;
       }
-    });
+    }
 
     return Object.values(agg);
   }, [filteredData, colaboradoresPO, selectedAuditores, selectedDiretorias, selectedLeaders, selectedCities, onlySpiActive, rankingGroup, getItemCity, matchLeader]);
@@ -634,23 +625,47 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
 
   // Meses - Evolução Histórica no Gráfico respeitando filtros (Gerente, Coordenador, Supervisor, Cidade, etc.)
   const monthAgg = useMemo(() => {
-    const baseWithoutMonthFilter = data.filter(item => {
-      const matchAuditor = selectedAuditores.length === 0 ||
-        selectedAuditores.includes(item['Nome Auditor']) ||
-        selectedAuditores.includes(item['Matrícula Auditor']);
-      return matchSpiFilter(item) &&
-        matchAuditor &&
-        (selectedTipos.length === 0 || selectedTipos.includes(cleanTipo(item['Questionário']))) &&
-        (selectedDiretorias.length === 0 || selectedDiretorias.includes(getItemDiretoria(item))) &&
-        matchLeader(item, selectedLeaders) &&
-        (selectedCities.length === 0 || selectedCities.includes(getItemCity(item)));
-    });
+    const hasTipos = selectedTipos.length > 0;
+    const tiposSet = hasTipos ? new Set(selectedTipos) : null;
+
+    const hasDirs = selectedDiretorias.length > 0;
+    const dirsSet = hasDirs ? new Set(selectedDiretorias) : null;
+
+    const hasCities = selectedCities.length > 0;
+    const citiesSet = hasCities ? new Set(selectedCities) : null;
+
+    const hasAud = selectedAuditores.length > 0;
+    const audSet = hasAud ? new Set(selectedAuditores) : null;
+
+    const hasLeaders = selectedLeaders.length > 0;
 
     const agg: Record<string, number> = {};
-    baseWithoutMonthFilter.forEach(item => {
+
+    for (let i = 0; i < data.length; i++) {
+      const item = data[i];
+
+      if (onlySpiActive && getItemDiretoria(item) === 'DIR SERVICOS AO CLIENTE SP INTERIOR' && item['ATIVO_SPI'] === 0) {
+        continue;
+      }
+
+      if (hasTipos && !tiposSet!.has(cleanTipo(item['Questionário']))) continue;
+      if (hasDirs && !dirsSet!.has(getItemDiretoria(item))) continue;
+      if (hasCities && !citiesSet!.has(getItemCity(item))) continue;
+
+      if (hasAud) {
+        const nome = item['Nome Auditor'];
+        const mat = item['Matrícula Auditor'];
+        if ((!nome || !audSet!.has(nome)) && (!mat || !audSet!.has(mat))) {
+          continue;
+        }
+      }
+
+      if (hasLeaders && !matchLeader(item, selectedLeaders)) continue;
+
       const m = String(item['Mês']);
       agg[m] = (agg[m] || 0) + 1;
-    });
+    }
+
     return allMonths.map(m => ({ month: m, count: agg[m] || 0 }));
   }, [data, selectedTipos, selectedDiretorias, selectedLeaders, selectedCities, selectedAuditores, allMonths, onlySpiActive, getItemCity, matchLeader]);
 
@@ -952,80 +967,104 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
               {rankAgg.length === 0 ? (
                 <div className="text-center py-20 text-gray-400 dark:text-gray-500">Nenhum registro encontrado no filtro selecionado.</div>
               ) : (
-                rankAgg.map((item, idx) => {
-                  const pct = (item.count / maxRank) * 100;
-                  const colors = ['bg-pink-500', 'bg-blue-500', 'bg-green-500', 'bg-orange-500', 'bg-purple-500', 'bg-teal-500', 'bg-yellow-500'];
-                  const barColor = colors[idx % colors.length];
-                  const multiplier = rankingGroup === 'cidade' ? (item.uniquePeople?.size || 1) : 1;
-                  const expected = Math.round(targetAprs * multiplier);
-                  const perc = expected > 0 ? Math.round((item.count / expected) * 100) : 0;
+                <>
+                  {rankAgg.slice(0, visibleRankCount).map((item, idx) => {
+                    const pct = (item.count / maxRank) * 100;
+                    const colors = ['bg-pink-500', 'bg-blue-500', 'bg-green-500', 'bg-orange-500', 'bg-purple-500', 'bg-teal-500', 'bg-yellow-500'];
+                    const barColor = colors[idx % colors.length];
+                    const multiplier = rankingGroup === 'cidade' ? (item.uniquePeople?.size || 1) : 1;
+                    const expected = Math.round(targetAprs * multiplier);
+                    const perc = expected > 0 ? Math.round((item.count / expected) * 100) : 0;
 
-                  return (
-                    <div key={`${item.name}-${idx}`}>
-                      <div
-                        onClick={() => rankingGroup === 'colaborador' && item.count > 0 && setSelectedAuditorDetails(item)}
-                        className={`grid grid-cols-[30px_1fr_80px_80px_80px_110px] items-center gap-4 py-2 px-3 rounded-xl mb-1.5 border border-transparent bg-white dark:bg-[#151d2f] hover:bg-purple-50/50 dark:hover:bg-purple-950/20 hover:border-purple-200 dark:hover:border-purple-800/40 transition-all ${rankingGroup === 'colaborador' && item.count > 0 ? 'cursor-pointer' : ''}`}
-                      >
-                        <div className={`text-xs font-bold ${item.count === 0 ? 'text-red-500' : idx < 3 ? 'text-[#660099] dark:text-purple-400 font-extrabold text-sm' : 'text-gray-400 dark:text-gray-500'}`}>
-                          {idx + 1}º
-                        </div>
-
-                        <div className="overflow-hidden pr-2">
-                          <div className="text-sm font-semibold truncate text-gray-800 dark:text-gray-200" title={item.name}>
-                            {item.name}
+                    return (
+                      <div key={`${item.name}-${idx}`}>
+                        <div
+                          onClick={() => rankingGroup === 'colaborador' && item.count > 0 && setSelectedAuditorDetails(item)}
+                          className={`grid grid-cols-[30px_1fr_80px_80px_80px_110px] items-center gap-4 py-2 px-3 rounded-xl mb-1.5 border border-transparent bg-white dark:bg-[#151d2f] hover:bg-purple-50/50 dark:hover:bg-purple-950/20 hover:border-purple-200 dark:hover:border-purple-800/40 transition-all ${rankingGroup === 'colaborador' && item.count > 0 ? 'cursor-pointer' : ''}`}
+                        >
+                          <div className={`text-xs font-bold ${item.count === 0 ? 'text-red-500' : idx < 3 ? 'text-[#660099] dark:text-purple-400 font-extrabold text-sm' : 'text-gray-400 dark:text-gray-500'}`}>
+                            {idx + 1}º
                           </div>
-                          {(item.supervisor || item.cidade) && (
-                            <div className="text-[11px] text-gray-400 dark:text-gray-500 truncate mt-0.5 flex items-center gap-1.5 flex-wrap">
-                              {item.supervisor && <span>Sup: {item.supervisor}</span>}
-                              {rankingGroup === 'colaborador' ? (
-                                <>
-                                  {item.cidadeBase && <span>• Base: <strong className="text-gray-700 dark:text-gray-300 font-medium">{item.cidadeBase}</strong></span>}
-                                  {item.cidadesExecucao && item.cidadesExecucao.size > 0 && Array.from(item.cidadesExecucao).some(c => c !== item.cidadeBase) && (
-                                    <span className="text-[10px] px-1.5 py-0.2 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 rounded font-medium border border-amber-200 dark:border-amber-800">
-                                      Mutirão: {Array.from(item.cidadesExecucao).filter(c => c !== item.cidadeBase).join(', ')}
-                                    </span>
-                                  )}
-                                </>
-                              ) : (
-                                item.cidade && <span>• {item.cidade}</span>
-                              )}
+
+                          <div className="overflow-hidden pr-2">
+                            <div className="text-sm font-semibold truncate text-gray-800 dark:text-gray-200" title={item.name}>
+                              {item.name}
                             </div>
-                          )}
-                          <div className="h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full mt-1.5 overflow-hidden">
-                            <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} className={`h-full ${item.count === 0 ? 'bg-transparent' : barColor} rounded-full opacity-80`} />
+                            {(item.supervisor || item.cidade) && (
+                              <div className="text-[11px] text-gray-400 dark:text-gray-500 truncate mt-0.5 flex items-center gap-1.5 flex-wrap">
+                                {item.supervisor && <span>Sup: {item.supervisor}</span>}
+                                {rankingGroup === 'colaborador' ? (
+                                  <>
+                                    {item.cidadeBase && <span>• Base: <strong className="text-gray-700 dark:text-gray-300 font-medium">{item.cidadeBase}</strong></span>}
+                                    {item.cidadesExecucao && item.cidadesExecucao.size > 0 && Array.from(item.cidadesExecucao).some(c => c !== item.cidadeBase) && (
+                                      <span className="text-[10px] px-1.5 py-0.2 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 rounded font-medium border border-amber-200 dark:border-amber-800">
+                                        Mutirão: {Array.from(item.cidadesExecucao).filter(c => c !== item.cidadeBase).join(', ')}
+                                      </span>
+                                    )}
+                                  </>
+                                ) : (
+                                  item.cidade && <span>• {item.cidade}</span>
+                                )}
+                              </div>
+                            )}
+                            <div className="h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full mt-1.5 overflow-hidden">
+                              <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} className={`h-full ${item.count === 0 ? 'bg-transparent' : barColor} rounded-full opacity-80`} />
+                            </div>
                           </div>
-                        </div>
 
-                        <div className="flex justify-center items-center">
-                          <div className={`text-sm font-bold ${item.count === 0 ? 'text-red-500 font-extrabold' : 'text-gray-900 dark:text-white'}`}>
-                            {formatNum(item.count)}
+                          <div className="flex justify-center items-center">
+                            <div className={`text-sm font-bold ${item.count === 0 ? 'text-red-500 font-extrabold' : 'text-gray-900 dark:text-white'}`}>
+                              {formatNum(item.count)}
+                            </div>
                           </div>
-                        </div>
 
-                        <div className="flex justify-center items-center">
-                          <div className="text-xs font-semibold text-gray-500 dark:text-gray-400">{formatNum(expected)}</div>
-                        </div>
+                          <div className="flex justify-center items-center">
+                            <div className="text-xs font-semibold text-gray-500 dark:text-gray-400">{formatNum(expected)}</div>
+                          </div>
 
-                        <div className="flex justify-center items-center">
-                          <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${item.count === 0 ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-400' :
-                            perc >= 100 ? 'bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-400' :
-                              perc >= 70 ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400' :
-                                perc > 0 ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-400' :
-                                  'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400'
-                            }`}>
-                            {perc}%
-                          </span>
-                        </div>
+                          <div className="flex justify-center items-center">
+                            <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${item.count === 0 ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-400' :
+                              perc >= 100 ? 'bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-400' :
+                                perc >= 70 ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400' :
+                                  perc > 0 ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-400' :
+                                    'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400'
+                              }`}>
+                              {perc}%
+                            </span>
+                          </div>
 
-                        <div className="flex justify-center items-center text-xs text-gray-500 dark:text-gray-400 font-medium">
-                          <span className="flex items-center gap-1">
-                            <Clock size={12} /> {item.validCount > 0 ? getAvgTimeStr(item.totalSecs, item.validCount) : '-'}
-                          </span>
+                          <div className="flex justify-center items-center text-xs text-gray-500 dark:text-gray-400 font-medium">
+                            <span className="flex items-center gap-1">
+                              <Clock size={12} /> {item.validCount > 0 ? getAvgTimeStr(item.totalSecs, item.validCount) : '-'}
+                            </span>
+                          </div>
                         </div>
                       </div>
+                    );
+                  })}
+
+                  {rankAgg.length > visibleRankCount && (
+                    <div className="flex items-center justify-between px-3 py-2.5 mt-2 bg-gray-50 dark:bg-gray-800/50 rounded-xl text-xs">
+                      <span className="text-gray-500 dark:text-gray-400">
+                        Mostrando <strong>{visibleRankCount}</strong> de <strong>{rankAgg.length}</strong>
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setVisibleRankCount(prev => prev + 50)}
+                          className="px-3 py-1 font-semibold bg-white dark:bg-gray-700 text-[#660099] dark:text-purple-300 rounded-lg shadow-sm border border-gray-200 dark:border-gray-600 hover:bg-purple-50 transition-colors"
+                        >
+                          + Carregar 50
+                        </button>
+                        <button
+                          onClick={() => setVisibleRankCount(rankAgg.length)}
+                          className="px-2.5 py-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 font-medium transition-colors"
+                        >
+                          Mostrar todos
+                        </button>
+                      </div>
                     </div>
-                  );
-                })
+                  )}
+                </>
               )}
             </div>
           </div>

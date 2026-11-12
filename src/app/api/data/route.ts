@@ -4,7 +4,7 @@ import { dataCache } from '@/lib/cache';
 
 export const dynamic = 'force-dynamic';
 
-const CACHE_TTL_MS = 60 * 1000; // 1 minute cache
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hora de cache em memória (invalidado automaticamente em novos uploads)
 
 const CITY_NORM_MAP: Record<string, string> = {
   // SPC
@@ -672,6 +672,21 @@ export async function GET(req: NextRequest) {
           return result;
         };
 
+        const hierarquiaCache = new Map<string, HierarquiaChain>();
+        const getHierarquiaCached = (
+          initialGestor: string | null | undefined,
+          colabDir: string | null | undefined,
+          colabCidade: string | null | undefined,
+          colabRegional: 'SPC' | 'SPI' | null | undefined
+        ): HierarquiaChain => {
+          const k = `${initialGestor || ''}__${colabDir || ''}__${colabCidade || ''}__${colabRegional || ''}`;
+          const existing = hierarquiaCache.get(k);
+          if (existing) return existing;
+          const val = buildHierarquia(initialGestor, colabDir, colabCidade, colabRegional);
+          hierarquiaCache.set(k, val);
+          return val;
+        };
+
         const INTERIOR = 'DIR SERVICOS AO CLIENTE SP INTERIOR';
         const CAPITAL = 'DIR SERVICOS AO CLIENTE SP CAPITAL';
 
@@ -730,7 +745,7 @@ export async function GET(req: NextRequest) {
           let coordenador: string | undefined = undefined;
 
           if (role !== 'DIRETOR' && p.gestor) {
-            const hLeader = buildHierarquia(p.gestor, dir, cidade, reg);
+            const hLeader = getHierarquiaCached(p.gestor, dir, cidade, reg);
             if (hLeader.diretor) diretor = hLeader.diretor;
             gerente = hLeader.gerente || (role === 'COORDENADOR' && hLeader.chain[0] ? hLeader.chain[0] : undefined);
             coordenador = hLeader.coordenador || undefined;
@@ -772,82 +787,99 @@ export async function GET(req: NextRequest) {
           regional: 'SPC',
         });
 
+        const formatDataFast = (d: any): string | null => {
+          if (!d) return null;
+          const s = String(d).trim();
+          if (!s) return null;
+          if (s.length >= 10 && s[2] === '/' && s[5] === '/') return s;
+          if (s.length >= 10 && s[4] === '-' && s[7] === '-') {
+            const yyyy = s.substring(0, 4);
+            const mm = s.substring(5, 7);
+            const dd = s.substring(8, 10);
+            const time = s.length > 10 ? s.substring(10).trim() : '00:00:00';
+            return `${dd}/${mm}/${yyyy} ${time.padEnd(8, ':00')}`;
+          }
+          return s;
+        };
+
         const seenNumbers = new Set<string>();
-        rows = aprRes.rows
-          .filter((a: any) => {
-            const num = String(a.numero || '').trim().replace(/\.0+$/, '');
-            if (!num || seenNumbers.has(num)) return false;
-            seenNumbers.add(num);
-            return true;
-          })
-          .map((a: any) => {
-            const idMat = normId(a.matricula_auditor);
-            const idRe = normId(a.re);
-            const p = (idMat && poById.get(idMat)) || (idRe && poById.get(idRe)) || poByNome.get(normNome(a.nome_auditor) || '') || null;
-            const spi = (idMat && spiByMat.get(idMat)) || (idRe && spiByMat.get(idRe)) || (normNome(a.nome_auditor) && spiByNome.get(normNome(a.nome_auditor)!)) || null;
+        const formattedAprs: any[] = [];
+        for (let i = 0; i < aprRes.rows.length; i++) {
+          const a = aprRes.rows[i];
+          const num = String(a.numero || '').trim().replace(/\.0+$/, '');
+          if (!num || seenNumbers.has(num)) continue;
+          seenNumbers.add(num);
 
-            // Cidade Base (Lotação oficial conforme PO / SPI) vs Cidade de Execução (Local onde o checklist foi preenchido)
-            const cidadeBase = cleanCidade(spi?.cidade_comercial) || cleanCidade(p?.cidade_comercial) || cleanCidade(a.cidade_comercial) || null;
-            const cidadeExecucao = cleanCidade(a.localidade_objeto) || cleanCidade(a.cidade_comercial) || cidadeBase || null;
-            const cidadePrincipal = cidadeBase || cidadeExecucao;
+          const idMat = normId(a.matricula_auditor);
+          const idRe = normId(a.re);
+          const p = (idMat && poById.get(idMat)) || (idRe && poById.get(idRe)) || poByNome.get(normNome(a.nome_auditor) || '') || null;
+          const spi = (idMat && spiByMat.get(idMat)) || (idRe && spiByMat.get(idRe)) || (normNome(a.nome_auditor) && spiByNome.get(normNome(a.nome_auditor)!)) || null;
 
-            // Regional e Diretoria são determinadas pela Cidade Base (Lotação do Colaborador) para não distorcer equipe/liderança em mutirões
-            const regional = getRegional(cidadePrincipal);
-            const fc = getFilialCnpj(cidadePrincipal);
+          // Cidade Base (Lotação oficial conforme PO / SPI) vs Cidade de Execução (Local onde o checklist foi preenchido)
+          const cidadeBase = cleanCidade(spi?.cidade_comercial) || cleanCidade(p?.cidade_comercial) || cleanCidade(a.cidade_comercial) || null;
+          const cidadeExecucao = cleanCidade(a.localidade_objeto) || cleanCidade(a.cidade_comercial) || cidadeBase || null;
+          const cidadePrincipal = cidadeBase || cidadeExecucao;
 
-            let rawDir = (spi ? INTERIOR : null) || p?.diretoria_2 || p?.diretoria_3 || a.diretoria_3 || null;
-            let diretoria = normalizeDiretoria(rawDir, regional);
-            if (!diretoria) {
-              diretoria = (regional === 'SPI') ? INTERIOR : CAPITAL;
-            }
+          // Regional e Diretoria são determinadas pela Cidade Base (Lotação do Colaborador) para não distorcer equipe/liderança em mutirões
+          const regional = getRegional(cidadePrincipal);
+          const fc = getFilialCnpj(cidadePrincipal);
 
-            let gestor = spi?.gestor_atual || p?.gestor || a.gestor || a.supervisor || null;
-            if (gestor) {
-              gestor = gestor.toString().trim().toUpperCase();
-            } else {
-              gestor = regional ? `SUPERVISÃO ${regional}` : 'SUPERVISÃO NÃO IDENTIFICADA';
-            }
+          let rawDir = (spi ? INTERIOR : null) || p?.diretoria_2 || p?.diretoria_3 || a.diretoria_3 || null;
+          let diretoria = normalizeDiretoria(rawDir, regional);
+          if (!diretoria) {
+            diretoria = (regional === 'SPI') ? INTERIOR : CAPITAL;
+          }
 
-            const filial = (p?.filial && p.filial.trim()) || fc?.filial || spi?.gerencia || p?.gerencia || a.gerencia || (regional ? `FILIAL ${regional}` : 'SÃO PAULO');
-            const cnpj = (p?.cnpj && p.cnpj.trim()) || fc?.cnpj || '-';
-            const h = buildHierarquia(gestor, diretoria, cidadePrincipal, regional);
+          if (!ALLOWED_DIRETORIAS.includes(diretoria)) continue;
 
-            return {
-              "Número": a.numero,
-              "Data Checklist": a.data_fim || a.data_checklist || a.data_inicio,
-              "Data Fechamento": a.data_fim,
-              "Data Início": a.data_inicio,
-              "Data Fim": a.data_fim,
-              "Duração": a.duracao,
-              "Situação": a.situacao,
-              "Matrícula Auditor": a.matricula_auditor,
-              "Nome Auditor": a.nome_auditor,
-              "Localidade Objeto": a.localidade_objeto,
-              "Questionário": a.questionario,
-              "CARGO": (spi?.cargo || p?.cargo || null)?.toString()?.trim()?.toUpperCase() || null,
-              "RE": a.re,
-              "CIDADE COMERCIAL": cidadePrincipal,
-              "CIDADE_BASE": cidadeBase || cidadePrincipal,
-              "CIDADE_EXECUCAO": cidadeExecucao,
-              "REGIONAL": regional || (diretoria?.includes('INTERIOR') ? 'SPI' : 'SPC'),
-              "UF COMERCIAL": p?.uf_comercial || a.uf_comercial || null,
-              "DIRETORIA 2": diretoria,
-              "DIRETORIA 3": diretoria,
-              "GERÊNCIA": spi?.gerencia || p?.gerencia || a.gerencia || null,
-              "FILIAL": filial,
-              "CNPJ": cnpj,
-              "GESTOR": gestor,
-              "Supervisor": h.supervisor || gestor,
-              "COORDENADOR": h.coordenador,
-              "GERENTE": h.gerente,
-              "DIRETOR": h.diretor,
-              "LIDERES": h.chain,
-              "Mês": a.mes,
-              "Ano": a.ano,
-              "ATIVO_SPI": spi ? spi.ativo : 1,
-              "IS_SPI": !!spi,
-            };
+          let gestor = spi?.gestor_atual || p?.gestor || a.gestor || a.supervisor || null;
+          if (gestor) {
+            gestor = gestor.toString().trim().toUpperCase();
+          } else {
+            gestor = regional ? `SUPERVISÃO ${regional}` : 'SUPERVISÃO NÃO IDENTIFICADA';
+          }
+
+          const filial = (p?.filial && p.filial.trim()) || fc?.filial || spi?.gerencia || p?.gerencia || a.gerencia || (regional ? `FILIAL ${regional}` : 'SÃO PAULO');
+          const cnpj = (p?.cnpj && p.cnpj.trim()) || fc?.cnpj || '-';
+          const h = getHierarquiaCached(gestor, diretoria, cidadePrincipal, regional);
+
+          formattedAprs.push({
+            "Número": a.numero,
+            "Data Checklist": formatDataFast(a.data_fim || a.data_checklist || a.data_inicio),
+            "Data Fechamento": formatDataFast(a.data_fim),
+            "Data Início": formatDataFast(a.data_inicio),
+            "Data Fim": formatDataFast(a.data_fim),
+            "Duração": a.duracao,
+            "Situação": a.situacao,
+            "Matrícula Auditor": a.matricula_auditor,
+            "Nome Auditor": a.nome_auditor,
+            "Localidade Objeto": a.localidade_objeto,
+            "Questionário": a.questionario,
+            "CARGO": (spi?.cargo || p?.cargo || null)?.toString()?.trim()?.toUpperCase() || null,
+            "RE": a.re,
+            "CIDADE COMERCIAL": cidadePrincipal,
+            "CIDADE_BASE": cidadeBase || cidadePrincipal,
+            "CIDADE_EXECUCAO": cidadeExecucao,
+            "REGIONAL": regional || (diretoria?.includes('INTERIOR') ? 'SPI' : 'SPC'),
+            "UF COMERCIAL": p?.uf_comercial || a.uf_comercial || null,
+            "DIRETORIA 2": diretoria,
+            "DIRETORIA 3": diretoria,
+            "GERÊNCIA": spi?.gerencia || p?.gerencia || a.gerencia || null,
+            "FILIAL": filial,
+            "CNPJ": cnpj,
+            "GESTOR": gestor,
+            "Supervisor": h.supervisor || gestor,
+            "COORDENADOR": h.coordenador,
+            "GERENTE": h.gerente,
+            "DIRETOR": h.diretor,
+            "LIDERES": h.chain,
+            "Mês": a.mes,
+            "Ano": a.ano,
+            "ATIVO_SPI": spi ? spi.ativo : 1,
+            "IS_SPI": !!spi,
           });
+        }
+        rows = formattedAprs;
 
         // Montar a lista canônica de colaboradores do PO em SP filtrada estritamente por cargo TÉCNICO
         const colaboradoresPO: any[] = [];
@@ -870,7 +902,7 @@ export async function GET(req: NextRequest) {
           const filial = fc?.filial || s.gerencia || poMatch?.filial || 'FILIAL SPI';
           const cnpj = fc?.cnpj || poMatch?.cnpj || '-';
 
-          const h = buildHierarquia(gestor, INTERIOR, cidade, 'SPI');
+          const h = getHierarquiaCached(gestor, INTERIOR, cidade, 'SPI');
 
           colaboradoresPO.push({
             matricula: mat,
@@ -939,7 +971,7 @@ export async function GET(req: NextRequest) {
           }
 
           let gestor = p.gestor ? p.gestor.toString().trim().toUpperCase() : `SUPERVISÃO ${regional}`;
-          const h = buildHierarquia(gestor, diretoria, cidade, regional);
+          const h = getHierarquiaCached(gestor, diretoria, cidade, regional);
 
           // Se for Serviços ao Cliente e hierarquia apontar para Samuel Rossi, pertencia ao Interior
           if (!isInfra && h.diretor === DIRECTOR_SPI) continue;
@@ -979,7 +1011,18 @@ export async function GET(req: NextRequest) {
         throw err;
       }
     }
-    // Converte datas para string no formato padrão brasileiro DD/MM/AAAA HH:mm:ss sem desvio de fuso
+
+    if (type === 'APR') {
+      const payload = {
+        data: rows,
+        colaboradoresPO: (rows as any)._colaboradoresPO || [],
+        liderancas: (rows as any)._liderancas || []
+      };
+      dataCache[type] = { data: payload, timestamp: Date.now() };
+      return NextResponse.json(payload);
+    }
+
+    // Converte datas para string no formato padrão brasileiro DD/MM/AAAA HH:mm:ss sem desvio de fuso (para outros tipos como DSS)
     const formattedData = rows.map(r => {
       const formatData = (d: any) => {
         if (!d) return null;
