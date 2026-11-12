@@ -695,16 +695,18 @@ export async function GET(req: NextRequest) {
           const rawDir = p.diretoria_2 || p.diretoria_3 || null;
           const rawDirClean = cleanStr(rawDir);
 
-          // ESTRITO: apenas quem pertence à Diretoria de Serviços ao Cliente!
-          if (!rawDirClean.includes('SERVICOS AO CLIENTE') && !isSamuel && !isEliseu) {
+          // Apenas quem pertence a Serviços ao Cliente ou Engenharia, Transporte e Infraestrutura
+          const isInfra = rawDirClean.includes('ENGENHARIA') || rawDirClean.includes('TRANSPORTE') || rawDirClean.includes('INFRA');
+          const isServCliente = rawDirClean.includes('SERVICOS AO CLIENTE') || rawDirClean.includes('CLIENTE');
+          if (!isInfra && !isServCliente && !isSamuel && !isEliseu) {
             continue;
           }
           if (rawDirClean.includes('LOJA') || rawDirClean.includes('VAREJO') || rawDirClean.includes('COMERCIAL')) {
             continue;
           }
 
-          let dir: string;
           let reg: 'SPC' | 'SPI';
+          let dir: string;
           let diretor: string;
           let cidade = cleanCidade(p.cidade_comercial) || null;
 
@@ -720,8 +722,8 @@ export async function GET(req: NextRequest) {
             cidade = cidade || 'SÃO PAULO';
           } else {
             reg = getRegional(cidade) || (rawDirClean.includes('INTERIOR') ? 'SPI' : 'SPC');
-            dir = rawDirClean.includes('INTERIOR') ? INTERIOR : CAPITAL;
-            diretor = (dir === INTERIOR) ? DIRECTOR_SPI : DIRECTOR_SPC;
+            dir = normalizeDiretoria(rawDir, reg) || (reg === 'SPI' ? INTERIOR : CAPITAL);
+            diretor = (reg === 'SPI') ? DIRECTOR_SPI : DIRECTOR_SPC;
           }
 
           let gerente: string | undefined = undefined;
@@ -795,11 +797,8 @@ export async function GET(req: NextRequest) {
 
             let rawDir = (spi ? INTERIOR : null) || p?.diretoria_2 || p?.diretoria_3 || a.diretoria_3 || null;
             let diretoria = normalizeDiretoria(rawDir, regional);
-
-            if (regional === 'SPI' || rawDir?.toUpperCase().includes('INTERIOR')) {
-              diretoria = INTERIOR;
-            } else if (regional === 'SPC' || rawDir?.toUpperCase().includes('CAPITAL')) {
-              diretoria = CAPITAL;
+            if (!diretoria) {
+              diretoria = (regional === 'SPI') ? INTERIOR : CAPITAL;
             }
 
             let gestor = spi?.gestor_atual || p?.gestor || a.gestor || a.supervisor || null;
@@ -894,20 +893,26 @@ export async function GET(req: NextRequest) {
           });
         }
 
-        // 2. Colaboradores da Diretoria da Capital (SPC):
-        // Extraídos do PO geral, garantindo que não puxa pessoal do Interior
+        // 2. Colaboradores de Serviços ao Cliente Capital e de Engenharia, Transporte e Infraestrutura (Capital e Interior):
         for (const p of poRes.rows) {
           const mat = normId(p.user_id_ssff);
           if (!mat || seenMatriculas.has(mat)) continue;
 
-          // Se for do Interior, ignora (já tratado com precisão absoluta via planilha de correção SPI)
           const rawDir = p.diretoria_2 || p.diretoria_3 || null;
           const rawDirClean = cleanStr(rawDir);
-          if (!rawDirClean.includes('CAPITAL') || rawDirClean.includes('INTERIOR') || rawDirClean.includes('SPI')) {
+
+          const isInfra = rawDirClean.includes('ENGENHARIA') || rawDirClean.includes('TRANSPORTE') || rawDirClean.includes('INFRA');
+          const isServCliente = rawDirClean.includes('SERVICOS AO CLIENTE') || rawDirClean.includes('CLIENTE');
+
+          // Aceita apenas quem pertence a Serviços ao Cliente ou Infraestrutura
+          if (!isInfra && !isServCliente) continue;
+
+          // Se for Serviços ao Cliente do Interior, já foi tratado com precisão via planilha oficial de correção SPI
+          if (isServCliente && (rawDirClean.includes('INTERIOR') || rawDirClean.includes('SPI'))) {
             continue;
           }
 
-          // Apenas técnicos de campo da Capital
+          // Apenas técnicos de campo
           if (!isTecnico(p.cargo)) continue;
           if (isNonFieldRole(p.cargo)) continue;
           if (rawDirClean.includes('LOJA') || rawDirClean.includes('VAREJO') || rawDirClean.includes('COMERCIAL')) {
@@ -920,19 +925,26 @@ export async function GET(req: NextRequest) {
           }
 
           const cidade = cleanCidade(p.cidade_comercial) || null;
-          const regional = getRegional(cidade);
-          if (regional === 'SPI') continue; // Lotação Interior não entra na Capital
+          const regional = getRegional(cidade) || (rawDirClean.includes('INTERIOR') ? 'SPI' : 'SPC');
+
+          // Se for Serviços ao Cliente e lotação for do Interior, não entra aqui (já no bloco 1)
+          if (!isInfra && regional === 'SPI') continue;
 
           const fc = getFilialCnpj(cidade);
-          let diretoria = CAPITAL;
+          let diretoria = normalizeDiretoria(rawDir, regional);
+          if (!diretoria) {
+            diretoria = isInfra
+              ? (regional === 'SPI' ? 'DIR ENGENHARIA TRANSPORTE E INFRA - INTERIOR' : 'DIR ENGENHARIA TRANSPORTE E INFRA - CAPITAL')
+              : CAPITAL;
+          }
 
-          let gestor = p.gestor ? p.gestor.toString().trim().toUpperCase() : 'SUPERVISÃO SPC';
-          const h = buildHierarquia(gestor, diretoria, cidade, 'SPC');
+          let gestor = p.gestor ? p.gestor.toString().trim().toUpperCase() : `SUPERVISÃO ${regional}`;
+          const h = buildHierarquia(gestor, diretoria, cidade, regional);
 
-          // Se a hierarquia chegar em Samuel Rossi, era Interior
-          if (h.diretor === DIRECTOR_SPI) continue;
+          // Se for Serviços ao Cliente e hierarquia apontar para Samuel Rossi, pertencia ao Interior
+          if (!isInfra && h.diretor === DIRECTOR_SPI) continue;
 
-          const filial = (p.filial && p.filial.trim()) || fc?.filial || p.gerencia || 'FILIAL SPC';
+          const filial = (p.filial && p.filial.trim()) || fc?.filial || p.gerencia || `FILIAL ${regional}`;
           const cnpj = (p.cnpj && p.cnpj.trim()) || fc?.cnpj || '-';
 
           seenMatriculas.add(mat);
@@ -940,18 +952,18 @@ export async function GET(req: NextRequest) {
             matricula: mat,
             nome: (p.nome || mat).toString().trim().toUpperCase(),
             cargo: (p.cargo || 'TECNICO').toString().trim().toUpperCase(),
-            diretoria: CAPITAL,
-            diretoria_2: CAPITAL,
+            diretoria: diretoria,
+            diretoria_2: diretoria,
             gerencia: (p.gerencia || '').toString().trim().toUpperCase(),
             filial: filial,
             cnpj: cnpj,
             supervisor: h.supervisor || gestor,
             coordenador: h.coordenador,
             gerente: h.gerente,
-            diretor: DIRECTOR_SPC,
+            diretor: h.diretor || (regional === 'SPI' ? DIRECTOR_SPI : DIRECTOR_SPC),
             lideres: h.chain,
             cidade: cidade,
-            regional: 'SPC',
+            regional: regional,
             ativo_spi: 1,
             is_spi: false
           });
