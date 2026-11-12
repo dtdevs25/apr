@@ -368,7 +368,8 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
       cargo?: string | null,
       cidade?: string,
       cidadeBase?: string,
-      cidadesExecucao: Set<string>
+      cidadesExecucao: Set<string>,
+      dataAdmissao?: string | null
     }> = {};
 
     // Se o agrupamento for por cidade: agrega diretamente pelas ocorrências de APR
@@ -450,7 +451,8 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
           cargo: p.cargo || null,
           cidade: p.cidade,
           cidadeBase: p.cidade,
-          cidadesExecucao: new Set<string>()
+          cidadesExecucao: new Set<string>(),
+          dataAdmissao: p.data_admissao || null
         };
 
         if (selectedCities.length === 0 || cityMode === 'base' || selectedCities.includes(p.cidade)) {
@@ -1011,6 +1013,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
                                 {rankingGroup === 'colaborador' ? (
                                   <>
                                     {item.cidadeBase && <span>• Base: <strong className="text-gray-700 dark:text-gray-300 font-medium">{item.cidadeBase}</strong></span>}
+                                    {item.dataAdmissao && <span>• Adm: <strong className="text-gray-700 dark:text-gray-300 font-medium">{item.dataAdmissao}</strong></span>}
                                     {item.cidadesExecucao && item.cidadesExecucao.size > 0 && Array.from(item.cidadesExecucao).some(c => c !== item.cidadeBase) && (
                                       <span className="text-[10px] px-1.5 py-0.2 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 rounded font-medium border border-amber-200 dark:border-amber-800">
                                         Mutirão: {Array.from(item.cidadesExecucao).filter(c => c !== item.cidadeBase).join(', ')}
@@ -1124,6 +1127,9 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
                   <h3 className="text-lg font-bold text-gray-900 dark:text-white">{selectedAuditorDetails.name}</h3>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                     Total de {selectedAuditorDetails.count} APRs registradas • Cidade Base: <span className="font-semibold text-[#660099] dark:text-purple-300">{selectedAuditorDetails.cidadeBase || selectedAuditorDetails.cidade || 'Não informada'}</span>
+                    {selectedAuditorDetails.dataAdmissao && (
+                      <span> • Admissão: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{selectedAuditorDetails.dataAdmissao}</strong></span>
+                    )}
                   </p>
                 </div>
                 <button onClick={() => setSelectedAuditorDetails(null)} className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600">

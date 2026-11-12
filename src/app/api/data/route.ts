@@ -384,7 +384,7 @@ export async function GET(req: NextRequest) {
             FROM aprs
           `),
           pool.query(`
-            SELECT user_id_ssff, nome, cargo,
+            SELECT user_id_ssff, nome, cargo, data_admissao,
                    COALESCE(to_jsonb(po)->>'grupo_2', to_jsonb(po)->>'grupo 2', to_jsonb(po)->>'GRUPO 2', to_jsonb(po)->>'GRUPO_2', '') AS grupo_2,
                    COALESCE(to_jsonb(po)->>'categoria', '') AS categoria,
                    COALESCE(to_jsonb(po)->>'subgrupo', '') AS subgrupo,
@@ -811,6 +811,20 @@ export async function GET(req: NextRequest) {
           return s;
         };
 
+        const formatDataDia = (d: any): string | null => {
+          if (!d) return null;
+          const s = String(d).trim();
+          if (!s) return null;
+          if (s.length >= 10 && s[2] === '/' && s[5] === '/') return s.substring(0, 10);
+          if (s.length >= 10 && s[4] === '-' && s[7] === '-') {
+            const yyyy = s.substring(0, 4);
+            const mm = s.substring(5, 7);
+            const dd = s.substring(8, 10);
+            return `${dd}/${mm}/${yyyy}`;
+          }
+          return s.substring(0, 10);
+        };
+
         const seenNumbers = new Set<string>();
         const formattedAprs: any[] = [];
         for (let i = 0; i < aprRes.rows.length; i++) {
@@ -919,7 +933,8 @@ export async function GET(req: NextRequest) {
             cidade: cidade,
             regional: 'SPI',
             ativo_spi: s.ativo, // 1 = Ativo em campo (menos de 500!), 0 = Afastado / Treinamento
-            is_spi: true
+            is_spi: true,
+            data_admissao: formatDataDia(poMatch?.data_admissao),
           });
         }
 
@@ -995,7 +1010,8 @@ export async function GET(req: NextRequest) {
             cidade: cidade,
             regional: regional,
             ativo_spi: 1,
-            is_spi: false
+            is_spi: false,
+            data_admissao: formatDataDia(p.data_admissao),
           });
         }
 

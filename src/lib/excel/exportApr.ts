@@ -55,7 +55,11 @@ export function exportAprToExcel({
   const tecnicosAgg: Record<string, {
     name: string;
     matricula: string;
+    dataAdmissao: string;
+    cargo: string;
     diretoria: string;
+    gerencia: string;
+    coordenador: string;
     filial: string;
     cnpj: string;
     cidadeBase: string;
@@ -81,7 +85,11 @@ export function exportAprToExcel({
       tecnicosAgg[key] = {
         name: nome,
         matricula: mat || pInfo?.matricula || '-',
-        diretoria: item['DIRETORIA 3'] || pInfo?.diretoria || 'N/A',
+        dataAdmissao: pInfo?.data_admissao || item['data_admissao'] || '-',
+        cargo: pInfo?.cargo || item['CARGO'] || 'Técnico de Campo',
+        diretoria: item['DIRETORIA 2'] || item['DIRETORIA 3'] || pInfo?.diretoria || 'N/A',
+        gerencia: pInfo?.gerencia || item['GERÊNCIA'] || '-',
+        coordenador: item['COORDENADOR'] || pInfo?.coordenador || '-',
         filial: filialVal,
         cnpj: cnpjVal,
         cidadeBase: cidBase,
@@ -138,7 +146,11 @@ export function exportAprToExcel({
       tecnicosAgg[key] = {
         name: pNome,
         matricula: pMat,
+        dataAdmissao: p.data_admissao || '-',
+        cargo: p.cargo || 'Técnico de Campo',
         diretoria: p.diretoria,
+        gerencia: p.gerencia || '-',
+        coordenador: p.coordenador || '-',
         filial: p.filial || p.cnpj || p.gerencia || 'São Paulo',
         cnpj: p.cnpj || '-',
         cidadeBase: p.cidade || 'São Paulo',
@@ -163,12 +175,14 @@ export function exportAprToExcel({
       "Posição": `${idx + 1}º`,
       "Técnico": item.name,
       "Matrícula": item.matricula,
+      "Data de Admissão": item.dataAdmissao || '-',
+      "Cargo": item.cargo || '-',
       "Diretoria": item.diretoria,
-      "Filial": item.filial,
-      "CNPJ": item.cnpj,
+      "Gerência": item.gerencia || '-',
+      "Coordenador": item.coordenador || '-',
+      "Supervisor": item.supervisor,
       "Cidade Base (PO)": item.cidadeBase,
       "Cidade Execução (APR)": execLocs || item.cidadeBase || '-',
-      "Supervisor": item.supervisor,
       "Realizado (APRs)": item.count,
       "Esperado": expected,
       "Meta (%)": perc,
@@ -190,14 +204,49 @@ export function exportAprToExcel({
     };
   }
   ws_tecnicos['!cols'] = [
-    { wch: 10 }, { wch: 38 }, { wch: 15 }, { wch: 38 }, { wch: 28 }, { wch: 20 },
-    { wch: 25 }, { wch: 32 }, { wch: 18 }, { wch: 15 }, { wch: 15 }, { wch: 24 },
-    { wch: 34 }, { wch: 18 }
+    { wch: 10 }, { wch: 38 }, { wch: 15 }, { wch: 18 }, { wch: 28 }, { wch: 38 },
+    { wch: 25 }, { wch: 25 }, { wch: 32 }, { wch: 22 }, { wch: 25 }, { wch: 18 },
+    { wch: 15 }, { wch: 15 }, { wch: 24 }, { wch: 34 }, { wch: 18 }
+  ];
+
+  // 4. Aba Dedicada: Colaboradores Sem APR
+  const semAprList = tecnicosList
+    .filter(item => item.count === 0)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((item, idx) => ({
+      "#": idx + 1,
+      "Matrícula": item.matricula,
+      "Colaborador": item.name,
+      "Data de Admissão": item.dataAdmissao || '-',
+      "Cargo": item.cargo || 'Técnico de Campo',
+      "Diretoria": item.diretoria,
+      "Gerência": item.gerencia || '-',
+      "Coordenador": item.coordenador || '-',
+      "Supervisor": item.supervisor,
+      "Cidade Base (PO)": item.cidadeBase,
+      "Status": "Sem APR no período selecionado"
+    }));
+
+  const ws_sem_apr = XLSX.utils.json_to_sheet(semAprList.length > 0 ? semAprList : [{ "Mensagem": "Todos os colaboradores realizaram APR no período selecionado." }]);
+  const rangeSemApr = XLSX.utils.decode_range(ws_sem_apr['!ref'] || 'A1:A1');
+  for (let C = rangeSemApr.s.c; C <= rangeSemApr.e.c; ++C) {
+    const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
+    if (!ws_sem_apr[cellAddress]) continue;
+    ws_sem_apr[cellAddress].s = {
+      fill: { fgColor: { rgb: "990000" } },
+      font: { color: { rgb: "FFFFFF" }, bold: true },
+      alignment: { horizontal: "center", vertical: "center" }
+    };
+  }
+  ws_sem_apr['!cols'] = [
+    { wch: 6 }, { wch: 15 }, { wch: 38 }, { wch: 18 }, { wch: 28 },
+    { wch: 35 }, { wch: 25 }, { wch: 25 }, { wch: 32 }, { wch: 22 }, { wch: 32 }
   ];
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws_dados, "Dados Filtrados APR");
   XLSX.utils.book_append_sheet(wb, ws_tecnicos, "Ranking Técnicos APR");
+  XLSX.utils.book_append_sheet(wb, ws_sem_apr, "Colaboradores Sem APR");
 
   if (rankingGroup === 'cidade') {
     const rankingCidadesData = rankAgg.map((item, idx) => {
