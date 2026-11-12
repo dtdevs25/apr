@@ -15,6 +15,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, onSucce
   const [showPassword, setShowPassword] = useState(false);
   const [adminAuthStatus, setAdminAuthStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [uploadStatus, setUploadStatus] = useState('');
+  const [truncateApr, setTruncateApr] = useState(true);
 
   const handleClose = () => {
     setAdminAction(null);
@@ -43,9 +44,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, onSucce
     const file = e.target.files?.[0];
     if (!file) return;
     
-    setUploadStatus('Enviando...');
+    setUploadStatus('Enviando e processando arquivo...');
     const formData = new FormData();
     formData.append('file', file);
+    if (adminAction === 'apr' && truncateApr) {
+      formData.append('truncate', 'true');
+    }
     
     try {
       let endpoint = '/api/admin/upload-apr';
@@ -149,6 +153,25 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, onSucce
                 <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-2">
                   {adminAction === 'dss' || adminAction === 'apr' ? 'Selecione o arquivo XLSX ou CSV para importar.' : 'Selecione o arquivo XLSX para importar os dados para o banco.'}
                 </p>
+
+                {adminAction === 'apr' && (
+                  <label className="flex items-start gap-3 p-3 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-xl cursor-pointer w-full text-left transition-all hover:bg-purple-100/50">
+                    <input
+                      type="checkbox"
+                      checked={truncateApr}
+                      onChange={(e) => setTruncateApr(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 accent-[#660099] rounded cursor-pointer"
+                    />
+                    <div className="flex-1">
+                      <p className="text-xs font-bold text-purple-950 dark:text-purple-200">
+                        Substituição Total: Limpar APRs antigas do banco
+                      </p>
+                      <p className="text-[11px] text-purple-700 dark:text-purple-300">
+                        Recomendado: limpa a base legada para importar a base completa do Arkium desde 01/01/2026 com meses indexados por Data de Fechamento.
+                      </p>
+                    </div>
+                  </label>
+                )}
                 
                 <label className="w-full border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer hover:border-[#660099] hover:bg-purple-50 dark:hover:bg-purple-950/20 transition-all">
                   <UploadCloud className="text-gray-400 mb-2" size={32} />

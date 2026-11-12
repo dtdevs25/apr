@@ -373,7 +373,7 @@ export async function GET(req: NextRequest) {
         };
 
         const [aprRes, poRes, spiRes] = await Promise.all([
-          pool.query(`SELECT * FROM aprs ORDER BY data_inicio DESC`),
+          pool.query(`SELECT * FROM aprs ORDER BY COALESCE(data_fim, data_inicio) DESC`),
           pool.query(`
             SELECT user_id_ssff, nome, cargo,
                    COALESCE(to_jsonb(po)->>'grupo_2', to_jsonb(po)->>'grupo 2', to_jsonb(po)->>'GRUPO 2', to_jsonb(po)->>'GRUPO_2', '') AS grupo_2,
@@ -814,7 +814,8 @@ export async function GET(req: NextRequest) {
 
             return {
               "Número": a.numero,
-              "Data Checklist": a.data_checklist,
+              "Data Checklist": a.data_fim || a.data_checklist || a.data_inicio,
+              "Data Fechamento": a.data_fim,
               "Data Início": a.data_inicio,
               "Data Fim": a.data_fim,
               "Duração": a.duracao,

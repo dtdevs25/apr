@@ -1083,7 +1083,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
                   <thead className="border-b border-gray-100 dark:border-gray-800 text-gray-400 font-semibold uppercase">
                     <tr>
                       <th className="py-2">Número</th>
-                      <th className="py-2">Data Início</th>
+                      <th className="py-2">Data Fechamento</th>
                       <th className="py-2">Duração</th>
                       <th className="py-2">Local APR</th>
                       <th className="py-2">Questionário</th>
@@ -1093,7 +1093,7 @@ export const AprDashboard: React.FC<AprDashboardProps> = ({ onBack, isDark, togg
                     {selectedAuditorDetails.data.map((r: any, idx: number) => (
                       <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                         <td className="py-2 font-mono font-medium">{r['Número']}</td>
-                        <td className="py-2">{r['Data Início'] || '-'}</td>
+                        <td className="py-2">{r['Data Fechamento'] || r['Data Início'] || '-'}</td>
                         <td className="py-2">{r['Duração'] || '-'}</td>
                         <td className="py-2 font-medium text-[#660099] dark:text-purple-300">{r['Localidade Objeto'] || r['CIDADE_EXECUCAO'] || '-'}</td>
                         <td className="py-2 max-w-[200px] truncate" title={r['Questionário']}>{cleanTipo(r['Questionário'])}</td>

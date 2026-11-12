@@ -3,6 +3,9 @@ import pool from '@/lib/db';
 import * as xlsx from 'xlsx';
 import { clearDataCache } from '@/lib/cache';
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 300; // 5 minutos de timeout para uploads volumosos
+
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
@@ -88,52 +91,67 @@ export async function POST(req: Request) {
       const sep = firstLine.includes(';') ? ';' : ',';
       const headers = firstLine.split(sep).map(h => h.trim().replace(/^["']|["']$/g, ''));
 
+      // Pre-mapear os índices das colunas no cabeçalho para performance máxima (milissegundos para 200k linhas)
+      const findColIdx = (keys: string[]): number => {
+        for (const key of keys) {
+          const target = normalizeKey(key);
+          const foundIdx = headers.findIndex(h => {
+            const nh = normalizeKey(h);
+            return nh === target || nh.includes(target);
+          });
+          if (foundIdx !== -1) return foundIdx;
+        }
+        return -1;
+      };
+
+      const idxNumero = findColIdx(['Número', 'Numero', 'num']);
+      const idxQuestionario = findColIdx(['Nome Questionário', 'Questionário', 'Questionario', 'Nome Questionario']);
+      const idxLocalidade = findColIdx(['Localidade Objeto', 'Localidade', 'Base']);
+      const idxDataAbertura = findColIdx(['Data Abertura', 'Data Início', 'Data Inicio', 'Data Checklist']);
+      const idxDataFechamento = findColIdx(['Data Fechamento', 'Data Fim', 'Data_Fim']);
+      const idxDuracao = findColIdx(['Duração', 'Duracao']);
+      const idxSituacao = findColIdx(['Situação', 'Situacao', 'Resultado', 'Status']);
+      const idxMatricula = findColIdx(['Matrícula Auditor', 'Matricula Auditor', 'Matrícula', 'Matricula', 'RE']);
+      const idxNome = findColIdx(['Nome Auditor', 'Identificador Objeto', 'Auditor']);
+      const idxRe = findColIdx(['RE']);
+      const idxMes = findColIdx(['Mês', 'Mes']);
+      const idxAno = findColIdx(['Ano']);
+      const idxCidade = findColIdx(['CIDADE COMERCIAL', 'Cidade']);
+      const idxDiretoria = findColIdx(['DIRETORIA 3', 'DIRETORIA3', 'DIRETORIA 2', 'Diretoria']);
+      const idxGerencia = findColIdx(['GERÊNCIA', 'GERENCIA', 'Gerência']);
+      const idxGestor = findColIdx(['GESTOR', 'Supervisor']);
+
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
         const cols = line.split(sep).map(c => c.trim().replace(/^["']|["']$/g, ''));
-        const rawRow: Record<string, string> = {};
-        headers.forEach((h, idx) => {
-          rawRow[h] = cols[idx] !== undefined ? cols[idx] : '';
-        });
 
-        const getVal = (keys: string[]) => {
-          const rowKeys = Object.keys(rawRow);
-          for (const key of keys) {
-            const target = normalizeKey(key);
-            const found = rowKeys.find(k => normalizeKey(k) === target);
-            if (found !== undefined && rawRow[found] !== null && rawRow[found] !== '') {
-              return rawRow[found];
-            }
-          }
-          return null;
-        };
-
-        const questionarioRaw = getVal(['Nome Questionário', 'Questionário', 'Questionario', 'Nome Questionario']) || '';
-        const questionarioUpper = questionarioRaw.toUpperCase();
+        const questionarioRaw = idxQuestionario !== -1 ? cols[idxQuestionario] : '';
+        const questionarioUpper = questionarioRaw ? questionarioRaw.toUpperCase() : '';
 
         // Filtro 1: Apenas APR
-        if (!questionarioUpper.includes('APR') && !questionarioUpper.includes('ANALISE PRELIMINAR DE RISCOS')) {
+        if (questionarioUpper && !questionarioUpper.includes('APR') && !questionarioUpper.includes('ANALISE PRELIMINAR DE RISCOS')) {
           continue;
         }
 
-        const localidadeRaw = getVal(['Localidade Objeto', 'Localidade', 'Base']) || '';
-        const localidadeUpper = localidadeRaw.toUpperCase().trim();
+        const localidadeRaw = idxLocalidade !== -1 ? cols[idxLocalidade] : '';
+        const localidadeUpper = localidadeRaw ? localidadeRaw.toUpperCase().trim() : '';
 
         // Filtro 2: Apenas região de São Paulo (SP)
         const isSP = localidadeUpper.startsWith('SP') || localidadeUpper.startsWith('SP ') || localidadeUpper.includes(' SP');
-        if (!isSP) {
+        if (localidadeUpper && !isSP) {
           continue;
         }
 
-        const numero = cleanNumero(getVal(['Número', 'Numero']));
+        const numeroRaw = idxNumero !== -1 ? cols[idxNumero] : cols[0];
+        const numero = cleanNumero(numeroRaw);
         if (!numero) continue;
 
         if (seenNumeros.has(numero)) continue;
         seenNumeros.add(numero);
 
-        const dataAberturaStr = getVal(['Data Abertura', 'Data Início', 'Data Inicio', 'Data Checklist']);
-        const dataFechamentoStr = getVal(['Data Fechamento', 'Data Fim', 'Data_Fim']);
+        const dataAberturaStr = idxDataAbertura !== -1 ? cols[idxDataAbertura] : null;
+        const dataFechamentoStr = idxDataFechamento !== -1 ? cols[idxDataFechamento] : null;
 
         const dataInicioObj = parseDateFlexible(dataAberturaStr);
         const dataFimObj = parseDateFlexible(dataFechamentoStr);
@@ -144,7 +162,7 @@ export async function POST(req: Request) {
         const dataChecklist = dataChecklistObj?.sql || null;
 
         // Duração calculada ou extraída
-        let duracao = getVal(['Duração', 'Duracao']);
+        let duracao = idxDuracao !== -1 ? cols[idxDuracao] : null;
         if (!duracao && dataInicioObj && dataFimObj) {
           const diffSec = Math.max(0, Math.floor((dataFimObj.getTime() - dataInicioObj.getTime()) / 1000));
           const h = Math.floor(diffSec / 3600);
@@ -153,32 +171,34 @@ export async function POST(req: Request) {
           duracao = [h, m, s].map(n => String(n).padStart(2, '0')).join(':');
         }
 
-        const situacao = toUpper(getVal(['Situação', 'Situacao'])) || (dataFim ? 'FECHADO' : 'ABERTO');
+        const situacao = toUpper(idxSituacao !== -1 ? cols[idxSituacao] : null) || (dataFim ? 'FECHADO' : 'ABERTO');
 
-        const matriculaAuditorRaw = getVal(['Matrícula Auditor', 'Matricula Auditor', 'Matrícula', 'Matricula', 'RE']) || '';
+        const matriculaAuditorRaw = idxMatricula !== -1 ? cols[idxMatricula] : '';
         let matriculaAuditor: string | null = String(matriculaAuditorRaw).trim().replace(/\.0+$/, '').replace(/[^0-9]/g, '');
         matriculaAuditor = matriculaAuditor.replace(/^0+/, '') || null;
 
-        const nomeAuditor = toUpper(getVal(['Nome Auditor', 'Identificador Objeto'])) || null;
+        const nomeAuditor = toUpper(idxNome !== -1 ? cols[idxNome] : null);
         const localidadeObjeto = toUpper(localidadeRaw) || null;
         const questionario = toUpper(questionarioRaw) || null;
-        const re = getVal(['RE']) ? cleanNumero(getVal(['RE'])) : matriculaAuditor;
+        const re = (idxRe !== -1 && cols[idxRe]) ? cleanNumero(cols[idxRe]) : matriculaAuditor;
 
         let mes: number | null = null;
         let ano: number | null = null;
-        const mesRaw = getVal(['Mês', 'Mes']);
-        const anoRaw = getVal(['Ano']);
+        const mesRaw = idxMes !== -1 ? cols[idxMes] : null;
+        const anoRaw = idxAno !== -1 ? cols[idxAno] : null;
         if (mesRaw) mes = parseInt(mesRaw);
         if (anoRaw) ano = parseInt(anoRaw);
 
-        if (!mes && dataInicioObj) mes = dataInicioObj.mes;
-        if (!ano && dataInicioObj) ano = dataInicioObj.ano;
+        // Regra Arkium: Data de Fechamento define o mês contábil oficial (com fallback para Abertura)
+        const dataRefObj = dataFimObj || dataInicioObj || dataChecklistObj;
+        if (!mes && dataRefObj) mes = dataRefObj.mes;
+        if (!ano && dataRefObj) ano = dataRefObj.ano;
 
-        const cidadeComercial = toUpper(cleanCidade(getVal(['CIDADE COMERCIAL'])) || cleanCidade(localidadeRaw)) || null;
+        const cidadeComercial = toUpper(cleanCidade(idxCidade !== -1 ? cols[idxCidade] : null) || cleanCidade(localidadeRaw)) || null;
         const ufComercial = 'SP';
-        const diretoria3 = toUpper(getVal(['DIRETORIA 3', 'DIRETORIA3'])) || null;
-        const gerencia = toUpper(getVal(['GERÊNCIA', 'GERENCIA'])) || null;
-        const gestor = toUpper(getVal(['GESTOR', 'Supervisor'])) || null;
+        const diretoria3 = toUpper(idxDiretoria !== -1 ? cols[idxDiretoria] : null);
+        const gerencia = toUpper(idxGerencia !== -1 ? cols[idxGerencia] : null);
+        const gestor = toUpper(idxGestor !== -1 ? cols[idxGestor] : null);
 
         numerosNaPlanilha.push(numero);
         rowsToProcess.push({
@@ -299,8 +319,10 @@ export async function POST(req: Request) {
         let mes = mesRaw ? parseInt(mesRaw) : null;
         let ano = anoRaw ? parseInt(anoRaw) : null;
 
-        if (!mes && dataInicioObj) mes = dataInicioObj.mes;
-        if (!ano && dataInicioObj) ano = dataInicioObj.ano;
+        // Regra Arkium: Data de Fechamento define o mês contábil oficial (com fallback para Abertura)
+        const dataRefObj = dataFimObj || dataInicioObj || dataChecklistObj;
+        if (!mes && dataRefObj) mes = dataRefObj.mes;
+        if (!ano && dataRefObj) ano = dataRefObj.ano;
 
         const cidadeComercial = toUpper(cleanCidade(getVal(['CIDADE COMERCIAL'])) || cleanCidade(localidadeRaw)) || null;
         const ufComercial = 'SP';
@@ -353,14 +375,22 @@ export async function POST(req: Request) {
           ano INT
         );
 
-        -- Remove eventuais duplicados legados mantendo o de maior id
-        DELETE FROM aprs a
-        USING aprs b
-        WHERE a.numero = b.numero AND a.id < b.id;
-
         -- Garante índice único para blindar duplicidade fisicamente
         CREATE UNIQUE INDEX IF NOT EXISTS aprs_numero_uniq_idx ON aprs (numero);
       `);
+
+      const shouldTruncate = formData.get('truncate') === 'true' || formData.get('truncate') === '1' || formData.get('limpar') === 'true';
+
+      if (shouldTruncate) {
+        await client.query('TRUNCATE TABLE aprs RESTART IDENTITY');
+      } else {
+        // Remove eventuais duplicados legados mantendo o de maior id
+        await client.query(`
+          DELETE FROM aprs a
+          USING aprs b
+          WHERE a.numero = b.numero AND a.id < b.id;
+        `);
+      }
 
       await client.query('BEGIN');
 
@@ -368,7 +398,7 @@ export async function POST(req: Request) {
       let atualizadas = 0;
 
       // Bulk upsert dos dados tratados com ON CONFLICT (numero)
-      const BATCH_SIZE = 500;
+      const BATCH_SIZE = 1000;
       for (let i = 0; i < rowsToProcess.length; i += BATCH_SIZE) {
         const batch = rowsToProcess.slice(i, i + BATCH_SIZE);
         
@@ -433,7 +463,9 @@ export async function POST(req: Request) {
 
       return NextResponse.json({ 
         success: true, 
-        message: `Importação de APR concluída com sucesso! ${novasInseridas} novas APRs inseridas, ${atualizadas} atualizadas (0 duplicadas de um total de ${totalProcessado} processadas).` 
+        message: shouldTruncate
+          ? `Base de APR renovada com sucesso! ${novasInseridas} APRs inseridas do arquivo oficial (base antiga limpa com sucesso).`
+          : `Importação de APR concluída com sucesso! ${novasInseridas} novas APRs inseridas, ${atualizadas} atualizadas (total de ${totalProcessado} processadas).`
       });
     } catch (e) {
       await client.query('ROLLBACK');
