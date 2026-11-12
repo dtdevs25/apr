@@ -240,7 +240,7 @@ export async function GET(req: NextRequest) {
     if (dataCache[type] && (Date.now() - dataCache[type].timestamp < CACHE_TTL_MS)) {
       return NextResponse.json(dataCache[type].data, {
         headers: {
-          'Cache-Control': 'public, max-age=900, stale-while-revalidate=3600',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
         }
       });
     }
@@ -380,11 +380,12 @@ export async function GET(req: NextRequest) {
           pool.query(`
             SELECT numero, data_fim, data_inicio, duracao, matricula_auditor, nome_auditor,
                    localidade_objeto, questionario, re, cidade_comercial, diretoria_3,
-                   gestor, supervisor, mes
+                   gestor, mes
             FROM aprs
           `),
           pool.query(`
-            SELECT user_id_ssff, nome, cargo, data_admissao,
+            SELECT user_id_ssff, nome, cargo,
+                   COALESCE(to_jsonb(po)->>'data_admissao', '') AS data_admissao,
                    COALESCE(to_jsonb(po)->>'grupo_2', to_jsonb(po)->>'grupo 2', to_jsonb(po)->>'GRUPO 2', to_jsonb(po)->>'GRUPO_2', '') AS grupo_2,
                    COALESCE(to_jsonb(po)->>'categoria', '') AS categoria,
                    COALESCE(to_jsonb(po)->>'subgrupo', '') AS subgrupo,
@@ -1035,7 +1036,7 @@ export async function GET(req: NextRequest) {
       dataCache[type] = { data: payload, timestamp: Date.now() };
       return NextResponse.json(payload, {
         headers: {
-          'Cache-Control': 'public, max-age=900, stale-while-revalidate=3600',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
         }
       });
     }
